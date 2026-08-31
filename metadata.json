@@ -1,0 +1,6 @@
+{
+  "name": "Resonance - Pro Sample Manager & Audio Slicer",
+  "description": "Station professionnelle de gestion de samples, triage automatique (BPM/Key/Timbre), lecture ultra-rapide, découpe de multi-sons et conversion de formats.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
