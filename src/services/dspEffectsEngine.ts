@@ -99,6 +99,82 @@ export interface PitchRingConfig {
   ringModMix: number; // 0 to 100%
 }
 
+export interface CompressorConfig {
+  enabled: boolean;
+  thresholdDb: number; // -60 dB to 0 dB
+  ratio: number; // 1 to 20
+  attackMs: number; // 0.1 ms to 100 ms
+  releaseMs: number; // 10 ms to 1000 ms
+  makeupGainDb: number; // 0 to +24 dB
+  kneeDb: number; // 0 to 12 dB
+}
+
+export interface StereoImagerConfig {
+  enabled: boolean;
+  widthPercent: number; // 0% (mono) to 200% (super-wide)
+  autopanRateHz: number; // 0 to 12 Hz
+  autopanDepth: number; // 0 to 100%
+  tremoloRateHz: number; // 0 to 20 Hz
+  tremoloDepth: number; // 0 to 100%
+}
+
+export interface FormantConfig {
+  enabled: boolean;
+  vowel: 'a' | 'e' | 'i' | 'o' | 'u' | 'auto-morph';
+  morphSpeedHz: number; // 0.1 to 10 Hz
+  formantShift: number; // -12 to +12 semitones
+  resonance: number; // 1 to 15 Q
+  mix: number; // 0 to 100%
+}
+
+export interface VinylTapeConfig {
+  enabled: boolean;
+  crackleAmount: number; // 0 to 100%
+  vinylDustPops: number; // 0 to 100%
+  tapeWarbleHz: number; // 0 to 8 Hz
+  tapeFlutterDepth: number; // 0 to 100%
+  vintageCurve: 'flat' | '1920-gramophone' | '1950-radio' | '1970-cassette' | '1980-walkman';
+  mix: number; // 0 to 100%
+}
+
+export interface FrequencyShifterConfig {
+  enabled: boolean;
+  shiftHz: number; // -1000 Hz to +1000 Hz
+  feedback: number; // 0 to 90%
+  quadraturePhase: number; // 0 to 360 deg
+  mix: number; // 0 to 100%
+}
+
+export interface ExciterConfig {
+  enabled: boolean;
+  frequencyHz: number; // 3000 Hz to 16000 Hz
+  harmonicsDrive: number; // 0 to 100%
+  airBoostDb: number; // 0 to +18 dB
+  curve: 'tube-even' | 'tape-odd' | 'silicon-sparkle';
+  mix: number; // 0 to 100%
+}
+
+export interface AutoWahConfig {
+  enabled: boolean;
+  sensitivity: number; // 0 to 100%
+  baseCutoffHz: number; // 100 Hz to 5000 Hz
+  sweepRangeHz: number; // 200 Hz to 8000 Hz
+  resonance: number; // 1 to 18 Q
+  attackMs: number; // 1 to 100 ms
+  releaseMs: number; // 10 to 500 ms
+  direction: 'up' | 'down';
+  mix: number; // 0 to 100%
+}
+
+export interface CombResonatorConfig {
+  enabled: boolean;
+  tuneFreqHz: number; // 40 Hz to 2500 Hz
+  feedbackDecay: number; // 0 to 98%
+  dampingHz: number; // 1000 Hz to 18000 Hz
+  stereoSpread: number; // 0 to 100%
+  mix: number; // 0 to 100%
+}
+
 export interface SurgicalConfig {
   reverse: boolean;
   tapeStopBrakeSec: number; // 0 = off, 0.1s to 2.5s
@@ -123,10 +199,18 @@ export interface DspRackConfig {
   delay: DelayConfig;
   reverb: ReverbConfig;
   distortion: DistortionConfig;
+  compressor: CompressorConfig;
   modulation: ModulationConfig;
   filter: FilterConfig;
   transient: TransientConfig;
   pitchRing: PitchRingConfig;
+  imager: StereoImagerConfig;
+  formant: FormantConfig;
+  vinylTape: VinylTapeConfig;
+  freqShifter: FrequencyShifterConfig;
+  exciter: ExciterConfig;
+  autoWah: AutoWahConfig;
+  combResonator: CombResonatorConfig;
   surgical: SurgicalConfig;
 }
 
@@ -182,6 +266,15 @@ export const DEFAULT_DSP_RACK_CONFIG: DspRackConfig = {
     noiseHiss: 0,
     mix: 75,
   },
+  compressor: {
+    enabled: false,
+    thresholdDb: -18,
+    ratio: 4,
+    attackMs: 15,
+    releaseMs: 120,
+    makeupGainDb: 3,
+    kneeDb: 4,
+  },
   modulation: {
     enabled: false,
     type: 'chorus',
@@ -212,6 +305,65 @@ export const DEFAULT_DSP_RACK_CONFIG: DspRackConfig = {
     pitchCents: 0,
     ringModFreqHz: 0,
     ringModMix: 0,
+  },
+  imager: {
+    enabled: false,
+    widthPercent: 100,
+    autopanRateHz: 0,
+    autopanDepth: 0,
+    tremoloRateHz: 0,
+    tremoloDepth: 0,
+  },
+  formant: {
+    enabled: false,
+    vowel: 'a',
+    morphSpeedHz: 1.5,
+    formantShift: 0,
+    resonance: 5.0,
+    mix: 0,
+  },
+  vinylTape: {
+    enabled: false,
+    crackleAmount: 35,
+    vinylDustPops: 25,
+    tapeWarbleHz: 0.8,
+    tapeFlutterDepth: 30,
+    vintageCurve: '1970-cassette',
+    mix: 80,
+  },
+  freqShifter: {
+    enabled: false,
+    shiftHz: 65,
+    feedback: 20,
+    quadraturePhase: 90,
+    mix: 50,
+  },
+  exciter: {
+    enabled: false,
+    frequencyHz: 8000,
+    harmonicsDrive: 40,
+    airBoostDb: 6,
+    curve: 'tube-even',
+    mix: 50,
+  },
+  autoWah: {
+    enabled: false,
+    sensitivity: 65,
+    baseCutoffHz: 400,
+    sweepRangeHz: 2800,
+    resonance: 6.0,
+    attackMs: 8,
+    releaseMs: 80,
+    direction: 'up',
+    mix: 85,
+  },
+  combResonator: {
+    enabled: false,
+    tuneFreqHz: 220, // A3 note
+    feedbackDecay: 75,
+    dampingHz: 6000,
+    stereoSpread: 50,
+    mix: 45,
   },
   surgical: {
     reverse: false,
@@ -938,6 +1090,344 @@ export async function applyEffectsToAudioBuffer(
       x2R = x1R; x1R = right[i];
       y2R = y1R; y1R = yR;
       right[i] = yR;
+    }
+  }
+
+  // 9b. VOCAL FORMANT & ROBOT TALKBOX FILTER
+  if (config.formant.enabled && config.formant.mix > 0) {
+    const vowel = config.formant.vowel;
+    const formantMix = config.formant.mix / 100;
+    const resQ = Math.max(1, config.formant.resonance);
+    const shiftRatio = Math.pow(2, config.formant.formantShift / 12);
+
+    // Formant vowel frequency pairs [F1, F2] in Hz
+    const vowelFormants: Record<string, [number, number]> = {
+      a: [800, 1200],
+      e: [400, 2200],
+      i: [280, 2600],
+      o: [500, 900],
+      u: [320, 750],
+      'auto-morph': [600, 1600],
+    };
+
+    let f1Base = vowelFormants[vowel]?.[0] || 600;
+    let f2Base = vowelFormants[vowel]?.[1] || 1600;
+
+    let fLfoPhase = 0;
+    const fLfoStep = (2 * Math.PI * config.formant.morphSpeedHz) / sampleRate;
+
+    let formX1L = 0, formX2L = 0, formY1L = 0, formY2L = 0;
+    let formX1R = 0, formX2R = 0, formY1R = 0, formY2R = 0;
+
+    for (let i = 0; i < newLength; i++) {
+      if (vowel === 'auto-morph') {
+        fLfoPhase += fLfoStep;
+        if (fLfoPhase > 2 * Math.PI) fLfoPhase -= 2 * Math.PI;
+        const morph = 0.5 * (1 + Math.sin(fLfoPhase));
+        f1Base = 300 + morph * 600;
+        f2Base = 800 + (1 - morph) * 1800;
+      }
+
+      const f1 = Math.max(100, Math.min(8000, f1Base * shiftRatio));
+      const omega = (2 * Math.PI * f1) / sampleRate;
+      const sinO = Math.sin(omega);
+      const cosO = Math.cos(omega);
+      const alpha = sinO / (2 * resQ);
+      const a0 = 1 + alpha;
+      const b0 = (sinO / 2) / a0;
+      const b2 = -(sinO / 2) / a0;
+      const a1 = (-2 * cosO) / a0;
+      const a2 = (1 - alpha) / a0;
+
+      const yL = b0 * left[i] + b2 * formX2L - a1 * formY1L - a2 * formY2L;
+      formX2L = formX1L; formX1L = left[i];
+      formY2L = formY1L; formY1L = yL;
+
+      const yR = b0 * right[i] + b2 * formX2R - a1 * formY1R - a2 * formY2R;
+      formX2R = formX1R; formX1R = right[i];
+      formY2R = formY1R; formY1R = yR;
+
+      left[i] = left[i] * (1 - formantMix) + yL * formantMix * 2.5;
+      right[i] = right[i] * (1 - formantMix) + yR * formantMix * 2.5;
+    }
+  }
+
+  // 9c. STUDIO COMPRESSOR & PEAK LIMITER (DYNAMICS)
+  if (config.compressor.enabled) {
+    const threshLin = Math.pow(10, config.compressor.thresholdDb / 20);
+    const ratio = Math.max(1, config.compressor.ratio);
+    const makeupGain = Math.pow(10, config.compressor.makeupGainDb / 20);
+    const attAlpha = Math.exp(-1 / (sampleRate * (config.compressor.attackMs / 1000)));
+    const relAlpha = Math.exp(-1 / (sampleRate * (config.compressor.releaseMs / 1000)));
+
+    let compEnv = 0;
+    for (let i = 0; i < newLength; i++) {
+      const peakSample = Math.max(Math.abs(left[i]), Math.abs(right[i]));
+      if (peakSample > compEnv) {
+        compEnv = peakSample + attAlpha * (compEnv - peakSample);
+      } else {
+        compEnv = peakSample + relAlpha * (compEnv - peakSample);
+      }
+
+      let gainReduction = 1.0;
+      if (compEnv > threshLin) {
+        const excessDb = 20 * Math.log10(compEnv / threshLin);
+        const compressedDb = excessDb / ratio;
+        const reductionDb = compressedDb - excessDb;
+        gainReduction = Math.pow(10, reductionDb / 20);
+      }
+
+      left[i] = left[i] * gainReduction * makeupGain;
+      right[i] = right[i] * gainReduction * makeupGain;
+    }
+  }
+
+  // 9d. STEREO IMAGER, AUTOPAN & TREMOLO
+  if (config.imager.enabled) {
+    const width = config.imager.widthPercent / 100;
+    const panRate = config.imager.autopanRateHz;
+    const panDepth = config.imager.autopanDepth / 100;
+    const tremRate = config.imager.tremoloRateHz;
+    const tremDepth = config.imager.tremoloDepth / 100;
+
+    let panPhase = 0;
+    const panStep = (2 * Math.PI * panRate) / sampleRate;
+    let tremPhase = 0;
+    const tremStep = (2 * Math.PI * tremRate) / sampleRate;
+
+    for (let i = 0; i < newLength; i++) {
+      // 1. Mid/Side Stereo Width Expansion
+      const mid = (left[i] + right[i]) * 0.5;
+      const side = (left[i] - right[i]) * 0.5 * width;
+      let outL = mid + side;
+      let outR = mid - side;
+
+      // 2. Autopan LFO
+      if (panRate > 0 && panDepth > 0) {
+        panPhase += panStep;
+        if (panPhase > 2 * Math.PI) panPhase -= 2 * Math.PI;
+        const panSin = Math.sin(panPhase) * panDepth; // -1 to +1
+        const gainL = 0.5 * (1 - panSin);
+        const gainR = 0.5 * (1 + panSin);
+        outL *= gainL * 2;
+        outR *= gainR * 2;
+      }
+
+      // 3. Tremolo Amplitude LFO
+      if (tremRate > 0 && tremDepth > 0) {
+        tremPhase += tremStep;
+        if (tremPhase > 2 * Math.PI) tremPhase -= 2 * Math.PI;
+        const trem = 1 - 0.5 * tremDepth * (1 + Math.sin(tremPhase));
+        outL *= trem;
+        outR *= trem;
+      }
+
+      left[i] = outL;
+      right[i] = outR;
+    }
+  }
+
+  // 9e. VINYL CRACKLE, NOISE & CASSETTE TAPE WARBLE
+  if (config.vinylTape.enabled && config.vinylTape.mix > 0) {
+    const vMix = config.vinylTape.mix / 100;
+    const crackle = config.vinylTape.crackleAmount / 100;
+    const dust = config.vinylTape.vinylDustPops / 100;
+    const warbleRate = config.vinylTape.tapeWarbleHz;
+    const flutterDepth = config.vinylTape.tapeFlutterDepth / 100;
+    const curve = config.vinylTape.vintageCurve;
+
+    let warblePhase = 0;
+    const warbleStep = (2 * Math.PI * warbleRate) / sampleRate;
+
+    // Buffer for tape pitch wow/flutter
+    const tapeBufSize = Math.floor(sampleRate * 0.05);
+    const tapeBufL = new Float32Array(tapeBufSize);
+    const tapeBufR = new Float32Array(tapeBufSize);
+    let tIdx = 0;
+
+    for (let i = 0; i < newLength; i++) {
+      // 1. Vinyl Dust & Crackle generation
+      let noiseVal = 0;
+      if (crackle > 0) {
+        // High-frequency dust hiss
+        noiseVal += (Math.random() * 2 - 1) * 0.015 * crackle;
+      }
+      if (dust > 0) {
+        // Random dust pop click
+        if (Math.random() < 0.0004 * dust) {
+          noiseVal += (Math.random() > 0.5 ? 1 : -1) * (0.15 + Math.random() * 0.35) * dust;
+        }
+      }
+
+      // 2. Tape Warble / Flutter Delay Line
+      warblePhase += warbleStep;
+      if (warblePhase > 2 * Math.PI) warblePhase -= 2 * Math.PI;
+      const modOffset = (0.01 + Math.sin(warblePhase) * 0.003 * flutterDepth) * sampleRate;
+      const readPos = (tIdx - modOffset + tapeBufSize) % tapeBufSize;
+      const rInt = Math.floor(readPos);
+
+      tapeBufL[tIdx] = left[i];
+      tapeBufR[tIdx] = right[i];
+      tIdx = (tIdx + 1) % tapeBufSize;
+
+      let wL = tapeBufL[rInt];
+      let wR = tapeBufR[rInt];
+
+      // 3. Vintage curve EQ shaping
+      if (curve === '1920-gramophone') {
+        wL = Math.max(-0.6, Math.min(0.6, wL * 1.5));
+        wR = Math.max(-0.6, Math.min(0.6, wR * 1.5));
+      } else if (curve === '1950-radio') {
+        wL = (wL + Math.sin(wL * 3) * 0.2) * 1.1;
+        wR = (wR + Math.sin(wR * 3) * 0.2) * 1.1;
+      } else if (curve === '1970-cassette') {
+        wL = Math.tanh(wL * 1.3);
+        wR = Math.tanh(wR * 1.3);
+      }
+
+      left[i] = left[i] * (1 - vMix) + (wL + noiseVal) * vMix;
+      right[i] = right[i] * (1 - vMix) + (wR + noiseVal) * vMix;
+    }
+  }
+
+  // 9f. BODE FREQUENCY SHIFTER (ALIEN / GONG / METALLIC SHIFT)
+  if (config.freqShifter.enabled && config.freqShifter.mix > 0 && config.freqShifter.shiftHz !== 0) {
+    const fMix = config.freqShifter.mix / 100;
+    const shiftHz = config.freqShifter.shiftHz;
+    const phaseRad = (config.freqShifter.quadraturePhase * Math.PI) / 180;
+    let shiftPhase = 0;
+    const shiftStep = (2 * Math.PI * shiftHz) / sampleRate;
+
+    for (let i = 0; i < newLength; i++) {
+      shiftPhase += shiftStep;
+      if (shiftPhase > 2 * Math.PI) shiftPhase -= 2 * Math.PI;
+
+      const carrierSin = Math.sin(shiftPhase);
+      const carrierCos = Math.cos(shiftPhase + phaseRad);
+
+      const shiftedL = left[i] * carrierSin;
+      const shiftedR = right[i] * carrierCos;
+
+      left[i] = left[i] * (1 - fMix) + shiftedL * fMix * 1.4;
+      right[i] = right[i] * (1 - fMix) + shiftedR * fMix * 1.4;
+    }
+  }
+
+  // 9g. HARMONIC EXCITER & AIR PRESENCE (APHEX HIGH-END SHIMMER)
+  if (config.exciter.enabled && config.exciter.mix > 0) {
+    const eMix = config.exciter.mix / 100;
+    const airGain = Math.pow(10, config.exciter.airBoostDb / 20);
+    const drive = 1 + (config.exciter.harmonicsDrive / 100) * 3;
+    const curve = config.exciter.curve;
+
+    // Highpass filter for exciter sidechain (> 4kHz)
+    const hpFreq = Math.max(3000, config.exciter.frequencyHz);
+    const alphaHp = 1 / (1 + (2 * Math.PI * hpFreq) / sampleRate);
+    let prevHpL = 0, prevInL = 0;
+    let prevHpR = 0, prevInR = 0;
+
+    for (let i = 0; i < newLength; i++) {
+      const hpL = alphaHp * (prevHpL + left[i] - prevInL);
+      const hpR = alphaHp * (prevHpR + right[i] - prevInR);
+      prevHpL = hpL; prevInL = left[i];
+      prevHpR = hpR; prevInR = right[i];
+
+      let excitedL = hpL * drive;
+      let excitedR = hpR * drive;
+
+      if (curve === 'tube-even') {
+        excitedL = excitedL + 0.5 * (excitedL * excitedL);
+        excitedR = excitedR + 0.5 * (excitedR * excitedR);
+      } else if (curve === 'tape-odd') {
+        excitedL = Math.tanh(excitedL * 1.5);
+        excitedR = Math.tanh(excitedR * 1.5);
+      } else {
+        excitedL = Math.sin(excitedL * 1.2);
+        excitedR = Math.sin(excitedR * 1.2);
+      }
+
+      left[i] += excitedL * airGain * eMix;
+      right[i] += excitedR * airGain * eMix;
+    }
+  }
+
+  // 9h. DYNAMIC AUTO-WAH & ENVELOPE FOLLOWER
+  if (config.autoWah.enabled && config.autoWah.mix > 0) {
+    const wahMix = config.autoWah.mix / 100;
+    const sens = config.autoWah.sensitivity / 100;
+    const baseCut = config.autoWah.baseCutoffHz;
+    const sweepRange = config.autoWah.sweepRangeHz;
+    const qWah = Math.max(1, config.autoWah.resonance);
+    const attA = Math.exp(-1 / (sampleRate * (config.autoWah.attackMs / 1000)));
+    const relA = Math.exp(-1 / (sampleRate * (config.autoWah.releaseMs / 1000)));
+    const isUp = config.autoWah.direction === 'up';
+
+    let env = 0;
+    let wX1L = 0, wX2L = 0, wY1L = 0, wY2L = 0;
+    let wX1R = 0, wX2R = 0, wY1R = 0, wY2R = 0;
+
+    for (let i = 0; i < newLength; i++) {
+      const peak = Math.max(Math.abs(left[i]), Math.abs(right[i]));
+      if (peak > env) env = peak + attA * (env - peak);
+      else env = peak + relA * (env - peak);
+
+      const modAmount = Math.min(1, env * sens * 4);
+      const cut = isUp
+        ? Math.min(18000, baseCut + modAmount * sweepRange)
+        : Math.max(50, baseCut - modAmount * sweepRange);
+
+      const omega = (2 * Math.PI * cut) / sampleRate;
+      const sinO = Math.sin(omega);
+      const cosO = Math.cos(omega);
+      const alpha = sinO / (2 * qWah);
+      const a0 = 1 + alpha;
+      const b0 = (sinO / 2) / a0;
+      const b2 = -(sinO / 2) / a0;
+      const a1 = (-2 * cosO) / a0;
+      const a2 = (1 - alpha) / a0;
+
+      const yL = b0 * left[i] + b2 * wX2L - a1 * wY1L - a2 * wY2L;
+      wX2L = wX1L; wX1L = left[i];
+      wY2L = wY1L; wY1L = yL;
+
+      const yR = b0 * right[i] + b2 * wX2R - a1 * wY1R - a2 * wY2R;
+      wX2R = wX1R; wX1R = right[i];
+      wY2R = wY1R; wY1R = yR;
+
+      left[i] = left[i] * (1 - wahMix) + yL * wahMix * 1.8;
+      right[i] = right[i] * (1 - wahMix) + yR * wahMix * 1.8;
+    }
+  }
+
+  // 9i. COMB FILTER & KARPLUS-STRONG PHYSICAL RESONATOR MATRIX
+  if (config.combResonator.enabled && config.combResonator.mix > 0) {
+    const resMix = config.combResonator.mix / 100;
+    const fHz = Math.max(30, Math.min(4000, config.combResonator.tuneFreqHz));
+    const delaySamples = Math.max(2, Math.floor(sampleRate / fHz));
+    const fbGain = Math.min(0.98, config.combResonator.feedbackDecay / 100);
+    const dampAlpha = Math.exp(-2 * Math.PI * (config.combResonator.dampingHz / sampleRate));
+
+    const combL = new Float32Array(delaySamples + 10);
+    const combR = new Float32Array(delaySamples + 10);
+    let cIdx = 0;
+    let dL = 0, dR = 0;
+
+    for (let i = 0; i < newLength; i++) {
+      const readIdx = (cIdx + 1) % delaySamples;
+      let outL = combL[readIdx];
+      let outR = combR[readIdx];
+
+      dL = outL + dampAlpha * (dL - outL);
+      dR = outR + dampAlpha * (dR - outR);
+      outL = dL;
+      outR = dR;
+
+      combL[cIdx] = left[i] + outL * fbGain;
+      combR[cIdx] = right[i] + outR * fbGain;
+      cIdx = (cIdx + 1) % delaySamples;
+
+      left[i] = left[i] * (1 - resMix) + outL * resMix * 1.5;
+      right[i] = right[i] * (1 - resMix) + outR * resMix * 1.5;
     }
   }
 
