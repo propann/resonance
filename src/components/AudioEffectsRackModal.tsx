@@ -266,7 +266,7 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
   }, [stopAudio]);
 
   // Toggle play/pause
-  const handleTogglePlayback = () => {
+  const handleTogglePlayback = useCallback(() => {
     if (isPlaying) {
       stopAudio();
     } else {
@@ -276,7 +276,35 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
           : sample.audioBuffer;
       playBuffer(targetBuffer, isLiveAuditionLoop);
     }
-  };
+  }, [isPlaying, previewMode, processedBuffer, sample.audioBuffer, isLiveAuditionLoop, playBuffer, stopAudio]);
+
+  // Global spacebar listener inside effects modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const target = e.target as HTMLElement;
+        const isTextInput =
+          (target instanceof HTMLInputElement &&
+            target.type !== 'range' &&
+            target.type !== 'checkbox' &&
+            target.type !== 'radio') ||
+          target instanceof HTMLTextAreaElement ||
+          target?.isContentEditable;
+
+        if (!isTextInput) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (target && typeof target.blur === 'function') {
+            target.blur();
+          }
+          handleTogglePlayback();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [handleTogglePlayback]);
 
   // Toggle Preview Mode (Wet vs Dry)
   const handleTogglePreviewMode = (mode: 'processed' | 'dry') => {

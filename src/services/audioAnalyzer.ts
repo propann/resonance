@@ -1,4 +1,4 @@
-import { MusicGenre, SampleCategory, SampleType, SliceRegion } from '../types/sample';
+import { MusicGenre, SampleCategory, SampleType, SliceRegion, SampleItem } from '../types/sample';
 
 // Note names
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -993,5 +993,174 @@ export function detectAutoSlices(
   }
 
   return slices;
+}
+
+/**
+ * Extracts acoustic and timbral semantic tags from DSP audio features
+ */
+export function extractTimbralDescriptors(
+  metrics: {
+    peakDb: number;
+    rmsDb: number;
+    spectralCentroid: number;
+    zeroCrossingRate: number;
+    dynamicRangeDb: number;
+    sustainFactor: number;
+  },
+  features: {
+    lowEnergyRatio: number;
+    midEnergyRatio: number;
+    highEnergyRatio: number;
+    attackTimeMs: number;
+    decayTimeMs: number;
+    subDominantFreq: number;
+  }
+): string[] {
+  const tags: string[] = [];
+
+  // Low-end / Sub profiling
+  if (features.lowEnergyRatio > 0.45 || features.subDominantFreq < 75) {
+    tags.push('sub-heavy');
+  }
+  if (metrics.spectralCentroid < 1200) {
+    tags.push('warm');
+  } else if (metrics.spectralCentroid > 3600) {
+    tags.push('bright');
+  }
+
+  // Transient & Dynamics
+  if (features.attackTimeMs <= 10 && metrics.dynamicRangeDb >= 7) {
+    tags.push('punchy');
+  }
+  if (features.attackTimeMs <= 6) {
+    tags.push('snappy');
+  }
+
+  // Timbre Texture
+  if (metrics.zeroCrossingRate > 0.18 || features.highEnergyRatio > 0.4) {
+    tags.push('crisp');
+  }
+  if (features.highEnergyRatio > 0.45 && metrics.zeroCrossingRate > 0.22) {
+    tags.push('metallic');
+  }
+
+  // Compression & Distortion
+  if (metrics.dynamicRangeDb < 6.5 && metrics.rmsDb > -13) {
+    tags.push('saturated');
+  }
+
+  // Decay profile
+  if (features.decayTimeMs < 180) {
+    tags.push('tight');
+  } else if (features.decayTimeMs > 550 || metrics.sustainFactor > 0.25) {
+    tags.push('sustained');
+  }
+
+  return tags;
+}
+
+/**
+ * Generates rich, deduplicated, standardized semantic tags for searchable sound database
+ */
+export function generateEnrichedTags(
+  sample: Partial<SampleItem>,
+  buffer?: AudioBuffer
+): string[] {
+  const tagSet = new Set<string>();
+
+  // 1. Sound Type & Category
+  if (sample.type) {
+    tagSet.add(sample.type.toLowerCase());
+  }
+  if (sample.category) {
+    tagSet.add(sample.category.toLowerCase());
+  } else if (sample.isLoop) {
+    tagSet.add('loop');
+  } else {
+    tagSet.add('one-shot');
+  }
+
+  // 2. Musical Key / Tonal Root
+  if (sample.key) {
+    const cleanKey = sample.key
+      .replace(/\s+min(or)?/i, 'm')
+      .replace(/\s+maj(or)?/i, 'maj')
+      .replace(/\s+/g, '');
+    tagSet.add(`key-${cleanKey.toLowerCase()}`);
+    tagSet.add(cleanKey);
+  }
+
+  // 3. Tempo / BPM
+  if (sample.bpm && sample.bpm > 0) {
+    tagSet.add(`${sample.bpm}bpm`);
+    if (sample.bpm >= 135) tagSet.add('fast-tempo');
+    else if (sample.bpm >= 95) tagSet.add('mid-tempo');
+    else tagSet.add('slow-tempo');
+  }
+
+  // 4. Bars (for loops)
+  if (sample.loopBars && sample.loopBars > 0) {
+    tagSet.add(`${sample.loopBars}-bars`);
+  }
+
+  // 5. Genre Style
+  if (sample.genre) {
+    const cleanGenre = sample.genre
+      .split('/')[0]
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-');
+    if (cleanGenre && cleanGenre !== 'universal') {
+      tagSet.add(cleanGenre);
+    }
+  }
+
+  // 6. DSP Timbre Analysis (if buffer or metrics available)
+  if (buffer) {
+    try {
+      const metrics = calculateAudioMetrics(buffer);
+      const features = extractAcousticFeatures(buffer);
+      const timbralTags = extractTimbralDescriptors(metrics, features);
+      timbralTags.forEach((t) => tagSet.add(t));
+
+      // Channels
+      if (buffer.numberOfChannels === 1) tagSet.add('mono');
+      else if (buffer.numberOfChannels >= 2) tagSet.add('stereo');
+
+      // Loudness tag
+      if (metrics.lufs > -70) {
+        tagSet.add(`${Math.round(metrics.lufs)}lufs`);
+      }
+    } catch {
+      // fallback
+    }
+  } else if (sample.spectralCentroid !== undefined) {
+    if (sample.spectralCentroid < 1200) tagSet.add('warm');
+    if (sample.spectralCentroid > 3600) tagSet.add('bright');
+    if (sample.dynamicRangeDb && sample.dynamicRangeDb > 10) tagSet.add('punchy');
+    if (sample.lufs) tagSet.add(`${Math.round(sample.lufs)}lufs`);
+  }
+
+  // 7. Format specs
+  if (sample.bitDepth && sample.sampleRate) {
+    const rateK = Math.round(sample.sampleRate / 1000);
+    tagSet.add(`${sample.bitDepth}bit-${rateK}k`);
+  }
+
+  // 8. EP-133 Slot
+  if (sample.ep133Slot) {
+    tagSet.add(`slot-${String(sample.ep133Slot).padStart(3, '0')}`);
+  }
+
+  // 9. Existing user tags (preserve)
+  if (sample.tags && Array.isArray(sample.tags)) {
+    sample.tags.forEach((t) => {
+      if (t && typeof t === 'string' && t.length > 1) {
+        tagSet.add(t.toLowerCase().trim());
+      }
+    });
+  }
+
+  return Array.from(tagSet).filter((t) => t && t.length > 0);
 }
 

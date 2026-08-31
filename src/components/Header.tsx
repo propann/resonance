@@ -14,6 +14,13 @@ import {
   Github,
   FolderTree,
   Flame,
+  Play,
+  Pause,
+  Scissors,
+  SkipBack,
+  SkipForward,
+  Wand2,
+  Repeat,
 } from 'lucide-react';
 import { audioEngine } from '../services/audioEngine';
 
@@ -31,6 +38,15 @@ interface HeaderProps {
   onOpenBatchNaming?: () => void;
   onOpenDspAnalyzer?: () => void;
   onOpenFxRack?: () => void;
+  onOpenAutoSlicer?: () => void;
+  onOpenAutoCurator?: () => void;
+  onOpenDocumentation?: () => void;
+  onAutoOrganizeLibrary?: () => void;
+  isPlaying?: boolean;
+  onTogglePlayPause?: () => void;
+  onPlayNext?: () => void;
+  onPlayPrev?: () => void;
+  currentSampleName?: string;
   autoLoudnessLeveling: boolean;
   onToggleAutoLoudness: () => void;
   samplesCount: number;
@@ -50,6 +66,15 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBatchNaming,
   onOpenDspAnalyzer,
   onOpenFxRack,
+  onOpenAutoSlicer,
+  onOpenAutoCurator,
+  onOpenDocumentation,
+  onAutoOrganizeLibrary,
+  isPlaying = false,
+  onTogglePlayPause,
+  onPlayNext,
+  onPlayPrev,
+  currentSampleName,
   autoLoudnessLeveling,
   onToggleAutoLoudness,
   samplesCount,
@@ -79,13 +104,13 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header id="app-header" className="h-12 bg-[#0E0E14] border-b-2 border-[#1E1E26] px-4 flex items-center justify-between select-none z-30 pixel-box">
+    <header id="app-header" className="h-12 bg-[#0E0E14] border-b-2 border-[#1E1E26] px-3 sm:px-4 flex items-center justify-between select-none z-30 pixel-box gap-2">
       {/* Brand & Logo */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 shrink-0">
         <div className="w-7 h-7 bg-[#00F0FF] text-black font-extrabold flex items-center justify-center border border-[#00C8D6] pixel-btn">
           <Waves className="w-4 h-4" />
         </div>
-        <div>
+        <div className="hidden sm:block">
           <div className="flex items-center gap-1.5">
             <h1 className="text-xs font-pixel font-bold tracking-wider text-[#EDEDEE] uppercase">
               RESONANCE
@@ -95,13 +120,62 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
           <p className="text-[8px] font-pixel text-[#8E8E93]">
-            {samplesCount} SAMPLES • 48kHz DSP
+            {samplesCount} SAMPLES • 48kHz
           </p>
         </div>
       </div>
 
+      {/* MASTER PLAYBACK TRANSPORT CONTROLS (Always Accessible Anywhere) */}
+      <div className="flex items-center gap-1 bg-[#08080C] px-2 py-1 border-2 border-[#242432] shrink-0">
+        {onPlayPrev && (
+          <button
+            id="global-prev-sample-btn"
+            onClick={onPlayPrev}
+            className="p-1 text-[#8E8E93] hover:text-white hover:bg-[#181824] transition rounded"
+            title="Sample Précédent (Flèche Haut)"
+          >
+            <SkipBack className="w-3 h-3" />
+          </button>
+        )}
+
+        {onTogglePlayPause && (
+          <button
+            id="global-play-pause-btn"
+            onClick={onTogglePlayPause}
+            className={`flex items-center gap-1 px-2.5 py-0.5 font-pixel text-[9px] font-bold transition pixel-btn ${
+              isPlaying
+                ? 'bg-[#FF3366] text-white border border-[#FF6688] shadow-sm animate-pulse'
+                : 'bg-[#00F0FF] text-black border border-[#00C8D6] hover:bg-[#38BDF8]'
+            }`}
+            title="Lecture / Pause (Barre d'espace)"
+          >
+            {isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
+            <span className="hidden md:inline">{isPlaying ? 'PAUSE' : 'PLAY'}</span>
+            <span className="text-[7px] opacity-70 hidden lg:inline">[ESPACE]</span>
+          </button>
+        )}
+
+        {onPlayNext && (
+          <button
+            id="global-next-sample-btn"
+            onClick={onPlayNext}
+            className="p-1 text-[#8E8E93] hover:text-white hover:bg-[#181824] transition rounded"
+            title="Sample Suivant (Flèche Bas)"
+          >
+            <SkipForward className="w-3 h-3" />
+          </button>
+        )}
+
+        {/* Current sample label preview */}
+        {currentSampleName && (
+          <div className="hidden xl:flex items-center gap-1 max-w-[130px] truncate pl-1 text-[9px] font-mono text-[#00F0FF] border-l border-[#222230]">
+            <span className="truncate">{currentSampleName}</span>
+          </div>
+        )}
+      </div>
+
       {/* Center Live Search Bar */}
-      <div className="flex-1 max-w-sm mx-4">
+      <div className="flex-1 max-w-xs min-w-[120px]">
         <div className="relative">
           <Search className="w-3 h-3 text-[#8E8E93] absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
@@ -116,11 +190,11 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Controls & Import Actions */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1 shrink-0">
         {/* Real-time LED Segment VU Meter */}
-        <div className="hidden lg:flex items-center gap-1.5 bg-[#060609] px-2 py-1 border border-[#242432]">
+        <div className="hidden 2xl:flex items-center gap-1.5 bg-[#060609] px-2 py-1 border border-[#242432]">
           <Activity className="w-3 h-3 text-[#00F0FF]" />
-          <div className="flex items-center gap-0.5 w-12 h-2.5 bg-[#121218] p-0.5">
+          <div className="flex items-center gap-0.5 w-10 h-2 bg-[#121218] p-0.5">
             <div
               className={`h-full transition-all duration-75 ${
                 peakMeterLevel > 0.85
@@ -159,10 +233,10 @@ export const Header: React.FC<HeaderProps> = ({
           id="import-files-btn"
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1 px-2 py-1 bg-[#14141C] hover:bg-[#1E1E28] text-[#EDEDEE] border-2 border-[#242432] text-[9px] font-pixel pixel-btn"
-          title="Importer des fichiers audio"
+          title="Importer des fichiers audio (Ctrl+O)"
         >
           <Upload className="w-3 h-3 text-[#00F0FF]" />
-          <span>FICHIERS</span>
+          <span className="hidden sm:inline">FICHIERS</span>
         </button>
 
         {/* Import Folder Button */}
@@ -170,73 +244,47 @@ export const Header: React.FC<HeaderProps> = ({
           id="import-folder-btn"
           onClick={() => folderInputRef.current?.click()}
           className="flex items-center gap-1 px-2 py-1 bg-[#14141C] hover:bg-[#1E1E28] text-[#EDEDEE] border-2 border-[#242432] text-[9px] font-pixel pixel-btn"
-          title="Importer un dossier"
+          title="Importer un dossier entier de samples (Ctrl+Shift+O)"
         >
           <FolderUp className="w-3 h-3 text-[#00F0FF]" />
-          <span>DOSSIER</span>
+          <span className="hidden sm:inline">DOSSIER</span>
         </button>
 
-        {/* Convention & Batch Renaming Button */}
-        {onOpenBatchNaming && (
+        {/* Auto-Organize Library Pro Folders */}
+        {onOpenAutoCurator && (
           <button
-            id="open-batch-naming-header-btn"
-            onClick={onOpenBatchNaming}
-            className="flex items-center gap-1 px-2 py-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border-2 border-[#A855F7]/40 text-[9px] font-pixel pixel-btn"
-            title="Convention de Nommage Pro"
+            id="open-auto-curator-header-btn"
+            onClick={onOpenAutoCurator}
+            className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-[#00F0FF] to-[#A855F7] text-black font-extrabold text-[9px] font-pixel hover:opacity-90 border-2 border-[#00C8D6] pixel-btn shadow-md"
+            title="Curateur Automatique & Rangement Intelligent (DSP Pipeline)"
           >
-            <FolderTree className="w-3 h-3 text-[#A855F7]" />
-            <span className="hidden sm:inline">CONVENTION</span>
+            <Wand2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">CURATEUR PRO</span>
           </button>
         )}
 
-        {/* DSP Analyzer Lab Button */}
-        {onOpenDspAnalyzer && (
+        {onAutoOrganizeLibrary && (
           <button
-            id="open-dsp-analyzer-header-btn"
-            onClick={onOpenDspAnalyzer}
-            className="hidden sm:flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border-2 border-[#00F0FF]/40 text-[9px] font-pixel pixel-btn"
-            title="Laboratoire DSP"
+            id="auto-organize-header-btn"
+            onClick={onAutoOrganizeLibrary}
+            className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 text-[#00F0FF] border-2 border-[#00F0FF]/30 text-[9px] font-pixel pixel-btn"
+            title="Auto-classer tous les sons en dossiers standards (01_ONE_SHOTS, 02_LOOPS, etc.)"
           >
-            <Activity className="w-3 h-3 text-[#00F0FF]" />
-            <span className="hidden xl:inline">DSP LAB</span>
+            <Wand2 className="w-3 h-3 text-[#00F0FF]" />
+            <span className="hidden xl:inline">AUTO-TRI</span>
           </button>
         )}
 
-        {/* Auto-Loudness Leveling Toggle */}
-        <button
-          id="toggle-loudness-leveling-btn"
-          onClick={onToggleAutoLoudness}
-          className={`flex items-center gap-1 px-2 py-1 border-2 text-[9px] font-pixel pixel-btn ${
-            autoLoudnessLeveling
-              ? 'bg-[#00F0FF]/20 text-[#00F0FF] border-[#00F0FF]'
-              : 'bg-[#14141C] text-[#8E8E93] border-[#242432]'
-          }`}
-          title="Égalisation -14 LUFS"
-        >
-          <Volume2 className="w-3 h-3" />
-          <span className="hidden xl:inline">-14LUFS</span>
-        </button>
-
-        {/* Smart Ingestion Magic Drop Button */}
-        <button
-          id="open-smart-ingest-btn"
-          onClick={onOpenSmartIngest}
-          className="flex items-center gap-1 px-2.5 py-1 bg-[#00F0FF] text-black font-bold text-[9px] font-pixel hover:bg-[#38BDF8] border-2 border-[#00C8D6] pixel-btn"
-          title="Smart Ingestion DSP"
-        >
-          <Sparkles className="w-3 h-3" />
-          <span>SMART INGEST</span>
-        </button>
-
-        {/* OP-1 Studio */}
-        {onOpenOp1Studio && (
+        {/* Auto-Slicer Direct Button */}
+        {onOpenAutoSlicer && (
           <button
-            id="open-op1-studio-header-btn"
-            onClick={onOpenOp1Studio}
-            className="hidden sm:flex items-center gap-1 px-2 py-1 bg-[#FF7A00]/15 hover:bg-[#FF7A00]/30 text-[#FF7A00] border-2 border-[#FF7A00]/40 text-[9px] font-pixel pixel-btn"
-            title="OP-1 Studio"
+            id="open-slicer-header-btn"
+            onClick={onOpenAutoSlicer}
+            className="flex items-center gap-1 px-2 py-1 bg-[#10B981]/15 hover:bg-[#10B981]/30 text-[#10B981] border-2 border-[#10B981]/40 text-[9px] font-pixel pixel-btn"
+            title="Découpe Automatique & Transitoires (Touche S)"
           >
-            <span>OP-1</span>
+            <Scissors className="w-3 h-3 text-[#10B981]" />
+            <span className="hidden md:inline font-bold">SLICER [S]</span>
           </button>
         )}
 
@@ -249,50 +297,79 @@ export const Header: React.FC<HeaderProps> = ({
             title="Rack d'Effets DSP & Sound Design (Ctrl+E)"
           >
             <Flame className="w-3 h-3 text-[#00F0FF]" />
-            <span className="hidden lg:inline font-bold">RACK FX</span>
+            <span className="hidden md:inline font-bold">RACK FX [E]</span>
           </button>
         )}
 
-        {/* GitHub Hub Sync */}
-        {onOpenGitHubSync && (
-          <button
-            id="open-github-sync-header-btn"
-            onClick={onOpenGitHubSync}
-            className="flex items-center gap-1 px-2 py-1 bg-[#242432] hover:bg-[#323244] text-white border-2 border-[#44445A] text-[9px] font-pixel pixel-btn"
-            title="GitHub: propann/az-sample"
-          >
-            <Github className="w-3 h-3 text-white" />
-            <span className="hidden md:inline text-[#00F0FF]">az-sample</span>
-          </button>
-        )}
-
-        {/* EP-133 Export */}
+        {/* Smart Ingestion Magic Drop Button */}
         <button
-          id="open-ep133-export-btn"
-          onClick={onExportEp133Pack}
-          className="hidden md:flex items-center gap-1 px-2 py-1 bg-[#14141C] text-[#FFE600] border-2 border-[#FFE600]/40 text-[9px] font-pixel pixel-btn"
-          title="Pack EP-133 KO II"
+          id="open-smart-ingest-btn"
+          onClick={onOpenSmartIngest}
+          className="hidden md:flex items-center gap-1 px-2 py-1 bg-[#00F0FF] text-black font-bold text-[9px] font-pixel hover:bg-[#38BDF8] border-2 border-[#00C8D6] pixel-btn"
+          title="Smart Ingestion DSP"
         >
-          <span>EP-133</span>
+          <Sparkles className="w-3 h-3" />
+          <span>INGEST</span>
+        </button>
+
+        {/* Convention & Batch Renaming Button */}
+        {onOpenBatchNaming && (
+          <button
+            id="open-batch-naming-header-btn"
+            onClick={onOpenBatchNaming}
+            className="hidden xl:flex items-center gap-1 px-2 py-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border-2 border-[#A855F7]/40 text-[9px] font-pixel pixel-btn"
+            title="Convention de Nommage Pro"
+          >
+            <FolderTree className="w-3 h-3 text-[#A855F7]" />
+            <span className="hidden 2xl:inline">CONVENTION</span>
+          </button>
+        )}
+
+        {/* Auto-Loudness Leveling Toggle */}
+        <button
+          id="toggle-loudness-leveling-btn"
+          onClick={onToggleAutoLoudness}
+          className={`flex items-center gap-1 px-2 py-1 border-2 text-[9px] font-pixel pixel-btn ${
+            autoLoudnessLeveling
+              ? 'bg-[#00F0FF]/20 text-[#00F0FF] border-[#00F0FF]'
+              : 'bg-[#14141C] text-[#8E8E93] border-[#242432]'
+          }`}
+          title="Égalisation -14 LUFS (EBU R128)"
+        >
+          <Volume2 className="w-3 h-3" />
+          <span className="hidden 2xl:inline">-14LUFS</span>
         </button>
 
         {/* Batch Converter Button */}
         <button
           id="open-batch-converter-header-btn"
           onClick={onOpenBatchConverter}
-          className="flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border-2 border-[#00F0FF]/40 text-[9px] font-pixel pixel-btn"
+          className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border-2 border-[#00F0FF]/40 text-[9px] font-pixel pixel-btn"
           title="Convertisseur par lot"
         >
           <FileCode2 className="w-3 h-3 text-[#00F0FF]" />
-          <span className="hidden sm:inline">CONVERT</span>
+          <span className="hidden xl:inline">CONVERT</span>
         </button>
+
+        {/* Documentation Modal Button */}
+        {onOpenDocumentation && (
+          <button
+            id="open-doc-header-btn"
+            onClick={onOpenDocumentation}
+            className="flex items-center gap-1 px-2 py-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border-2 border-[#A855F7]/40 text-[9px] font-pixel pixel-btn"
+            title="Documentation Officielle & Conventions de Nommage (F1)"
+          >
+            <HelpCircle className="w-3 h-3 text-[#A855F7]" />
+            <span className="hidden sm:inline">DOCS</span>
+          </button>
+        )}
 
         {/* Shortcuts Help */}
         <button
           id="shortcuts-help-btn"
           onClick={() => setShowShortcuts(!showShortcuts)}
           className="p-1 bg-[#14141C] text-[#8E8E93] hover:text-white border-2 border-[#242432] pixel-btn"
-          title="Raccourcis Clavier"
+          title="Raccourcis Clavier (?)"
         >
           <HelpCircle className="w-3 h-3" />
         </button>

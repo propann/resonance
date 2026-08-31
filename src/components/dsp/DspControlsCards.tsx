@@ -1724,7 +1724,7 @@ export const DspControlsCards: React.FC<DspControlsCardsProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* 15. PITCH SHIFT & RING MODULATOR                         */}
+      {/* 15. PITCH SHIFT & MUSICAL NOTE TUNER                     */}
       {/* ======================================================== */}
       {config.pitchRing.enabled && shouldShow('pitchRing') && (
         <div className="p-4 bg-[#0B0B16] border border-[#818CF8]/40 shadow-lg rounded space-y-3">
@@ -1732,18 +1732,168 @@ export const DspControlsCards: React.FC<DspControlsCardsProps> = ({
             <div className="flex items-center gap-2">
               <Radio className="w-4 h-4 text-[#818CF8]" />
               <h4 className="text-xs font-pixel font-bold text-[#818CF8]">
-                15. PITCH TRANSPOSITION (+/-24st) & MODULATEUR EN ANNEAU
+                15. TRANSPOSITION MUSICALE & ACCORDAGE DE NOTE (NOTE PITCH TUNER)
               </h4>
             </div>
-            <span className="text-[10px] font-mono text-[#818CF8] bg-[#818CF8]/15 px-2 py-0.5 rounded border border-[#818CF8]/30">
-              ACTIF
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-[#818CF8] bg-[#818CF8]/15 px-2 py-0.5 rounded border border-[#818CF8]/30">
+                {config.pitchRing.algorithm === 'hq-resample'
+                  ? '⚡ HQ RESAMPLE (RE-PITCH)'
+                  : config.pitchRing.algorithm === 'sola-time-preserve'
+                  ? '⏱️ WSOLA (TEMPS FIXE)'
+                  : '✨ GRANULAR'}
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs font-mono">
+          {/* Quick Musical Note Transposition Bar */}
+          <div className="p-2.5 bg-[#141428] border border-[#818CF8]/30 rounded space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+              <span className="text-[#8E8E98] flex items-center gap-1.5">
+                🎵 <strong className="text-white">Note Cible / Transposition :</strong>
+              </span>
+              <div className="flex items-center gap-1 flex-wrap">
+                {(['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const).map((note) => {
+                  const isSelected = config.pitchRing.targetNote === note;
+                  return (
+                    <button
+                      key={note}
+                      type="button"
+                      onClick={() => {
+                        const noteMap: Record<string, number> = {
+                          C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5,
+                          'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11,
+                        };
+                        const targetSemis = noteMap[note] ?? 0;
+                        onChangeConfig({
+                          ...config,
+                          pitchRing: {
+                            ...config.pitchRing,
+                            targetNote: note,
+                            pitchSemitones: targetSemis,
+                          },
+                        });
+                      }}
+                      className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors ${
+                        isSelected
+                          ? 'bg-[#818CF8] text-black shadow-md shadow-[#818CF8]/30'
+                          : 'bg-[#1D1D36] text-[#A5B4FC] hover:bg-[#28284C]'
+                      }`}
+                    >
+                      {note}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick action buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-[#818CF8]/15">
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: {
+                      ...config.pitchRing,
+                      pitchSemitones: Math.max(-24, config.pitchRing.pitchSemitones - 12),
+                    },
+                  })
+                }
+                className="px-2 py-1 text-[10px] font-mono bg-[#1C1C36] hover:bg-[#28284E] text-[#818CF8] border border-[#818CF8]/30 rounded transition-colors"
+              >
+                -12 st (-1 Oct)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: {
+                      ...config.pitchRing,
+                      pitchSemitones: Math.max(-24, config.pitchRing.pitchSemitones - 1),
+                    },
+                  })
+                }
+                className="px-2 py-1 text-[10px] font-mono bg-[#1C1C36] hover:bg-[#28284E] text-[#818CF8] border border-[#818CF8]/30 rounded transition-colors"
+              >
+                -1 st
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: {
+                      ...config.pitchRing,
+                      pitchSemitones: 0,
+                      pitchCents: 0,
+                      targetNote: 'C',
+                    },
+                  })
+                }
+                className="px-2 py-1 text-[10px] font-mono bg-[#1C1C36] hover:bg-[#28284E] text-white border border-[#818CF8]/30 rounded transition-colors"
+              >
+                Reset (0 st)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: {
+                      ...config.pitchRing,
+                      pitchSemitones: Math.min(24, config.pitchRing.pitchSemitones + 1),
+                    },
+                  })
+                }
+                className="px-2 py-1 text-[10px] font-mono bg-[#1C1C36] hover:bg-[#28284E] text-[#818CF8] border border-[#818CF8]/30 rounded transition-colors"
+              >
+                +1 st
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: {
+                      ...config.pitchRing,
+                      pitchSemitones: Math.min(24, config.pitchRing.pitchSemitones + 12),
+                    },
+                  })
+                }
+                className="px-2 py-1 text-[10px] font-mono bg-[#1C1C36] hover:bg-[#28284E] text-[#818CF8] border border-[#818CF8]/30 rounded transition-colors"
+              >
+                +12 st (+1 Oct)
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+            <div className="p-2 bg-[#121222] border border-[#202036] rounded space-y-1">
+              <span className="text-[#8E8E98]">Algorithme de Pitch</span>
+              <select
+                value={config.pitchRing.algorithm || 'hq-resample'}
+                onChange={(e) =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: {
+                      ...config.pitchRing,
+                      algorithm: e.target.value as any,
+                    },
+                  })
+                }
+                className="w-full bg-[#1A1A2E] text-[#818CF8] border border-[#303046] px-2 py-1 text-xs rounded outline-none"
+              >
+                <option value="hq-resample">HQ Spline Resample (808 / Kick / Stab)</option>
+                <option value="sola-time-preserve">WSOLA Time-Preserve (Mélodie / Voix)</option>
+                <option value="granular">Granular Crossfade (FX Créatif)</option>
+              </select>
+            </div>
+
             <div className="p-2 bg-[#121222] border border-[#202036] rounded space-y-1">
               <div className="flex justify-between">
-                <span className="text-[#8E8E98]">Pitch (Demi-Tons)</span>
+                <span className="text-[#8E8E98]">Demi-Tons (Semitones)</span>
                 <span className="text-[#818CF8] font-bold">
                   {config.pitchRing.pitchSemitones > 0 ? `+${config.pitchRing.pitchSemitones}` : config.pitchRing.pitchSemitones} st
                 </span>
@@ -1766,6 +1916,29 @@ export const DspControlsCards: React.FC<DspControlsCardsProps> = ({
 
             <div className="p-2 bg-[#121222] border border-[#202036] rounded space-y-1">
               <div className="flex justify-between">
+                <span className="text-[#8E8E98]">Accord Fin (Cents)</span>
+                <span className="text-[#818CF8] font-bold">
+                  {config.pitchRing.pitchCents > 0 ? `+${config.pitchRing.pitchCents}` : config.pitchRing.pitchCents} ¢
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-100"
+                max="100"
+                step="1"
+                value={config.pitchRing.pitchCents || 0}
+                onChange={(e) =>
+                  onChangeConfig({
+                    ...config,
+                    pitchRing: { ...config.pitchRing, pitchCents: Number(e.target.value) },
+                  })
+                }
+                className="w-full accent-[#818CF8]"
+              />
+            </div>
+
+            <div className="p-2 bg-[#121222] border border-[#202036] rounded space-y-1">
+              <div className="flex justify-between">
                 <span className="text-[#8E8E98]">Porteuse Ring Mod</span>
                 <span className="text-[#818CF8] font-bold">{config.pitchRing.ringModFreqHz} Hz</span>
               </div>
@@ -1779,26 +1952,6 @@ export const DspControlsCards: React.FC<DspControlsCardsProps> = ({
                   onChangeConfig({
                     ...config,
                     pitchRing: { ...config.pitchRing, ringModFreqHz: Number(e.target.value) },
-                  })
-                }
-                className="w-full accent-[#818CF8]"
-              />
-            </div>
-
-            <div className="p-2 bg-[#121222] border border-[#202036] rounded space-y-1">
-              <div className="flex justify-between">
-                <span className="text-[#8E8E98]">Mix Ring Mod</span>
-                <span className="text-[#818CF8] font-bold">{config.pitchRing.ringModMix}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={config.pitchRing.ringModMix}
-                onChange={(e) =>
-                  onChangeConfig({
-                    ...config,
-                    pitchRing: { ...config.pitchRing, ringModMix: Number(e.target.value) },
                   })
                 }
                 className="w-full accent-[#818CF8]"

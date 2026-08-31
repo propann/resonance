@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Play,
   Pause,
@@ -15,11 +15,47 @@ import {
   Activity,
   FolderTree,
   Flame,
+  ShieldCheck,
+  RotateCcw,
+  Sliders,
 } from 'lucide-react';
 import { SampleItem, SampleType, FilterState } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { audioBufferToWavBlob, triggerFileDownload } from '../services/audioConverter';
 import { MiniWaveform } from './MiniWaveform';
+
+export interface ColumnWidths {
+  select: number;
+  wave: number;
+  name: number;
+  type: number;
+  key: number;
+  genre: number;
+  lufs: number;
+  tools: number;
+}
+
+const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
+  select: 55,
+  wave: 125,
+  name: 240,
+  type: 130,
+  key: 95,
+  genre: 110,
+  lufs: 90,
+  tools: 155,
+};
+
+const MIN_COLUMN_WIDTHS: ColumnWidths = {
+  select: 45,
+  wave: 70,
+  name: 120,
+  type: 80,
+  key: 60,
+  genre: 70,
+  lufs: 65,
+  tools: 110,
+};
 
 interface SampleTableProps {
   samples: SampleItem[];
@@ -28,6 +64,7 @@ interface SampleTableProps {
   onOpenSlicerForSample: (sample: SampleItem) => void;
   onOpenDspAnalyzer?: (sample: SampleItem) => void;
   onOpenFxRack?: (sample: SampleItem) => void;
+  onOpenLoudnessStandard?: (sample: SampleItem) => void;
   onOpenBatchNaming?: () => void;
   onToggleFavorite: (sampleId: string) => void;
   onSetRating: (sampleId: string, rating: number) => void;
@@ -64,6 +101,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   onOpenSlicerForSample,
   onOpenDspAnalyzer,
   onOpenFxRack,
+  onOpenLoudnessStandard,
   onOpenBatchNaming,
   onToggleFavorite,
   onSetRating,
@@ -77,15 +115,80 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
 
-  // Subscribe to engine state
-  React.useEffect(() => {
-    const unsub = audioEngine.subscribe((st) => {
-      setPlayingId(st.isPlaying ? st.sampleId : null);
-      if (st.isPlaying && st.duration > 0) {
-        setPlaybackProgress(st.currentTime / st.duration);
-      } else {
-        setPlaybackProgress(0);
+  // Colonnes redimensionnables comme un tableur
+  const [colWidths, setColWidths] = useState<ColumnWidths>(() => {
+    try {
+      const saved = localStorage.getItem('resonance_sample_table_col_widths_v2');
+      if (saved) {
+        return { ...DEFAULT_COLUMN_WIDTHS, ...JSON.parse(saved) };
       }
+    } catch (e) {
+      // Ignorer
+    }
+    return DEFAULT_COLUMN_WIDTHS;
+  });
+
+  const [activeResizingCol, setActiveResizingCol] = useState<keyof ColumnWidths | null>(null);
+  const resizeStartXRef = useRef<number>(0);
+  const resizeStartWidthRef = useRef<number>(0);
+
+  // Sauvegarde des largeurs
+  useEffect(() => {
+    try {
+      localStorage.setItem('resonance_sample_table_col_widths_v2', JSON.stringify(colWidths));
+    } catch (e) {
+      // Ignorer
+    }
+  }, [colWidths]);
+
+  // Gestionnaire de redimensionnement de colonne (Spreadsheet resize handler)
+  const handleStartResize = (e: React.MouseEvent, colKey: keyof ColumnWidths) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveResizingCol(colKey);
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = colWidths[colKey];
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - resizeStartXRef.current;
+      const minW = MIN_COLUMN_WIDTHS[colKey] || 50;
+      const newWidth = Math.max(minW, resizeStartWidthRef.current + deltaX);
+
+      setColWidths((prev) => ({
+        ...prev,
+        [colKey]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setActiveResizingCol(null);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Double-clic sur le resizer pour reset la colonne
+  const handleResetColWidth = (colKey: keyof ColumnWidths) => {
+    setColWidths((prev) => ({
+      ...prev,
+      [colKey]: DEFAULT_COLUMN_WIDTHS[colKey],
+    }));
+  };
+
+  // Reset toutes les colonnes
+  const handleResetAllCols = () => {
+    setColWidths(DEFAULT_COLUMN_WIDTHS);
+  };
+
+  // Subscribe to audio engine playback state
+  useEffect(() => {
+    const unsub = audioEngine.subscribe((state) => {
+      setPlayingId(state.isPlaying ? state.sampleId : null);
+      const prog = state.duration > 0 ? (state.currentTime / state.duration) * 100 : 0;
+      setPlaybackProgress(prog);
     });
     return () => unsub();
   }, []);
@@ -95,7 +198,8 @@ export const SampleTable: React.FC<SampleTableProps> = ({
     if (!sample.audioBuffer) return;
 
     if (playingId === sample.id) {
-      audioEngine.pause();
+      audioEngine.stop();
+      setPlayingId(null);
     } else {
       onSelectSample(sample);
       audioEngine.play(sample.audioBuffer, sample.id);
@@ -130,69 +234,192 @@ export const SampleTable: React.FC<SampleTableProps> = ({
 
   return (
     <div id="sample-table-container" className="flex-1 flex flex-col bg-[#0A0A0E] border-2 border-[#1E1E26] overflow-hidden select-none pixel-box">
-      {/* Pixel Hardware Table Header */}
-      <div className="bg-[#121218] border-b-2 border-[#1E1E26] text-[#8E8E93] text-[9px] font-pixel uppercase tracking-wide grid grid-cols-12 px-3 py-2 items-center select-none">
-        {/* Checkbox & Play */}
-        <div className="col-span-1 flex items-center gap-1.5">
+      {/* Table Top Controls & Info Bar */}
+      <div className="bg-[#0E0E14] border-b border-[#1E1E26] px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-[#8E8E98]">
+        <div className="flex items-center gap-3">
+          <span className="text-[#00F0FF] font-bold">
+            {samples.length} sample{samples.length > 1 ? 's' : ''}
+          </span>
+          {selectedSampleIds.length > 0 && (
+            <span className="bg-[#00F0FF]/15 text-[#00F0FF] px-1.5 py-0.5 rounded border border-[#00F0FF]/30">
+              {selectedSampleIds.length} sélectionné{selectedSampleIds.length > 1 ? 's' : ''}
+            </span>
+          )}
+          <span className="hidden sm:inline text-[#5A5A68]">
+            | Glissez les séparateurs pour redimensionner les colonnes comme un tableur
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {onOpenLoudnessStandard && (
+            <button
+              onClick={() => {
+                const target = samples.find((s) => s.id === selectedSampleId) || samples[0];
+                if (target) onOpenLoudnessStandard(target);
+              }}
+              className="px-2 py-0.5 bg-[#00F0FF]/10 hover:bg-[#00F0FF]/25 text-[#00F0FF] border border-[#00F0FF]/40 rounded text-[10px] flex items-center gap-1 transition-colors"
+              title="Ouvrir l'étalon international de normalisation sonore"
+            >
+              <ShieldCheck className="w-3 h-3" />
+              <span>ÉTALON ITU-R BS.1770</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleResetAllCols}
+            className="p-1 hover:text-white text-[#8E8E98] hover:bg-[#1E1E28] rounded border border-transparent hover:border-[#333348] transition-colors"
+            title="Réinitialiser la largeur des colonnes"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Spreadsheet-like Resizable Table Header */}
+      <div className="bg-[#121218] border-b-2 border-[#1E1E26] text-[#8E8E93] text-[9px] font-pixel uppercase tracking-wide flex items-center select-none overflow-x-auto custom-scrollbar">
+        {/* Column 1: Checkbox & Play */}
+        <div
+          style={{ width: `${colWidths.select}px`, minWidth: `${colWidths.select}px` }}
+          className="relative px-2 py-2 flex items-center gap-1.5 flex-shrink-0 border-r border-[#1E1E28]"
+        >
           <input
             type="checkbox"
             checked={isAllSelected}
             onChange={(e) => onSelectAllSamples(e.target.checked)}
             className="rounded-none border-[#333344] text-[#00F0FF] focus:ring-0 w-3 h-3 bg-[#000000] accent-[#00F0FF] cursor-pointer"
           />
-          <span>PLAY</span>
+          <span className="truncate">PLAY</span>
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'select')}
+            onDoubleClick={() => handleResetColWidth('select')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'select' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
 
-        {/* Mini Waveform Visualizer */}
-        <div className="col-span-2">
-          <span>ONDE</span>
-        </div>
-
-        {/* Name */}
+        {/* Column 2: Mini Waveform */}
         <div
-          className="col-span-3 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF]"
+          style={{ width: `${colWidths.wave}px`, minWidth: `${colWidths.wave}px` }}
+          className="relative px-2 py-2 flex items-center flex-shrink-0 border-r border-[#1E1E28]"
+        >
+          <span className="truncate">ONDE</span>
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'wave')}
+            onDoubleClick={() => handleResetColWidth('wave')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'wave' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
+        </div>
+
+        {/* Column 3: Name */}
+        <div
+          style={{ width: `${colWidths.name}px`, minWidth: `${colWidths.name}px` }}
+          className="relative px-2 py-2 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF] flex-shrink-0 border-r border-[#1E1E28]"
           onClick={() => handleSort('name')}
         >
-          <span>NOM DU FICHIER</span>
-          <ArrowUpDown className="w-2.5 h-2.5" />
+          <span className="truncate">NOM DU FICHIER</span>
+          <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0" />
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'name')}
+            onDoubleClick={() => handleResetColWidth('name')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'name' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
 
-        {/* Category / Type */}
+        {/* Column 4: Type */}
         <div
-          className="col-span-2 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF]"
+          style={{ width: `${colWidths.type}px`, minWidth: `${colWidths.type}px` }}
+          className="relative px-2 py-2 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF] flex-shrink-0 border-r border-[#1E1E28]"
           onClick={() => handleSort('type')}
         >
-          <span>TYPE</span>
-          <ArrowUpDown className="w-2.5 h-2.5" />
+          <span className="truncate">TYPE</span>
+          <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0" />
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'type')}
+            onDoubleClick={() => handleResetColWidth('type')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'type' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
 
-        {/* Key / BPM */}
+        {/* Column 5: Key / BPM */}
         <div
-          className="col-span-1 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF]"
+          style={{ width: `${colWidths.key}px`, minWidth: `${colWidths.key}px` }}
+          className="relative px-2 py-2 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF] flex-shrink-0 border-r border-[#1E1E28]"
           onClick={() => handleSort('key')}
         >
-          <span>KEY/BPM</span>
-          <ArrowUpDown className="w-2.5 h-2.5" />
+          <span className="truncate">KEY/BPM</span>
+          <ArrowUpDown className="w-2.5 h-2.5 flex-shrink-0" />
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'key')}
+            onDoubleClick={() => handleResetColWidth('key')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'key' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
 
-        {/* Genre */}
-        <div className="col-span-1">
-          <span>GENRE</span>
+        {/* Column 6: Genre */}
+        <div
+          style={{ width: `${colWidths.genre}px`, minWidth: `${colWidths.genre}px` }}
+          className="relative px-2 py-2 flex items-center flex-shrink-0 border-r border-[#1E1E28]"
+        >
+          <span className="truncate">GENRE</span>
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'genre')}
+            onDoubleClick={() => handleResetColWidth('genre')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'genre' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
 
-        {/* Loudness LUFS & Gain */}
-        <div className="col-span-1">
-          <span>LUFS</span>
+        {/* Column 7: LUFS */}
+        <div
+          style={{ width: `${colWidths.lufs}px`, minWidth: `${colWidths.lufs}px` }}
+          className="relative px-2 py-2 flex items-center flex-shrink-0 border-r border-[#1E1E28]"
+        >
+          <span className="truncate">LUFS / ÉTALON</span>
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'lufs')}
+            onDoubleClick={() => handleResetColWidth('lufs')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'lufs' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
 
-        {/* Actions */}
-        <div className="col-span-1 text-right pr-2">
-          <span>OUTILS</span>
+        {/* Column 8: Tools */}
+        <div
+          style={{ width: `${colWidths.tools}px`, minWidth: `${colWidths.tools}px` }}
+          className="relative px-2 py-2 flex items-center justify-end pr-2 flex-shrink-0"
+        >
+          <span className="truncate">OUTILS</span>
+          <div
+            onMouseDown={(e) => handleStartResize(e, 'tools')}
+            onDoubleClick={() => handleResetColWidth('tools')}
+            className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#00F0FF] transition-colors z-10 ${
+              activeResizingCol === 'tools' ? 'bg-[#00F0FF]' : ''
+            }`}
+            title="Double-clic pour réinitialiser"
+          />
         </div>
       </div>
 
-      {/* Table Rows */}
-      <div className="flex-1 overflow-y-auto divide-y-2 divide-[#14141C]">
+      {/* Table Rows Container */}
+      <div className="flex-1 overflow-y-auto overflow-x-auto divide-y-2 divide-[#14141C] custom-scrollbar">
         {samples.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-[#8E8E93] text-xs font-pixel space-y-2">
             <Disc className="w-8 h-8 text-[#5A5A62] animate-spin" style={{ animationDuration: '6s' }} />
@@ -210,14 +437,17 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                 key={sample.id}
                 id={`sample-row-${sample.id}`}
                 onClick={() => onSelectSample(sample)}
-                className={`grid grid-cols-12 px-3 py-1.5 items-center text-xs transition select-none cursor-pointer group ${
+                className={`flex items-center text-xs transition select-none cursor-pointer group min-w-max ${
                   isSelected
                     ? 'bg-[#00F0FF]/15 border-l-4 border-[#00F0FF]'
                     : 'hover:bg-[#12121A]'
                 }`}
               >
-                {/* Select Checkbox & Play Button */}
-                <div className="col-span-1 flex items-center gap-1.5">
+                {/* 1. Select Checkbox & Play Button */}
+                <div
+                  style={{ width: `${colWidths.select}px`, minWidth: `${colWidths.select}px` }}
+                  className="px-2 py-1.5 flex items-center gap-1.5 flex-shrink-0"
+                >
                   <input
                     type="checkbox"
                     checked={isChecked}
@@ -229,7 +459,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   />
                   <button
                     onClick={(e) => handlePlaySample(e, sample)}
-                    className={`w-5 h-5 flex items-center justify-center transition border pixel-btn ${
+                    className={`w-5 h-5 flex items-center justify-center transition border pixel-btn flex-shrink-0 ${
                       isPlaying
                         ? 'bg-[#FFE600] text-black font-bold border-[#FFE600]'
                         : 'bg-[#14141C] hover:bg-[#1E1E28] text-[#00F0FF] border-[#2A2A3A]'
@@ -243,29 +473,35 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   </button>
                 </div>
 
-                {/* Mini Waveform Visualizer */}
-                <div className="col-span-2 pr-2">
+                {/* 2. Mini Waveform Visualizer */}
+                <div
+                  style={{ width: `${colWidths.wave}px`, minWidth: `${colWidths.wave}px` }}
+                  className="px-2 py-1.5 flex-shrink-0"
+                >
                   <MiniWaveform
                     audioBuffer={sample.audioBuffer}
                     sampleId={sample.id}
                     type={sample.type}
                     isPlaying={isPlaying}
                     progress={isPlaying ? playbackProgress : 0}
-                    width={110}
+                    width={Math.max(60, colWidths.wave - 16)}
                     height={22}
                     slices={sample.slices}
                     onClick={(e) => handlePlaySample(e, sample)}
                   />
                 </div>
 
-                {/* Name & Multi-sound slices tag */}
-                <div className="col-span-3 flex items-center gap-1.5 truncate pr-2">
+                {/* 3. Name & Multi-sound slices tag */}
+                <div
+                  style={{ width: `${colWidths.name}px`, minWidth: `${colWidths.name}px` }}
+                  className="px-2 py-1.5 flex items-center gap-1.5 truncate flex-shrink-0"
+                >
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onToggleFavorite(sample.id);
                     }}
-                    className="text-[#5A5A62] hover:text-[#FFE600] transition"
+                    className="text-[#5A5A62] hover:text-[#FFE600] transition flex-shrink-0"
                   >
                     <Star
                       className={`w-3 h-3 ${
@@ -286,8 +522,11 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   )}
                 </div>
 
-                {/* Category & Type Badge */}
-                <div className="col-span-2 flex items-center gap-1 flex-wrap">
+                {/* 4. Category & Type Badge */}
+                <div
+                  style={{ width: `${colWidths.type}px`, minWidth: `${colWidths.type}px` }}
+                  className="px-2 py-1.5 flex items-center gap-1 flex-wrap flex-shrink-0"
+                >
                   {sample.isLoop ? (
                     <span className="px-1 py-0.2 text-[8px] font-pixel bg-[#A855F7]/20 text-[#A855F7] border border-[#A855F7]/40">
                       LOOP
@@ -304,8 +543,11 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   </span>
                 </div>
 
-                {/* Musical Key & BPM */}
-                <div className="col-span-1 font-pixel flex flex-col gap-0.5 text-[9px]">
+                {/* 5. Musical Key & BPM */}
+                <div
+                  style={{ width: `${colWidths.key}px`, minWidth: `${colWidths.key}px` }}
+                  className="px-2 py-1.5 font-pixel flex flex-col gap-0.5 text-[9px] flex-shrink-0"
+                >
                   {sample.key ? (
                     <span className="text-[#FFE600]">
                       {sample.key}
@@ -318,21 +560,49 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   )}
                 </div>
 
-                {/* Genre */}
-                <div className="col-span-1 truncate pr-1 text-[9px] font-pixel text-[#8E8E93]">
+                {/* 6. Genre */}
+                <div
+                  style={{ width: `${colWidths.genre}px`, minWidth: `${colWidths.genre}px` }}
+                  className="px-2 py-1.5 truncate text-[9px] font-pixel text-[#8E8E93] flex-shrink-0"
+                >
                   <span>{sample.genre?.split('/')[0] || 'Universal'}</span>
                 </div>
 
-                {/* Loudness LUFS & Gain Matching */}
-                <div className="col-span-1 font-pixel text-[9px]">
+                {/* 7. Loudness LUFS & Étalon Status */}
+                <div
+                  style={{ width: `${colWidths.lufs}px`, minWidth: `${colWidths.lufs}px` }}
+                  className="px-2 py-1.5 font-pixel text-[9px] flex-shrink-0 flex items-center gap-1"
+                >
                   <div className={sample.lufs && sample.lufs > -10 ? 'text-[#FFE600]' : 'text-[#EDEDEE]'}>
                     {sample.lufs ? `${sample.lufs.toFixed(0)} LUF` : `${(sample.rmsDb || -14).toFixed(0)} dB`}
                   </div>
+                  {sample.lufs && Math.abs(sample.lufs - (-14)) <= 1.0 && (
+                    <span className="text-[8px] text-[#10B981]" title="Conforme Étalon Streaming -14 LUFS">
+                      ✓
+                    </span>
+                  )}
                 </div>
 
-                {/* Quick Action Tools */}
-                <div className="col-span-1 flex items-center justify-end gap-1">
-                  {/* DSP FX Rack & Sound Transformer Button */}
+                {/* 8. Quick Action Tools */}
+                <div
+                  style={{ width: `${colWidths.tools}px`, minWidth: `${colWidths.tools}px` }}
+                  className="px-2 py-1.5 flex items-center justify-end gap-1 flex-shrink-0"
+                >
+                  {/* Étalon Loudness Button */}
+                  {onOpenLoudnessStandard && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenLoudnessStandard(sample);
+                      }}
+                      className="p-1 bg-[#10B981]/15 hover:bg-[#10B981]/30 text-[#10B981] border border-[#10B981]/40 pixel-btn"
+                      title="Calibrer selon l'Étalon Officiel (ITU-R BS.1770 / EBU R128)"
+                    >
+                      <ShieldCheck className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+
+                  {/* DSP FX Rack & Pitch Transposer Button */}
                   {onOpenFxRack && (
                     <button
                       onClick={(e) => {
@@ -340,7 +610,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                         onOpenFxRack(sample);
                       }}
                       className="p-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border border-[#00F0FF]/40 pixel-btn"
-                      title="Rack d'Effets DSP & Sound Design"
+                      title="Rack FX, Transposition de Note & DSP"
                     >
                       <Flame className="w-2.5 h-2.5" />
                     </button>

@@ -43,6 +43,7 @@ import { AudioVisualizationGuideModal } from './AudioVisualizationGuideModal';
 export type WaveformColorTheme = 'cyber-neon' | 'sunset-amber' | 'emerald-matrix' | 'magma-fire' | 'ice-arctic';
 
 interface WaveformCanvasProps {
+  height?: number;
   sample: SampleItem;
   onSliceClick?: (slice: SliceRegion) => void;
   onOpenSlicer?: () => void;
@@ -55,6 +56,7 @@ interface WaveformCanvasProps {
 }
 
 export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
+  height,
   sample,
   onSliceClick,
   onOpenSlicer,
@@ -1302,7 +1304,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       <div className="relative flex w-full border border-[#1E1E28] bg-[#050508] overflow-hidden">
         {/* Left / Center: Waveform + Spectrogram Canvas */}
         <div
-          className={`relative flex-1 h-44 overflow-hidden ${
+          style={{ height: height ? `${height}px` : undefined }}
+          className={`relative flex-1 ${height ? '' : 'h-44'} overflow-hidden ${
             isHoveringMarker || draggingSliceIndex !== null ? 'cursor-ew-resize' : 'cursor-crosshair'
           }`}
         >

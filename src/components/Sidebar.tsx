@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Folder,
   FolderPlus,
@@ -17,10 +17,14 @@ import {
   FolderTree,
   FileAudio,
   Plus,
+  Flame,
+  Wand2,
+  BookOpen,
 } from 'lucide-react';
 import { FolderItem, SampleType, FilterState, SampleItem, MusicGenre } from '../types/sample';
 
 interface SidebarProps {
+  width?: number;
   folders: FolderItem[];
   samples: SampleItem[];
   filterState: FilterState;
@@ -30,6 +34,9 @@ interface SidebarProps {
   onOpenRecorder: () => void;
   onOpenOp1Studio?: () => void;
   onOpenGitHubSync?: () => void;
+  onOpenAutoCurator?: () => void;
+  onOpenDocumentation?: () => void;
+  onAutoOrganizeLibrary?: () => void;
   activeView: 'library' | 'timbre';
   onViewChange: (view: 'library' | 'timbre') => void;
 }
@@ -62,6 +69,7 @@ const EP133_PAD_GROUPS = [
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  width,
   folders,
   samples,
   filterState,
@@ -71,6 +79,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenRecorder,
   onOpenOp1Studio,
   onOpenGitHubSync,
+  onOpenAutoCurator,
+  onOpenDocumentation,
+  onAutoOrganizeLibrary,
   activeView,
   onViewChange,
 }) => {
@@ -78,6 +89,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderName, setNewFolderName] = useState<string>('');
   const [newFolderColor, setNewFolderColor] = useState<string>('#00F0FF');
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
+    'f-root-oneshots': true,
+    'f-root-loops': true,
+    'f-os-drums': true,
+    'f-lp-drums': true,
+  });
+
+  const toggleFolderExpand = (folderId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [folderId]: !prev[folderId],
+    }));
+  };
 
   const handleCreateFolderSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +111,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setNewFolderName('');
       setIsCreatingFolder(false);
     }
+  };
+
+  // Group folders by root vs children
+  const rootFolders = useMemo(() => {
+    return folders.filter((f) => !f.parentId);
+  }, [folders]);
+
+  const getChildFolders = (parentId: string) => {
+    return folders.filter((f) => f.parentId === parentId);
   };
 
   const getCountForType = (type: SampleType | 'all') => {
@@ -102,7 +136,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       id="app-sidebar"
-      className="w-72 sm:w-80 bg-[#0A0A0E] border-r-2 border-[#1E1E26] flex flex-col h-full select-none overflow-hidden z-20 font-mono text-xs"
+      style={{
+        width: width ? `${width}px` : undefined,
+        minWidth: width ? `${width}px` : undefined,
+        maxWidth: width ? `${width}px` : undefined,
+      }}
+      className={`${width ? '' : 'w-72 sm:w-80'} bg-[#0A0A0E] border-r-2 border-[#1E1E26] flex flex-col h-full select-none overflow-hidden z-20 font-mono text-xs flex-shrink-0`}
     >
       {/* Top Header Mode Banner - Retro Hardware Switch */}
       <div className="p-2.5 bg-[#0F0F14] border-b-2 border-[#1E1E26] space-y-2">
@@ -245,21 +284,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* ======================================================== */}
         {sidebarTab === 'folders' && (
           <div className="space-y-2">
-            {/* Header with New Folder Button */}
+            {/* Header with Auto-Organize & New Folder Buttons */}
             <div className="flex items-center justify-between pb-1 border-b border-[#1E1E26]">
               <span className="text-[10px] font-pixel text-[#FFE600] tracking-wider uppercase flex items-center gap-1.5">
                 <Folder className="w-3.5 h-3.5 text-[#FFE600]" />
-                Arborescence Dossiers
+                Arborescence Pro
               </span>
-              <button
-                id="add-folder-btn"
-                onClick={() => setIsCreatingFolder(true)}
-                className="px-2 py-0.5 bg-[#FFE600]/10 hover:bg-[#FFE600]/20 text-[#FFE600] border border-[#FFE600]/40 text-[9px] font-pixel flex items-center gap-1 transition pixel-btn"
-                title="Créer un nouveau dossier de samples"
-              >
-                <Plus className="w-3 h-3" />
-                <span>DOSSIER</span>
-              </button>
+              <div className="flex items-center gap-1">
+                {onOpenAutoCurator && (
+                  <button
+                    onClick={onOpenAutoCurator}
+                    className="px-1.5 py-0.5 bg-gradient-to-r from-[#00F0FF]/20 to-[#A855F7]/20 hover:from-[#00F0FF]/30 hover:to-[#A855F7]/30 text-[#00F0FF] border border-[#00F0FF]/40 text-[8px] font-pixel flex items-center gap-1 transition pixel-btn font-bold"
+                    title="Curateur Automatique : puiser, étudier, mettre au format, renommer et ranger"
+                  >
+                    <Wand2 className="w-2.5 h-2.5 text-[#00F0FF]" />
+                    <span>CURATEUR</span>
+                  </button>
+                )}
+                {onAutoOrganizeLibrary && (
+                  <button
+                    onClick={onAutoOrganizeLibrary}
+                    className="px-1.5 py-0.5 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#00F0FF] border border-[#00F0FF]/40 text-[8px] font-pixel flex items-center gap-1 transition pixel-btn"
+                    title="Auto-classer les sons selon l'arborescence d'or (Splice / Ableton / NI)"
+                  >
+                    <Wand2 className="w-2.5 h-2.5" />
+                    <span>AUTO-TRI</span>
+                  </button>
+                )}
+                <button
+                  id="add-folder-btn"
+                  onClick={() => setIsCreatingFolder(true)}
+                  className="px-1.5 py-0.5 bg-[#FFE600]/10 hover:bg-[#FFE600]/20 text-[#FFE600] border border-[#FFE600]/40 text-[8px] font-pixel flex items-center gap-1 transition pixel-btn"
+                  title="Créer un nouveau dossier personnalisé"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                  <span>+ DOSSIER</span>
+                </button>
+              </div>
             </div>
 
             {/* Folder Creation Form */}
@@ -314,7 +375,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 id="folder-all-btn"
                 onClick={() => onFilterChange({ selectedFolderId: null })}
-                className={`w-full flex items-center justify-between px-2.5 py-2 border transition pixel-btn ${
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 border transition pixel-btn ${
                   filterState.selectedFolderId === null
                     ? 'bg-[#181822] text-[#00F0FF] border-[#00F0FF] font-bold shadow-xs'
                     : 'bg-[#101015] text-[#EDEDEE] border-[#1C1C24] hover:border-[#2C2C38]'
@@ -329,64 +390,200 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </span>
               </button>
 
-              {/* User Folders & Sub-directories */}
-              {folders.length === 0 ? (
-                <div className="p-3 text-center bg-[#101015] border border-dashed border-[#22222C] text-[#8E8E93] text-[11px] space-y-1">
-                  <p>Aucun dossier personnalisé</p>
-                  <p className="text-[9px] text-[#00F0FF] font-pixel">
-                    Glissez des dossiers ou cliquez sur "+ DOSSIER"
-                  </p>
-                </div>
-              ) : (
-                folders.map((folder) => {
-                  const isSel = filterState.selectedFolderId === folder.id;
-                  const folderCount = samples.filter((s) => s.folderId === folder.id).length;
-                  return (
+              {/* Hierarchical Folder Rendering */}
+              {rootFolders.map((rootFolder) => {
+                const isRootSel = filterState.selectedFolderId === rootFolder.id;
+                const isExpanded = !!expandedFolders[rootFolder.id];
+                const childFolders = getChildFolders(rootFolder.id);
+                const hasChildren = childFolders.length > 0;
+
+                // Total samples in root or its subfolders
+                const totalCount = samples.filter((s) => {
+                  if (s.folderId === rootFolder.id) return true;
+                  if (s.folderPath && s.folderPath.startsWith(rootFolder.path)) return true;
+                  return false;
+                }).length;
+
+                return (
+                  <div key={rootFolder.id} className="space-y-0.5">
+                    {/* Root Folder Row */}
                     <div
-                      key={folder.id}
-                      className={`group flex items-center justify-between px-2.5 py-2 border transition pixel-btn ${
-                        isSel
+                      className={`group flex items-center justify-between px-2 py-1.5 border transition pixel-btn ${
+                        isRootSel
                           ? 'bg-[#1A1A26] text-white border-[#FFE600] font-bold'
                           : 'bg-[#101016] text-[#EDEDEE] border-[#1E1E28] hover:border-[#333344]'
                       }`}
                     >
-                      <button
-                        onClick={() => onFilterChange({ selectedFolderId: folder.id })}
-                        className="flex items-center gap-2 flex-1 text-left truncate"
-                      >
-                        <span style={{ color: folder.color || '#FFE600' }} className="text-sm">
-                          📁
-                        </span>
-                        <div className="truncate">
-                          <span className="text-xs font-semibold truncate block">
-                            {folder.name}
-                          </span>
-                        </div>
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        {hasChildren ? (
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFolderExpand(rootFolder.id, e)}
+                            className="p-0.5 hover:bg-[#2A2A3A] rounded text-[#8E8E93] hover:text-white"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3 h-3 text-[#FFE600]" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3 text-[#8E8E93]" />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="w-3" />
+                        )}
 
-                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => onFilterChange({ selectedFolderId: rootFolder.id })}
+                          className="flex items-center gap-1.5 flex-1 text-left truncate"
+                        >
+                          <span style={{ color: rootFolder.color || '#FFE600' }} className="text-xs">
+                            📁
+                          </span>
+                          <span className="text-xs font-semibold truncate tracking-tight">
+                            {rootFolder.name}
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <span
                           className="text-[9px] font-pixel px-1.5 py-0.2 border"
                           style={{
-                            color: folder.color || '#FFE600',
-                            borderColor: `${folder.color || '#FFE600'}44`,
-                            backgroundColor: `${folder.color || '#FFE600'}15`,
+                            color: rootFolder.color || '#FFE600',
+                            borderColor: `${rootFolder.color || '#FFE600'}44`,
+                            backgroundColor: `${rootFolder.color || '#FFE600'}15`,
                           }}
                         >
-                          {folderCount}
+                          {totalCount}
                         </span>
-                        <button
-                          onClick={() => onDeleteFolder(folder.id)}
-                          className="opacity-0 group-hover:opacity-100 text-[#8E8E93] hover:text-[#EF4444] p-1 transition"
-                          title="Supprimer ce dossier"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {!rootFolder.id.startsWith('f-') && (
+                          <button
+                            onClick={() => onDeleteFolder(rootFolder.id)}
+                            className="opacity-0 group-hover:opacity-100 text-[#8E8E93] hover:text-[#EF4444] p-0.5 transition"
+                            title="Supprimer ce dossier"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  );
-                })
-              )}
+
+                    {/* Sub-Folders (Level 1) */}
+                    {hasChildren && isExpanded && (
+                      <div className="pl-3 space-y-0.5 border-l border-[#22222E] ml-2">
+                        {childFolders.map((subFolder) => {
+                          const isSubSel = filterState.selectedFolderId === subFolder.id;
+                          const isSubExpanded = !!expandedFolders[subFolder.id];
+                          const subChildren = getChildFolders(subFolder.id);
+                          const hasSubChildren = subChildren.length > 0;
+
+                          const subCount = samples.filter((s) => {
+                            if (s.folderId === subFolder.id) return true;
+                            if (s.folderPath && s.folderPath.startsWith(subFolder.path)) return true;
+                            return false;
+                          }).length;
+
+                          return (
+                            <div key={subFolder.id} className="space-y-0.5">
+                              {/* Sub Folder Row */}
+                              <div
+                                className={`group flex items-center justify-between px-2 py-1 border transition pixel-btn ${
+                                  isSubSel
+                                    ? 'bg-[#1C1C2C] text-white border-[#00F0FF] font-bold'
+                                    : 'bg-[#0E0E14] text-[#C5C5D2] border-[#181822] hover:border-[#2A2A3A]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  {hasSubChildren ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => toggleFolderExpand(subFolder.id, e)}
+                                      className="p-0.5 hover:bg-[#2A2A3A] rounded text-[#8E8E93] hover:text-white"
+                                    >
+                                      {isSubExpanded ? (
+                                        <ChevronDown className="w-2.5 h-2.5 text-[#00F0FF]" />
+                                      ) : (
+                                        <ChevronRight className="w-2.5 h-2.5 text-[#8E8E93]" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="w-2.5" />
+                                  )}
+
+                                  <button
+                                    onClick={() => onFilterChange({ selectedFolderId: subFolder.id })}
+                                    className="flex items-center gap-1.5 flex-1 text-left truncate"
+                                  >
+                                    <span style={{ color: subFolder.color || '#00F0FF' }} className="text-[10px]">
+                                      ↳
+                                    </span>
+                                    <span className="text-[11px] truncate">{subFolder.name}</span>
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span
+                                    className="text-[8px] font-pixel px-1 py-0.2 border"
+                                    style={{
+                                      color: subFolder.color || '#00F0FF',
+                                      borderColor: `${subFolder.color || '#00F0FF'}44`,
+                                      backgroundColor: `${subFolder.color || '#00F0FF'}15`,
+                                    }}
+                                  >
+                                    {subCount}
+                                  </span>
+                                  {!subFolder.id.startsWith('f-') && (
+                                    <button
+                                      onClick={() => onDeleteFolder(subFolder.id)}
+                                      className="opacity-0 group-hover:opacity-100 text-[#8E8E93] hover:text-[#EF4444] p-0.5 transition"
+                                      title="Supprimer ce dossier"
+                                    >
+                                      <Trash2 className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Sub-Folders Level 2 */}
+                              {hasSubChildren && isSubExpanded && (
+                                <div className="pl-3 space-y-0.5 border-l border-[#282838] ml-2">
+                                  {subChildren.map((leafFolder) => {
+                                    const isLeafSel = filterState.selectedFolderId === leafFolder.id;
+                                    const leafCount = samples.filter(
+                                      (s) => s.folderId === leafFolder.id || s.folderPath?.startsWith(leafFolder.path)
+                                    ).length;
+
+                                    return (
+                                      <div
+                                        key={leafFolder.id}
+                                        className={`group flex items-center justify-between px-2 py-0.5 border transition pixel-btn ${
+                                          isLeafSel
+                                            ? 'bg-[#1E1E34] text-[#00F0FF] border-[#00F0FF] font-bold'
+                                            : 'bg-[#0A0A0F] text-[#A5A5B5] border-[#14141E] hover:border-[#222230]'
+                                        }`}
+                                      >
+                                        <button
+                                          onClick={() => onFilterChange({ selectedFolderId: leafFolder.id })}
+                                          className="flex items-center gap-1.5 flex-1 text-left truncate"
+                                        >
+                                          <span className="text-[9px] text-[#8E8E93]">•</span>
+                                          <span className="text-[10px] truncate">{leafFolder.name}</span>
+                                        </button>
+                                        <span className="text-[8px] font-pixel text-[#8E8E93] bg-[#14141E] px-1 py-0.2 border border-[#222230]">
+                                          {leafCount}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Quick Micro / Rec Shortcut */}
@@ -563,6 +760,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
       </div>
+
+      {/* Sidebar Footer Documentation & Standards Card */}
+      {onOpenDocumentation && (
+        <div className="p-2 border-t border-[#1C1C24] bg-[#0A0A0F]">
+          <button
+            id="sidebar-open-doc-btn"
+            onClick={onOpenDocumentation}
+            className="w-full flex items-center justify-between p-2 bg-[#12121A] hover:bg-[#1A1A26] border border-[#2A2A38] hover:border-[#00F0FF]/40 rounded text-left transition group"
+          >
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-3.5 h-3.5 text-[#00F0FF] group-hover:scale-110 transition" />
+              <div>
+                <div className="text-[9px] font-pixel text-white">GUIDE & CONVENTIONS</div>
+                <div className="text-[8px] font-mono text-gray-400">Norme propann/az-sample</div>
+              </div>
+            </div>
+            <span className="text-[8px] font-pixel text-[#00F0FF] px-1.5 py-0.5 bg-[#00F0FF]/15 border border-[#00F0FF]/30 rounded">
+              DOCS
+            </span>
+          </button>
+        </div>
+      )}
     </aside>
   );
 };

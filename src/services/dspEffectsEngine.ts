@@ -13,6 +13,8 @@
  * - Tape Stop Vinyl Brake, Reverse & Surgical Audio Enveloping
  */
 
+import { audioEngine } from './audioEngine';
+
 export interface SubBassConfig {
   enabled: boolean;
   boostDb: number; // 0 to +24 dB
@@ -95,6 +97,9 @@ export interface PitchRingConfig {
   enabled: boolean;
   pitchSemitones: number; // -24 to +24
   pitchCents: number; // -100 to +100
+  targetNote?: string; // e.g. 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
+  targetOctave?: number; // -2 to +2
+  algorithm: 'hq-resample' | 'sola-time-preserve' | 'granular';
   ringModFreqHz: number; // 0 to 2000 Hz (0 = disabled)
   ringModMix: number; // 0 to 100%
 }
@@ -303,6 +308,9 @@ export const DEFAULT_DSP_RACK_CONFIG: DspRackConfig = {
     enabled: false,
     pitchSemitones: 0,
     pitchCents: 0,
+    targetNote: 'C',
+    targetOctave: 0,
+    algorithm: 'hq-resample',
     ringModFreqHz: 0,
     ringModMix: 0,
   },
@@ -622,6 +630,7 @@ export const DSP_RACK_PRESETS: DspRackConfig[] = [
     category: 'Pitch & Extreme FX',
     pitchRing: {
       enabled: true,
+      algorithm: 'hq-resample',
       pitchSemitones: -5,
       pitchCents: 0,
       ringModFreqHz: 340,
@@ -710,7 +719,7 @@ export async function applyEffectsToAudioBuffer(
     tailSec = Math.max(tailSec, Math.min(4, config.delay.timeSec * 4));
   }
 
-  const newLength = originalLength + Math.floor(tailSec * sampleRate);
+  let newLength = originalLength + Math.floor(tailSec * sampleRate);
   
   // Clone channels to Float32Arrays
   let left = new Float32Array(newLength);
@@ -962,30 +971,154 @@ export async function applyEffectsToAudioBuffer(
       }
     }
 
-    // Pitch Semitones Shifter (Granular pitch shift offline)
+    // Pitch Transposition & Musical Note Tuner
     if (config.pitchRing.pitchSemitones !== 0 || config.pitchRing.pitchCents !== 0) {
       const totalCents = config.pitchRing.pitchSemitones * 100 + config.pitchRing.pitchCents;
       const pitchRatio = Math.pow(2, totalCents / 1200);
+      const algo = config.pitchRing.algorithm || 'hq-resample';
 
-      // Granular crossfade pitch shifter
-      const grainSize = Math.floor(sampleRate * 0.04); // 40ms grains
-      const hopSize = Math.floor(grainSize / 2);
-      const outL = new Float32Array(newLength);
-      const outR = new Float32Array(newLength);
+      if (algo === 'hq-resample') {
+        // High-Quality Hermite 4-point Spline Resampling (Pure phase, zero transient blur, perfect for 808/kicks/synth)
+        const resampledLength = Math.max(16, Math.floor(newLength / pitchRatio));
+        const outL = new Float32Array(resampledLength);
+        const outR = new Float32Array(resampledLength);
 
-      for (let pos = 0; pos < newLength - grainSize; pos += hopSize) {
-        for (let g = 0; g < grainSize; g++) {
-          const srcIdx = Math.floor(pos + g * pitchRatio);
-          if (srcIdx < newLength) {
-            // Hann window
-            const win = 0.5 * (1 - Math.cos((2 * Math.PI * g) / grainSize));
-            outL[pos + g] += left[srcIdx] * win;
-            outR[pos + g] += right[srcIdx] * win;
+        for (let i = 0; i < resampledLength; i++) {
+          const srcPos = i * pitchRatio;
+          const idx0 = Math.floor(srcPos);
+          const frac = srcPos - idx0;
+
+          // 4-point Hermite interpolation for Left channel
+          const p0_L = idx0 > 0 ? left[idx0 - 1] : left[0];
+          const p1_L = left[Math.min(newLength - 1, idx0)];
+          const p2_L = left[Math.min(newLength - 1, idx0 + 1)];
+          const p3_L = left[Math.min(newLength - 1, idx0 + 2)];
+
+          const c0_L = p1_L;
+          const c1_L = 0.5 * (p2_L - p0_L);
+          const c2_L = p0_L - 2.5 * p1_L + 2.0 * p2_L - 0.5 * p3_L;
+          const c3_L = 0.5 * (p3_L - p0_L) + 1.5 * (p1_L - p2_L);
+          outL[i] = ((c3_L * frac + c2_L) * frac + c1_L) * frac + c0_L;
+
+          // 4-point Hermite interpolation for Right channel
+          const p0_R = idx0 > 0 ? right[idx0 - 1] : right[0];
+          const p1_R = right[Math.min(newLength - 1, idx0)];
+          const p2_R = right[Math.min(newLength - 1, idx0 + 1)];
+          const p3_R = right[Math.min(newLength - 1, idx0 + 2)];
+
+          const c0_R = p1_R;
+          const c1_R = 0.5 * (p2_R - p0_R);
+          const c2_R = p0_R - 2.5 * p1_R + 2.0 * p2_R - 0.5 * p3_R;
+          const c3_R = 0.5 * (p3_R - p0_R) + 1.5 * (p1_R - p2_R);
+          outR[i] = ((c3_R * frac + c2_R) * frac + c1_R) * frac + c0_R;
+        }
+
+        left = outL;
+        right = outR;
+        newLength = resampledLength;
+      } else if (algo === 'sola-time-preserve') {
+        // WSOLA (Waveform Similarity Overlap-Add) - Pitch transposition without changing duration
+        const winSize = Math.floor(sampleRate * 0.035); // 35ms window
+        const hopOut = Math.floor(winSize / 2);
+        const searchRange = Math.floor(winSize * 0.4);
+        const outL = new Float32Array(newLength);
+        const outR = new Float32Array(newLength);
+        const normFactor = new Float32Array(newLength);
+
+        // Pre-resample with pitchRatio
+        const tempLen = Math.max(16, Math.floor(newLength / pitchRatio));
+        const tempL = new Float32Array(tempLen);
+        const tempR = new Float32Array(tempLen);
+
+        for (let i = 0; i < tempLen; i++) {
+          const srcPos = i * pitchRatio;
+          const idx0 = Math.floor(srcPos);
+          const frac = srcPos - idx0;
+          const s1_L = left[Math.min(newLength - 1, idx0)];
+          const s2_L = left[Math.min(newLength - 1, idx0 + 1)];
+          tempL[i] = s1_L + frac * (s2_L - s1_L);
+          const s1_R = right[Math.min(newLength - 1, idx0)];
+          const s2_R = right[Math.min(newLength - 1, idx0 + 1)];
+          tempR[i] = s1_R + frac * (s2_R - s1_R);
+        }
+
+        // Overlap-Add to restore exact original duration
+        let outPos = 0;
+        let inPos = 0;
+        const timeScale = tempLen / Math.max(1, newLength);
+
+        while (outPos < newLength - winSize && inPos < tempLen - winSize - searchRange) {
+          // Cross-correlation search for optimal phase match
+          let bestOffset = 0;
+          let maxCorr = -1e9;
+
+          if (outPos > 0) {
+            for (let offset = -searchRange; offset <= searchRange; offset++) {
+              const testIn = inPos + offset;
+              if (testIn < 0 || testIn + winSize >= tempLen) continue;
+
+              let corr = 0;
+              for (let k = 0; k < winSize; k += 4) {
+                corr += outL[outPos + k] * tempL[testIn + k];
+              }
+              if (corr > maxCorr) {
+                maxCorr = corr;
+                bestOffset = offset;
+              }
+            }
+          }
+
+          const actualIn = Math.max(0, Math.min(tempLen - winSize, inPos + bestOffset));
+
+          // Overlap add with Hann window
+          for (let k = 0; k < winSize; k++) {
+            const win = 0.5 * (1 - Math.cos((2 * Math.PI * k) / (winSize - 1)));
+            const targetIdx = outPos + k;
+            if (targetIdx < newLength) {
+              outL[targetIdx] += tempL[actualIn + k] * win;
+              outR[targetIdx] += tempR[actualIn + k] * win;
+              normFactor[targetIdx] += win;
+            }
+          }
+
+          outPos += hopOut;
+          inPos = Math.floor(outPos * timeScale);
+        }
+
+        // Normalize overlap window amplitude
+        for (let i = 0; i < newLength; i++) {
+          if (normFactor[i] > 0.01) {
+            outL[i] /= normFactor[i];
+            outR[i] /= normFactor[i];
+          } else if (outL[i] === 0 && i < left.length) {
+            outL[i] = left[i];
+            outR[i] = right[i];
           }
         }
+
+        left = outL;
+        right = outR;
+      } else {
+        // Granular crossfade pitch shifter
+        const grainSize = Math.floor(sampleRate * 0.04); // 40ms grains
+        const hopSize = Math.floor(grainSize / 2);
+        const outL = new Float32Array(newLength);
+        const outR = new Float32Array(newLength);
+
+        for (let pos = 0; pos < newLength - grainSize; pos += hopSize) {
+          for (let g = 0; g < grainSize; g++) {
+            const srcIdx = Math.floor(pos + g * pitchRatio);
+            if (srcIdx < newLength) {
+              // Hann window
+              const win = 0.5 * (1 - Math.cos((2 * Math.PI * g) / grainSize));
+              outL[pos + g] += left[srcIdx] * win;
+              outR[pos + g] += right[srcIdx] * win;
+            }
+          }
+        }
+        left = outL;
+        right = outR;
       }
-      left = outL;
-      right = outR;
     }
   }
 
@@ -1631,10 +1764,9 @@ export async function applyEffectsToAudioBuffer(
     }
   }
 
-  // Create resulting AudioBuffer
-  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const offlineCtx = new AudioCtx();
-  const outputBuffer = offlineCtx.createBuffer(2, newLength, sampleRate);
+  // Create resulting AudioBuffer using shared AudioContext to avoid leak
+  const ctx = audioEngine.getAudioContext();
+  const outputBuffer = ctx.createBuffer(2, newLength, sampleRate);
   outputBuffer.copyToChannel(left, 0);
   outputBuffer.copyToChannel(right, 1);
 

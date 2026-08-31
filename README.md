@@ -1,100 +1,117 @@
-# 🎛️ Resonance — Pro Audio Sample Manager & Hardware Slicer
+# 🎛️ Resonance — Pro Audio Sample Manager, DSP Curator & Hardware Hub
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19.0-61dafb?logo=react)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-6.2-646CFF?logo=vite)](https://vitejs.dev/)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.1-38B2AC?logo=tailwindcss)](https://tailwindcss.com/)
-[![Web Audio API](https://img.shields.io/badge/Web%20Audio%20API-Hardware%20DSP-FF7A00)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
-[![Target Repo](https://img.shields.io/badge/GitHub-propann%2Faz--sample-00F0FF?logo=github)](https://github.com/propann/az-sample)
+<div align="center">
 
-**Resonance** est une station de travail audio numérique (DAW-companion) complète et ultra-rapide fonctionnant directement dans le navigateur. Conçue pour les sound designers, beatmakers, producteurs et possesseurs de hardware (Teenage Engineering OP-1, EP-133 K.O. II, samplers MPC/Roland), elle offre des outils avancés d'analyse acoustique DSP, de découpe automatique de transitoires, de fabrication de kits hardware et de synchronisation Git.
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6.2-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.1-38B2AC?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Web Audio API](https://img.shields.io/badge/Web%20Audio-Hardware%20DSP-FF7A00)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+[![EBU R128](https://img.shields.io/badge/Loudness-EBU%20R128%20(-14%20LUFS)-00F0FF)](https://tech.ebu.ch/loudness)
+[![Target Repo](https://img.shields.io/badge/GitHub%20Sync-propann%2Faz--sample-A855F7?logo=github&logoColor=white)](https://github.com/propann/az-sample)
 
----
+**La station de curation, d'analyse acoustique DSP, de fabrication de kits hardware et de synchronisation Git pour sound designers & beatmakers exigeants.**
 
-## ⚡ Fonctionnalités Clés
+[📖 Guide Utilisateur (DOCS.md)](./DOCS.md) • [🏷️ Convention de Nommage (CONVENTION.md)](./CONVENTION.md) • [⚡ Dépôt Cible (`propann/az-sample`)](https://github.com/propann/az-sample)
 
-### 1. 🔍 Exploration & Indexation Audio Ultra-Rapide
-- **Chargement instantané** : Drag-and-drop de fichiers uniques ou dossiers complets avec scan récursif.
-- **Lecture à latence zéro** : Moteur Web Audio API optimisé, pré-mise en mémoire tampon et gestion multi-voix.
-- **MiniWaveforms vectorielles** : Formes d'ondes graphiques légères calculées via cache de crêtes pour un défilement à 60 FPS.
-- **Auto-Loudness Leveling** : Égalisation automatique en temps réel à -14 LUFS lors de l'audition pour éviter la fatigue auditive.
-- **Audition au clavier & Pitch rapide** : Pré-écoute transposée de -12 à +12 demi-tons en direct.
-
-### 2. 🔬 Laboratoire d'Analyse Acoustique DSP
-- **Loudness & Dynamique** : Mesure intégrée EBU R128 (LUFS), True Peak (dBFS), RMS moyen et Facteur de Crête (Crest Factor).
-- **Spectre Fréquentiel & Timbre** : FFT temps réel avec calcul du Centroïde Spectral (brillance/chaleur en Hz), bande passante effective et détection des 3 harmoniques dominantes.
-- **Détection de Pitch & Clé Musicale** : Algorithme hybride d'autocorrélation & spectre de produit harmonique pour identifier la fréquence fondamentale ($f_0$), note MIDI et gamme (Mineur/Majeur).
-- **Diagnostic de Santé Audio** : Détection du DC Offset (courant continu), risque d'écrêtage (clipping) et rumble sub-harmonique (< 20 Hz).
-- **Correction rapide en 1-clic** : Élimination du DC offset, normalisation True Peak à -0.2 dBFS et normalisation -14 LUFS.
-
-### 3. ✂️ Découpeur de Transitoires & Slicer Intelligent
-- **Découpe automatique** : Détection de transitoires basée sur l'énergie spectrale et le ratio de pente d'attaque.
-- **Snap au passage à zéro (Zero-Crossing)** : Évite les clics et pops indésirables lors de l'export des tranches.
-- **Édition fine des régions** : Ajustement visuel des points de début/fin, crossfade, inversion (reverse) et transposition par tranche.
-- **Export multiple** : Export en WAVs individuels ou assemblage direct vers un kit de percussions.
-
-### 4. 🎚️ Studio de Kits Teenage Engineering OP-1 & EP-133
-- **OP-1 Drum Kit Builder** :
-  - Assemblage de 24 pads avec jauge budgétaire de 12.0 secondes maximum (limite mémoire hardware OP-1 OG).
-  - Génération conforme du conteneur **AIFF** intégrant le chunk JSON propriétaire `op-1 drum snapshot` (positions de start/end 0..4095, pitch, playmode, revers, etc.).
-  - Compatible **OP-1 OG** et **OP-1 Field**.
-- **EP-133 K.O. II Exporter** :
-  - Numérotation séquentielle standardisée `sound_001.wav` à `sound_099.wav`.
-  - Format 44.1 kHz / 16-bit ou 24-bit optimisé pour le transfert via l'utilitaire Teenage Engineering.
-
-### 5. 🏷️ Convention de Nommage Pro & Rangement Automatique
-- **Modèles de nommage configurables** :
-  - `Studio Standard` : `[Type]_[Key]_[BPM]_[Name].wav` (ex : `KCK_Cmin_124_DeepPunch.wav`)
-  - `Vendor Clean` : `[Type]_[Name]_[Key]_[BPM].wav`
-  - `Hardware Minimal` : `01_[Type]_[Name].wav`
-  - `EP-133 Slot` : `[Slot]_[Type]_[Name].wav`
-- **Sanitisation sécurisée** : Suppression des caractères interdits par les OS et samplers hardware (`/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`), normalisation des espaces en tirets bas.
-- **Structure de dossiers automatique** : Tri par instrument (`/Kicks`, `/Snares`, `/Bass_808`, `/HiHats`, `/Loops`, etc.).
-- **Prévisualisation Diff temps réel** : Tableau comparatif avant/après avant application.
-
-### 6. 🌐 Synchronisation GitHub (`propann/az-sample`)
-- **Push Direct via GitHub API** : Synchronisation en 1 clic vers `https://github.com/propann/az-sample.git` à l'aide d'un Personal Access Token (PAT).
-- **Export Package Git-Ready** : Création d'une archive `.zip` contenant les dossiers structurés, les kits OP-1, les sons EP-133, le `manifest.json`, le `README.md` et `.gitattributes` (Git LFS).
-- **Assistant Terminal CLI** : Commandes prêtes à copier-coller pour cloner, commiter et pusher.
-
-### 7. 🎙️ Enregistreur & Capture Audio Directe
-- Enregistrement direct depuis le microphone ou une carte son externe.
-- Vu-mètre de niveau crête en temps réel avec indicateur de clipping.
-- Déclencheur automatique de seuil (Auto-Threshold gate).
-- Normalisation et insertion immédiate dans la bibliothèque active.
+</div>
 
 ---
 
-## 🏗️ Architecture Technique
+## 📸 Aperçu de l'Interface Studio (ASCII Mockup)
 
 ```
-src/
-├── components/                # Composants UI modulaires
-│   ├── AudioAnalysisModal.tsx # Laboratoire DSP & inspection acoustique
-│   ├── AudioRecorderModal.tsx # Capture live & micro/carte son
-│   ├── BatchConverterModal.tsx# Convertisseur de masse & normaliseur
-│   ├── BatchNamingModal.tsx   # Convention de nommage & rangement
-│   ├── GitHubSyncModal.tsx    # Hub de synchronisation GitHub
-│   ├── Header.tsx             # Barre de contrôle & accès rapide
-│   ├── MarketBenchmarkModal.tsx# Benchmark & comparateur
-│   ├── MiniWaveform.tsx       # Sparklines de forme d'onde légères (Canvas 2D)
-│   ├── Op1KitBuilderModal.tsx # Constructeur de kits OP-1 & EP-133
-│   ├── SampleBrowser.tsx      # Tableau de bord principal & filtres
-│   ├── SampleDetailModal.tsx  # Inspecteur de sample individuel
-│   ├── SlicerModal.tsx        # Découpeur de transitoires
-│   └── WaveformViewer.tsx     # Afficheur de forme d'onde principal
-├── services/                  # Moteurs métier & DSP (Zero complaisance)
-│   ├── audioAnalyzer.ts       # Analyse FFT, LUFS, Pitch, Détection Transitoires
-│   ├── audioConverter.ts      # Encodage WAV / AIFF, Resampling, ZIP
-│   ├── audioEngine.ts         # Moteur Web Audio (Player, Leveling, Transpose)
-│   ├── geminiEnhancer.ts      # Suggestions IA & Tagging sémantique
-│   ├── gitHubSync.ts          # Intégration Git & GitHub REST API
-│   ├── op1AiffEncoder.ts      # Spécification binaire AIFF & chunk OP-1
-│   ├── sampleNamingConvention.ts # Moteur de renommage & arborescence
-│   └── sampleStorage.ts       # Indexation locale & persistance
-├── types/                     # Schémas & contrats TypeScript stricts
-│   └── sample.ts              # Types SampleItem, Metrics, Presets, Configs
-└── main.tsx                   # Point d'entrée de l'application
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│ 🎛️ RESONANCE STUDIO   │  Fichier  Édition  Audio/DSP  Hardware  Vue  Aide  │  [● RECORD LIVE]│
+├─────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 🔍 [Rechercher sample, note, bpm...] │ [⚡ CURATEUR PRO]  [✂️ SLICER]  [🎚️ OP-1]  [🐙 GIT PUSH] │
+├──────────────────────────┬──────────────────────────────────────────────────────────────────┤
+│ 📂 ARBORESCENCE STUDIO   │ 📊 SAMPLE MASTER : AZ_KCK_PunchyHard_F#m_140BPM_01.wav           │
+│ ├─ 01_DRUMS              │ ┌──────────────────────────────────────────────────────────────┐ │
+│ ├─ 02_BASS_808           │ │  /\_/\    /\  /\_/\    /\  /\_/\    /\  /\_/\                │ │
+│ ├─ 03_MELODIC            │ │ /    \  /  \/    \  /  \/    \  /  \/    \   [ 00:00.428s ]  │ │
+│ ├─ 04_VOCALS             │ └──────────────────────────────────────────────────────────────┘ │
+│ ├─ 05_FX_TEXTURES        │ ▶ [PLAY/SPACE]  [PITCH: -12..+12]  [GAIN: -14 LUFS]  [LOOP: OFF] │
+│ ├─ 06_LOOPS              ├──────────────────────────────────────────────────────────────────┤
+│ └─ 07_INSTRUMENTS        │ 🔬 MÉTRIQUES DSP EN DIRECT                                       │
+├──────────────────────────┤ │ • Clé : F#min (f0: 92.5 Hz)    • Loudness : -13.8 LUFS (OK)    │
+│ 🏷️ TAGS RAPIDES          │ │ • Peak : -0.2 dBFS             • Centroïde : 1150 Hz (Warm)    │
+│ [punchy] [warm] [bright] │ │ • BPM : 140                    • DC Offset : 0.00% (Clean)     │
+│ [sub-heavy] [tight]      ├──────────────────────────────────────────────────────────────────┤
+│                          │ 📋 TABLE DES SAMPLES DISPONIBLES (60 FPS)                        │
+│ ⚙️ OP-1 BUFFER (12.0s)   │ │  # │ Nom Standardisé       │ Type │ Clé  │ BPM │ LUFS │ Actions │
+│ [████████░░░░] 7.8s / 12s│ │ 01 │ AZ_KCK_DeepPunch_01   │ KCK  │ F#m  │ 140 │ -14  │ [▶][✂]  │
+│                          │ │ 02 │ AZ_808_RumbleSub_01   │ 808  │ F#m  │ 140 │ -12  │ [▶][✂]  │
+└──────────────────────────┴─┴────┴───────────────────────┴──────┴──────┴─────┴──────┴─────────┘
+```
+
+---
+
+## ⚡ Fonctionnalités Majeures
+
+### 1. 🪄 Studio Auto-Curateur & Pipeline DSP
+- **Puisage & Analyse en Masse :** Glissez-déposez un dossier complet de samples bruts ou puisez dans votre bibliothèque active.
+- **Analyse Spectrale & Tonalité :** Algorithmes d'autocorrélation et de centroïde spectral pour identifier automatiquement la note fondamentale ($f_0$), la gamme (Majeur/Mineur), le tempo en BPM et les tranches de transitoires.
+- **Enrichissement de Tags Timbraux :** Génération de métadonnées sémantiques précises (`punchy`, `warm`, `bright`, `sub-heavy`, `crisp`, `saturated`, `tight`, `sustained`).
+- **Formatage Audio Conforme :** Conversion et encodage automatique en **WAV 24-bit 48kHz** (Master Studio) ou **16-bit 46.8k/44.1k** (Hardware).
+- **Rangement Épuré en 7 Dossiers :** Classement rationnel sans prolifération anarchique de sous-dossiers (`01_DRUMS`, `02_BASS_808`, `03_MELODIC`, `04_VOCALS`, `05_FX_TEXTURES`, `06_LOOPS`, `07_INSTRUMENTS`).
+
+### 2. 🔬 Laboratoire d'Analyse Acoustique DSP
+- **Mesure de Loudness EBU R128 :** Calcul intégré LUFS, True Peak (dBFS), RMS et Facteur de Crête (Crest Factor).
+- **Diagnostic de Santé Audio :** Détection automatique du DC Offset (courant continu), risque d'écrêtage (clipping) et rumble sub-harmonique (< 20 Hz).
+- **Correcteurs en 1-Clic :** Élimination du DC Offset, normalisation True Peak à -0.5 dBFS et normalisation -14.0 LUFS.
+
+### 3. ✂️ Découpeur de Transitoires & Slicer Intelligent
+- **Détection Automatique de Transitoires :** Analyse d'énergie spectrale avec sensibilité réglable.
+- **Snap au Passage à Zéro (Zero-Crossing) :** Élimination des clics et artéfacts audio lors du découpage.
+- **Audition au Clavier :** Déclenchement instantané des tranches via les touches numériques 1 à 8.
+- **Export Multi-Format :** Export en archive WAV individuelle ou conversion directe en kit de 24 pads OP-1.
+
+### 4. 🎚️ Studio de Kits Teenage Engineering OP-1 & EP-133
+- **OP-1 Drum Kit Builder :**
+  - Assemblage de 24 pads avec jauge budgétaire de 12.0 secondes maximum (limite mémoire hardware OP-1 OG).
+  - Génération conforme du conteneur **AIFF** intégrant le chunk JSON propriétaire `op-1 drum snapshot` (positions `0..4095`, pitch, playmode, revers, etc.).
+  - Compatible **OP-1 OG** et **OP-1 Field**.
+- **EP-133 K.O. II Exporter :**
+  - Numérotation séquentielle standardisée `sound_001.wav` à `sound_099.wav`.
+  - Format 44.1 kHz / 16-bit ou 24-bit optimisé pour le transfert via le TE Sample Tool.
+
+### 5. 🏷️ Convention de Nommage Pro Standardisée
+- Gabarit officiel : `AZ_[TYPE]_[NomDescriptif]_[Key]_[BPM]_[Index].wav`
+- Voir le guide complet des codes et des règles : [CONVENTION.md](./CONVENTION.md)
+
+### 6. 🐙 Synchronisation Git Directe (`propann/az-sample`)
+- **Push Direct via GitHub API :** Synchronisation en un clic vers `https://github.com/propann/az-sample.git` à l'aide d'un Personal Access Token (PAT).
+- **Export Package Git-Ready :** Création d'une archive `.zip` contenant les dossiers structurés, les kits OP-1, les sons EP-133, le `manifest.json`, le `README.md`, `CONVENTION.md`, `DOCS.md` et `.gitattributes` (Git LFS).
+- **Script Terminal Automatisé :** Script `push_to_az_sample.sh` inclus pour la synchronisation en ligne de commande.
+
+---
+
+## 📂 Arborescence du Dépôt Cible (`az-sample`)
+
+Lorsque vous synchronisez votre bibliothèque avec [propann/az-sample](https://github.com/propann/az-sample), le dépôt adopte la structure suivante :
+
+```
+az-sample/
+├── 01_DRUMS/                   # Kicks, Snares, Claps, HiHats, Cymbals, Percussions
+├── 02_BASS_808/                # Basses analogiques, 808 subs accordés
+├── 03_MELODIC/                 # Synthétiseurs, Leads, Pads, Chords, Plucks
+├── 04_VOCALS/                  # Vocal chops, Hooks, One-shots de voix
+├── 05_FX_TEXTURES/             # Risers, Impacts, Textures ambiantes, Foley
+├── 06_LOOPS/                   # Boucles rythmiques et mélodiques avec tempo & bar count
+├── 07_INSTRUMENTS/             # Guitares, Pianos, Cuivres acoustiques
+├── op1_kits/                   # Kits OP-1 Drum Patches (.aif avec métadonnées 24 pads)
+│   └── az_sample_OP1_Kit_01.aif
+├── ep133_packs/                # Banques formatées Teenage Engineering EP-133
+│   ├── sound_001_Kick_*.wav
+│   └── sound_099_FX_*.wav
+├── .gitattributes              # Configuration Git LFS pour les binaires audio
+├── README.md                   # Index et documentation du pack
+├── CONVENTION.md               # Guide officiel de nommage et de curation
+├── DOCS.md                     # Manuel utilisateur et fiches techniques
+├── manifest.json               # Métadonnées audio (BPM, Key, LUFS, Tags)
+└── scripts/
+    └── push_to_az_sample.sh    # Script de synchronisation rapide en ligne de commande
 ```
 
 ---
@@ -122,45 +139,42 @@ npm run build
 ```
 Les fichiers statiques optimisés sont générés dans le dossier `dist/`.
 
-### Validation TypeScript / Linter
+### Validation TypeScript & Linting
 ```bash
 npm run lint
 ```
 
 ---
 
-## 📦 Structure du Répertoire GitHub Cible (`az-sample`)
+## ⌨️ Raccourcis Clavier Principaux
 
-Lorsque vous synchronisez votre bibliothèque avec [propann/az-sample](https://github.com/propann/az-sample), le dépôt adopte la disposition suivante :
-
-```
-az-sample/
-├── .gitattributes              # Configuration Git LFS pour les binaires audio
-├── README.md                   # Index et documentation du pack
-├── manifest.json               # Métadonnées audio (BPM, Key, LUFS, Tags)
-├── op1_kits/                   # Kits OP-1 Drum Patches (.aif avec métadonnées 24 pads)
-│   └── az_sample_OP1_Kit_01.aif
-├── ep133_packs/                # Banques formatées Teenage Engineering EP-133
-│   ├── sound_001_Kick_*.wav
-│   └── sound_099_FX_*.wav
-└── samples/                    # Masters WAV 24-bit triés par catégorie
-    ├── Kicks/
-    ├── Snares/
-    ├── Claps/
-    ├── HiHats/
-    ├── Bass_808/
-    ├── Leads/
-    ├── Pads_Chords/
-    └── FX_Textures/
-```
+| Raccourci | Action |
+| :--- | :--- |
+| <kbd>Espace</kbd> | Lecture / Pause du sample actif |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Naviguer dans la liste des sons |
+| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Importer des fichiers audio |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> | Importer un dossier complet |
+| <kbd>Ctrl</kbd> + <kbd>K</kbd> | Ouvrir le Studio Auto-Curateur & Rangement DSP |
+| <kbd>Ctrl</kbd> + <kbd>S</kbd> | Ouvrir le Découpeur de Transitoires (Slicer) |
+| <kbd>Ctrl</kbd> + <kbd>G</kbd> | Ouvrir le Hub de Synchronisation GitHub |
+| <kbd>1</kbd> à <kbd>8</kbd> | Déclencher les tranches dans le Slicer |
+| <kbd>+</kbd> / <kbd>-</kbd> | Transposer le pitch (-12 à +12 demi-tons) |
+| <kbd>F</kbd> | Basculer l'état Favori |
 
 ---
 
-## 🔒 Sécurité & Confidentialité
-- **100% Client-Side Processing** : Tout le traitement de signal numérique (DSP), la découpe et l'encodage binaire AIFF/WAV se déroulent en local dans votre navigateur.
-- **Protection des identifiants** : Les jetons d'accès GitHub (PAT) restent stockés uniquement dans le stockage local de votre navigateur (`localStorage`).
+## 🔒 Confidentialité & Sécurité
+
+- **100% Client-Side Processing :** Tout le traitement de signal numérique (DSP), la découpe et l'encodage binaire AIFF/WAV se déroulent localement dans votre navigateur sans serveur tiers.
+- **Sécurité des Clés Git :** Les tokens d'accès GitHub (PAT) restent stockés uniquement dans le stockage local de votre navigateur (`localStorage`).
 
 ---
 
-## 📜 Licence
-Développé avec précision technique par **Engineering Studio**. Tous droits réservés.
+## 📜 Documentation Complémentaire
+
+- [📘 Manuel Utilisateur & Guides Visuels (DOCS.md)](./DOCS.md)
+- [🏷️ Convention de Nommage & Standards Audio (CONVENTION.md)](./CONVENTION.md)
+- [🐙 Dépôt Git Officiel](https://github.com/propann/az-sample)
+
+---
+*Développé avec précision technique par **Engineering Studio**.*

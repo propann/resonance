@@ -83,13 +83,39 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
     }, durationMs);
   };
 
-  // Keyboard trigger MPC pads (1-8, Q-I)
+  // Play/pause entire sample
+  const handleTogglePlayFull = () => {
+    if (!sample.audioBuffer) return;
+    if (audioEngine.getState().isPlaying) {
+      audioEngine.pause();
+    } else {
+      audioEngine.play(sample.audioBuffer, sample.id, sample.loudnessGainDb);
+    }
+  };
+
+  // Keyboard trigger MPC pads (1-8, Q-I) and Spacebar for full playback
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing inside input
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+      const target = e.target as HTMLElement;
+      const isTextInput =
+        (target instanceof HTMLInputElement &&
+          target.type !== 'range' &&
+          target.type !== 'checkbox' &&
+          target.type !== 'radio') ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable;
+
+      if (isTextInput) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (target && typeof target.blur === 'function') {
+          target.blur();
+        }
+        handleTogglePlayFull();
         return;
       }
 
@@ -101,8 +127,8 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [isOpen, slices, sample]);
 
   // Save Slices to Sample

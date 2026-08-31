@@ -19,6 +19,7 @@ import { AutoSlicerModal } from './components/AutoSlicerModal';
 import { BatchConverterModal } from './components/BatchConverterModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { SmartIngestionModal } from './components/SmartIngestionModal';
+import { AutoCuratorModal } from './components/AutoCuratorModal';
 import { MarketBenchmarkModal } from './components/MarketBenchmarkModal';
 import { Op1KitBuilderModal } from './components/Op1KitBuilderModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
@@ -26,6 +27,9 @@ import { BatchNamingModal } from './components/BatchNamingModal';
 import { AudioAnalysisModal } from './components/AudioAnalysisModal';
 import { AudioEffectsRackModal } from './components/AudioEffectsRackModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { DocumentationModal } from './components/DocumentationModal';
+import { LoudnessStandardModal } from './components/LoudnessStandardModal';
+import { LoudnessAuditReport, LoudnessStandardKey } from './services/audioLoudnessStandard';
 import { audioEngine } from './services/audioEngine';
 import {
   calculateAudioMetrics,
@@ -38,8 +42,17 @@ import {
   classifyGenre,
   assignEp133Slot,
 } from './services/audioAnalyzer';
-import { audioBufferToWavBlob, triggerFileDownload } from './services/audioConverter';
+import {
+  audioBufferToWavBlob,
+  triggerFileDownload,
+  exportEp133ProjectPack,
+  exportMultipleWavsAsZip,
+} from './services/audioConverter';
 import { parseOp1AiffPatch, extractSlicesToWavBlobs } from './services/op1PatchEncoder';
+import {
+  classifySampleToProFolder,
+  autoOrganizeLibrary,
+} from './services/proFolderOrganizer';
 
 export default function App() {
   const [samples, setSamples] = useState<SampleItem[]>([]);
@@ -48,11 +61,36 @@ export default function App() {
   const [selectedSampleIds, setSelectedSampleIds] = useState<string[]>([]);
   const [activeView, setActiveView] = useState<'library' | 'timbre'>('library');
 
+  // Dynamic Resizable Windows & Panels
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('resonance_sidebar_width_v2');
+      if (saved) return Number(saved);
+    } catch (e) {
+      // Ignorer
+    }
+    return 280;
+  });
+
+  const [waveformHeight, setWaveformHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('resonance_waveform_height_v2');
+      if (saved) return Number(saved);
+    } catch (e) {
+      // Ignorer
+    }
+    return 175;
+  });
+
+  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
+  const [isResizingWaveform, setIsResizingWaveform] = useState<boolean>(false);
+
   // Modals state
   const [slicerSample, setSlicerSample] = useState<SampleItem | null>(null);
   const [isBatchConverterOpen, setIsBatchConverterOpen] = useState<boolean>(false);
   const [isRecorderOpen, setIsRecorderOpen] = useState<boolean>(false);
   const [isSmartIngestOpen, setIsSmartIngestOpen] = useState<boolean>(false);
+  const [isAutoCuratorOpen, setIsAutoCuratorOpen] = useState<boolean>(false);
   const [isBenchmarkOpen, setIsBenchmarkOpen] = useState<boolean>(false);
   const [isOp1StudioOpen, setIsOp1StudioOpen] = useState<boolean>(false);
   const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
@@ -60,6 +98,10 @@ export default function App() {
   const [isDspModalOpen, setIsDspModalOpen] = useState<boolean>(false);
   const [isFxRackOpen, setIsFxRackOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
+  const [isDocOpen, setIsDocOpen] = useState<boolean>(false);
+  const [isLoudnessModalOpen, setIsLoudnessModalOpen] = useState<boolean>(false);
+  const [sampleForLoudness, setSampleForLoudness] = useState<SampleItem | null>(null);
+
   const [sampleForDsp, setSampleForDsp] = useState<SampleItem | null>(null);
   const [sampleForFxRack, setSampleForFxRack] = useState<SampleItem | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
@@ -106,6 +148,58 @@ export default function App() {
     }
     init();
   }, []);
+
+  // Handlers pour le redimensionnement vertical à la souris (Sidebar Splitter)
+  const handleStartSidebarResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingSidebar(true);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newW = Math.max(190, Math.min(520, startWidth + deltaX));
+      setSidebarWidth(newW);
+      try {
+        localStorage.setItem('resonance_sidebar_width_v2', String(newW));
+      } catch (err) {}
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Handlers pour le redimensionnement horizontal à la souris (Waveform Splitter)
+  const handleStartWaveformResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingWaveform(true);
+    const startY = e.clientY;
+    const startHeight = waveformHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const newH = Math.max(100, Math.min(420, startHeight + deltaY));
+      setWaveformHeight(newH);
+      try {
+        localStorage.setItem('resonance_waveform_height_v2', String(newH));
+      } catch (err) {}
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingWaveform(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Filtered and Sorted Samples list
   const filteredSamples = useMemo(() => {
@@ -204,236 +298,293 @@ export default function App() {
       });
   }, [samples, filterState]);
 
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+
+  // Subscribe to audio engine playback state changes
+  useEffect(() => {
+    const unsub = audioEngine.subscribe((state) => {
+      setIsPlaying(state.isPlaying);
+    });
+    return () => unsub();
+  }, []);
+
   const selectedSample = useMemo(() => {
     return samples.find((s) => s.id === selectedSampleId) || filteredSamples[0] || null;
   }, [samples, selectedSampleId, filteredSamples]);
 
-  // Global Keyboard Shortcuts
+  // Master Playback Transport Handlers (Available globally across all screens)
+  const handleTogglePlayPause = useCallback(() => {
+    const st = audioEngine.getState();
+    if (st.isPlaying) {
+      audioEngine.pause();
+    } else if (selectedSample && selectedSample.audioBuffer) {
+      audioEngine.play(selectedSample.audioBuffer, selectedSample.id, selectedSample.loudnessGainDb);
+    } else if (filteredSamples.length > 0) {
+      const first = filteredSamples[0];
+      setSelectedSampleId(first.id);
+      if (first.audioBuffer) {
+        audioEngine.play(first.audioBuffer, first.id, first.loudnessGainDb);
+      }
+    }
+  }, [selectedSample, filteredSamples]);
+
+  const handlePlayNext = useCallback(() => {
+    if (filteredSamples.length === 0) return;
+    const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
+    const nextIdx = (idx + 1) % filteredSamples.length;
+    const nextSample = filteredSamples[nextIdx];
+    setSelectedSampleId(nextSample.id);
+    if (nextSample.audioBuffer) {
+      audioEngine.play(nextSample.audioBuffer, nextSample.id, nextSample.loudnessGainDb);
+    }
+  }, [filteredSamples, selectedSampleId]);
+
+  const handlePlayPrev = useCallback(() => {
+    if (filteredSamples.length === 0) return;
+    const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
+    const prevIdx = (idx - 1 + filteredSamples.length) % filteredSamples.length;
+    const prevSample = filteredSamples[prevIdx];
+    setSelectedSampleId(prevSample.id);
+    if (prevSample.audioBuffer) {
+      audioEngine.play(prevSample.audioBuffer, prevSample.id, prevSample.loudnessGainDb);
+    }
+  }, [filteredSamples, selectedSampleId]);
+
+  const handleToggleAutoLoudness = () => {
+    const newVal = !autoLoudnessLeveling;
+    setAutoLoudnessLeveling(newVal);
+    audioEngine.setAutoLoudness(newVal);
+  };
+
+  // Keyboard Shortcuts (Space for Play/Pause, Up/Down for next/prev)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+      // Avoid triggering when user is in input or textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
         return;
       }
 
       if (e.code === 'Space') {
         e.preventDefault();
-        const st = audioEngine.getState();
-        if (st.isPlaying) {
-          audioEngine.pause();
-        } else if (selectedSample && selectedSample.audioBuffer) {
-          audioEngine.play(selectedSample.audioBuffer, selectedSample.id, selectedSample.loudnessGainDb);
-        }
-      } else if (e.code === 'ArrowDown') {
+        handleTogglePlayPause();
+      } else if (e.code === 'ArrowDown' || e.code === 'KeyJ') {
         e.preventDefault();
-        if (filteredSamples.length > 0) {
-          const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
-          const nextIdx = (idx + 1) % filteredSamples.length;
-          const nextSample = filteredSamples[nextIdx];
-          setSelectedSampleId(nextSample.id);
-          if (nextSample.audioBuffer) {
-            audioEngine.play(nextSample.audioBuffer, nextSample.id, nextSample.loudnessGainDb);
-          }
-        }
-      } else if (e.code === 'ArrowUp') {
+        handlePlayNext();
+      } else if (e.code === 'ArrowUp' || e.code === 'KeyK') {
         e.preventDefault();
-        if (filteredSamples.length > 0) {
-          const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
-          const prevIdx = (idx - 1 + filteredSamples.length) % filteredSamples.length;
-          const prevSample = filteredSamples[prevIdx];
-          setSelectedSampleId(prevSample.id);
-          if (prevSample.audioBuffer) {
-            audioEngine.play(prevSample.audioBuffer, prevSample.id, prevSample.loudnessGainDb);
-          }
-        }
-      } else if (e.key.toLowerCase() === 'l') {
+        handlePlayPrev();
+      } else if (e.code === 'KeyL') {
+        e.preventDefault();
         audioEngine.toggleLoop();
-      } else if (e.key.toLowerCase() === 'r') {
-        audioEngine.toggleReverse();
-      } else if (e.key.toLowerCase() === 's' && selectedSample) {
-        setSlicerSample(selectedSample);
-      } else if (e.key.toLowerCase() === 'e' && selectedSample) {
-        setSampleForFxRack(selectedSample);
-        setIsFxRackOpen(true);
-      } else if (e.key === '?') {
-        setIsShortcutsOpen(true);
-      } else if (e.key === 'F1') {
+      } else if (e.code === 'KeyN' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        setActiveView('library');
-      } else if (e.key === 'F2') {
+        setIsBatchNamingOpen(true);
+      } else if (e.code === 'KeyI' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        setActiveView('timbre');
-      } else if (e.key === 'F4') {
+        setIsSmartIngestOpen(true);
+      } else if (e.code === 'KeyE' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        setSampleForDsp(selectedSample);
-        setIsDspModalOpen(true);
+        if (selectedSample) {
+          setSampleForFxRack(selectedSample);
+          setIsFxRackOpen(true);
+        }
+      } else if (e.code === 'F1') {
+        e.preventDefault();
+        setIsDocOpen(true);
+      } else if (e.code === 'F2') {
+        e.preventDefault();
+        setActiveView((prev) => (prev === 'library' ? 'timbre' : 'library'));
+      } else if (e.code === 'F4') {
+        e.preventDefault();
+        if (selectedSample) {
+          setSampleForDsp(selectedSample);
+          setIsDspModalOpen(true);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredSamples, selectedSampleId, selectedSample]);
+  }, [handleTogglePlayPause, handlePlayNext, handlePlayPrev, selectedSample]);
 
-  // Toggle Auto-Loudness Leveling (EBU R128 -14 LUFS)
-  const handleToggleAutoLoudness = () => {
-    const nextState = !autoLoudnessLeveling;
-    audioEngine.setAutoLoudness(nextState);
-    setAutoLoudnessLeveling(nextState);
+  // Import files pipeline
+  const handleImportFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    const audioFiles = files.filter((f) => {
+      return (
+        f.type.startsWith('audio/') ||
+        /\.(wav|mp3|ogg|flac|aiff|aif|webm|m4a)$/i.test(f.name)
+      );
+    });
+
+    if (audioFiles.length === 0) return;
+
+    const newSamples: SampleItem[] = [];
+
+    for (let i = 0; i < audioFiles.length; i++) {
+      const file = audioFiles[i];
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer);
+        const metrics = calculateAudioMetrics(audioBuffer);
+        const pitchKey = detectPitchAndKey(audioBuffer);
+        const autoSlices = detectAutoSlices(audioBuffer);
+        const loopInfo = detectLoopVsOneShot(audioBuffer);
+        const detectedGenre = classifyGenre(file.name, loopInfo.bpm, loopInfo.isLoop, 'other');
+
+        const classification = classifySample(audioBuffer, file.name, metrics, pitchKey?.pitchHz || 0);
+
+        const sampleType = classification.type;
+        const epSlot = assignEp133Slot(sampleType, i);
+
+        // Auto-Dossier Pro Standard
+        const sampleItemStub: SampleItem = {
+          id: `stub-${i}`,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          originalFileName: file.name,
+          format: (file.name.split('.').pop()?.toLowerCase() || 'wav') as 'wav' | 'mp3' | 'ogg' | 'flac' | 'aiff' | 'webm' | 'm4a',
+          size: file.size,
+          duration: audioBuffer.duration,
+          sampleRate: audioBuffer.sampleRate,
+          bitDepth: 24,
+          channels: audioBuffer.numberOfChannels,
+          type: sampleType,
+          category: autoSlices.length > 1 ? 'multi-sound' : loopInfo.isLoop ? 'loop' : 'one-shot',
+          genre: detectedGenre,
+          isLoop: loopInfo.isLoop,
+          bpm: loopInfo.bpm || undefined,
+          key: pitchKey?.keyString,
+          tags: [...classification.tags, detectedGenre.split('/')[0].toLowerCase().trim()],
+          folderId: 'f-root-oneshots',
+          folderPath: '/01_ONE_SHOTS',
+          favorite: false,
+          rating: 4,
+          spectralCentroid: metrics.spectralCentroid,
+          dynamicRangeDb: metrics.dynamicRangeDb,
+          peakDb: metrics.peakDb,
+          rmsDb: metrics.rmsDb,
+          zeroCrossingRate: metrics.zeroCrossingRate,
+          lufs: metrics.lufs,
+          loudnessGainDb: 0,
+          blobUrl: '',
+          slices: autoSlices,
+          audioBuffer,
+          dateAdded: Date.now(),
+          isMultiSound: autoSlices.length > 1,
+        };
+
+        const { folderId, folderPath, category } = classifySampleToProFolder(sampleItemStub);
+
+        const sampleItem: SampleItem = {
+          id: `sample-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          originalFileName: file.name,
+          format: (file.name.split('.').pop()?.toLowerCase() || 'wav') as 'wav' | 'mp3' | 'ogg' | 'flac' | 'aiff' | 'webm' | 'm4a',
+          size: file.size,
+          duration: audioBuffer.duration,
+          sampleRate: audioBuffer.sampleRate,
+          bitDepth: 24,
+          channels: audioBuffer.numberOfChannels,
+          type: sampleType,
+          category,
+          genre: detectedGenre,
+          isLoop: loopInfo.isLoop,
+          bpm: loopInfo.bpm || undefined,
+          key: pitchKey?.keyString,
+          tags: [...classification.tags, detectedGenre.split('/')[0].toLowerCase().trim()],
+          folderId,
+          folderPath,
+          favorite: false,
+          rating: 4,
+          spectralCentroid: metrics.spectralCentroid,
+          dynamicRangeDb: metrics.dynamicRangeDb,
+          peakDb: metrics.peakDb,
+          rmsDb: metrics.rmsDb,
+          zeroCrossingRate: metrics.zeroCrossingRate,
+          slices: autoSlices,
+          blobUrl: URL.createObjectURL(file),
+          audioBuffer,
+          dateAdded: Date.now(),
+          ep133Slot: epSlot,
+          isMultiSound: autoSlices.length > 1,
+          lufs: metrics.lufs,
+          loudnessGainDb: 0,
+        };
+
+        newSamples.push(sampleItem);
+      } catch (err) {
+        console.error(`Error loading file ${file.name}:`, err);
+      }
+    }
+
+    if (newSamples.length > 0) {
+      setSamples((prev) => [...newSamples, ...prev]);
+      setSelectedSampleId(newSamples[0].id);
+      if (newSamples[0].audioBuffer) {
+        audioEngine.play(newSamples[0].audioBuffer, newSamples[0].id, 0);
+      }
+    }
   };
 
-  // Import audio files/folders with automatic DSP feature extraction
-  const handleImportFiles = useCallback(
-    async (fileList: FileList | File[]) => {
-      const files = Array.from(fileList);
-      const audioFiles = files.filter(
-        (f) =>
-          f.type.startsWith('audio/') ||
-          /\.(wav|mp3|ogg|flac|aiff|aif|m4a|webm)$/i.test(f.name)
-      );
-
-      if (audioFiles.length === 0) return;
-
-      const newSampleItems: SampleItem[] = [];
-
-      for (const file of audioFiles) {
-        try {
-          const arrayBuf = await file.arrayBuffer();
-          const buffer = await audioEngine.decodeAudioData(arrayBuf);
-          const cleanName = file.name.replace(/\.[^/.]+$/, '');
-
-          // DSP Analysis: Metrics, Pitch & Key, BPM, Loop vs One-Shot, Genre, EP-133 Slot
-          const metrics = calculateAudioMetrics(buffer);
-          const pitchKey = detectPitchAndKey(buffer);
-          const loopAnalysis = detectLoopVsOneShot(buffer);
-          const bpm = loopAnalysis.bpm || detectBpm(buffer);
-          const slices = detectAutoSlices(buffer, { sensitivity: 0.5 });
-          const classification = classifySample(buffer, cleanName, metrics, slices.length);
-          const genre = classifyGenre(cleanName, bpm, loopAnalysis.isLoop, classification.type);
-          const ep133Slot = assignEp133Slot(classification.type, loopAnalysis.isLoop, Math.floor(Math.random() * 80) + 1);
-
-          // Loudness leveling gain computation
-          const targetLufs = -14.0;
-          const loudnessGainDb = Math.max(-12, Math.min(12, targetLufs - metrics.lufs));
-
-          const wavBlob = audioBufferToWavBlob(buffer, { bitDepth: 24, normalize: true });
-          const blobUrl = URL.createObjectURL(wavBlob);
-
-          const item: SampleItem = {
-            id: `user-sample-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            name: cleanName,
-            originalFileName: file.name,
-            format: (file.name.split('.').pop()?.toLowerCase() || 'wav') as SampleItem['format'],
-            size: file.size,
-            duration: buffer.duration,
-            sampleRate: buffer.sampleRate,
-            bitDepth: 24,
-            channels: buffer.numberOfChannels,
-            bpm,
-            key: pitchKey?.keyString,
-            musicalMode: pitchKey?.mode,
-            confidence: pitchKey?.confidence,
-            pitchHz: pitchKey?.pitchHz,
-            type: classification.type,
-            category: loopAnalysis.isLoop ? 'loop' : 'one-shot',
-            genre,
-            isLoop: loopAnalysis.isLoop,
-            loopBars: loopAnalysis.estimatedBars,
-            lufs: metrics.lufs,
-            loudnessGainDb,
-            ep133Slot,
-            tags: [...classification.tags, genre.split(' ')[0]],
-            folderId: 'f-drums',
-            folderPath: '/Imported',
-            favorite: false,
-            rating: 3,
-            spectralCentroid: metrics.spectralCentroid,
-            dynamicRangeDb: metrics.dynamicRangeDb,
-            peakDb: metrics.peakDb,
-            rmsDb: metrics.rmsDb,
-            zeroCrossingRate: metrics.zeroCrossingRate,
-            slices,
-            blobUrl,
-            audioBuffer: buffer,
-            dateAdded: Date.now(),
-            isMultiSound: classification.isMultiSound,
-          };
-
-          newSampleItems.push(item);
-        } catch (err) {
-          console.error(`Error decoding audio file ${file.name}:`, err);
-        }
-      }
-
-      if (newSampleItems.length > 0) {
-        setSamples((prev) => [...newSampleItems, ...prev]);
-        setSelectedSampleId(newSampleItems[0].id);
-        if (newSampleItems[0].audioBuffer) {
-          audioEngine.play(newSampleItems[0].audioBuffer, newSampleItems[0].id, newSampleItems[0].loudnessGainDb);
-        }
-      }
-    },
-    []
-  );
-
-  // Import OP-1 Drum Kit Patch (.aif with APPL JSON chunk)
+  // Import OP-1 Drum Kit AIFF Patch
   const handleImportOp1Patch = async (file: File) => {
     try {
-      const parsed = await parseOp1AiffPatch(file);
-      const metrics = calculateAudioMetrics(parsed.audioBuffer);
-      const wavBlob = audioBufferToWavBlob(parsed.audioBuffer, { bitDepth: 24 });
-      const blobUrl = URL.createObjectURL(wavBlob);
+      const buffer = await file.arrayBuffer();
+      const parsed = await parseOp1AiffPatch(buffer);
+      const audioBuf = parsed.audioBuffer || (await audioEngine.decodeAudioData(buffer));
 
-      const slices: SliceRegion[] = parsed.slices.map((s, idx) => ({
-        id: `op1-slice-${idx + 1}-${Date.now().toString(36)}`,
+      const slices: SliceRegion[] = parsed.slices.map((sl, idx) => ({
+        id: sl.id || `slice-${idx}`,
         index: idx + 1,
-        startSec: s.startSec,
-        endSec: s.endSec,
-        label: s.name || `Pad ${idx + 1}`,
-        color: s.color || '#00F0FF',
-        detectedType: s.type,
+        startSec: sl.startSec,
+        endSec: sl.endSec,
+        label: sl.name || `Pad ${idx + 1}`,
+        color: sl.color || '#00F0FF',
       }));
 
-      const op1Item: SampleItem = {
-        id: `op1-kit-${Date.now().toString(36)}`,
-        name: parsed.name || file.name.replace(/\.[^/.]+$/, ''),
+      const op1Metrics = calculateAudioMetrics(audioBuf);
+
+      const newSample: SampleItem = {
+        id: `op1-${Date.now()}`,
+        name: file.name.replace(/\.[^/.]+$/, ''),
         originalFileName: file.name,
         format: 'aiff',
         size: file.size,
-        duration: parsed.audioBuffer.duration,
-        sampleRate: parsed.audioBuffer.sampleRate,
+        duration: audioBuf.duration,
+        sampleRate: audioBuf.sampleRate,
         bitDepth: 16,
-        channels: parsed.audioBuffer.numberOfChannels,
+        channels: audioBuf.numberOfChannels,
         type: 'multi-sound',
         category: 'multi-sound',
-        genre: 'Universal / Multi-Genre',
+        genre: 'Synthwave / Retro',
         isLoop: false,
-        lufs: metrics.lufs,
-        loudnessGainDb: 0,
-        tags: ['op1-patch', '24-pads', 'drum-kit', 'sliceable'],
-        folderId: 'f-drums',
-        folderPath: '/OP1_Patches',
+        tags: ['op-1', 'drumkit', 'multi-stem', 'slices'],
+        folderId: 'f-root-multisound',
+        folderPath: '/03_MULTI_SOUND_KITS',
         favorite: true,
         rating: 5,
-        spectralCentroid: metrics.spectralCentroid,
-        dynamicRangeDb: metrics.dynamicRangeDb,
-        peakDb: metrics.peakDb,
-        rmsDb: metrics.rmsDb,
-        zeroCrossingRate: metrics.zeroCrossingRate,
+        spectralCentroid: op1Metrics.spectralCentroid,
+        dynamicRangeDb: op1Metrics.dynamicRangeDb,
+        peakDb: op1Metrics.peakDb,
+        rmsDb: op1Metrics.rmsDb,
+        zeroCrossingRate: op1Metrics.zeroCrossingRate,
+        lufs: op1Metrics.lufs,
+        loudnessGainDb: 0,
         slices,
-        blobUrl,
-        audioBuffer: parsed.audioBuffer,
+        audioBuffer: audioBuf,
+        blobUrl: URL.createObjectURL(file),
         dateAdded: Date.now(),
         isMultiSound: true,
       };
 
-      setSamples((prev) => [op1Item, ...prev]);
-      setSelectedSampleId(op1Item.id);
-      audioEngine.play(parsed.audioBuffer, op1Item.id, 0);
+      setSamples((prev) => [newSample, ...prev]);
+      setSelectedSampleId(newSample.id);
+      audioEngine.play(audioBuf, newSample.id, 0);
     } catch (err) {
-      console.error('Failed to parse OP-1 Patch:', err);
+      console.error('Erreur importation patch OP-1:', err);
     }
   };
 
-  // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(true);
@@ -448,32 +599,10 @@ export default function App() {
     e.preventDefault();
     setIsDraggingOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setIsSmartIngestOpen(true);
+      handleImportFiles(e.dataTransfer.files);
     }
   };
 
-  // Export full EP-133 Sound Pack
-  const handleExportEp133Pack = () => {
-    const listToExport = filteredSamples.length > 0 ? filteredSamples : samples;
-    const epSummary = listToExport.map((s) => ({
-      slot: s.ep133Slot ? String(s.ep133Slot).padStart(3, '0') : '999',
-      name: s.name,
-      type: s.type,
-      category: s.isLoop ? 'LOOP' : 'ONE-SHOT',
-      bpm: s.bpm || 'Free',
-      key: s.key || 'N/A',
-      lufs: s.lufs?.toFixed(1) || '-14.0',
-      sampleRate: '46.875 kHz (Native EP-133)',
-      bitDepth: '16-bit PCM Linear',
-    }));
-
-    const jsonBlob = new Blob([JSON.stringify(epSummary, null, 2)], {
-      type: 'application/json',
-    });
-    triggerFileDownload(jsonBlob, 'EP133_KO_II_Sample_Bank_Map.json');
-  };
-
-  // Sample management callbacks
   const handleToggleFavorite = (sampleId: string) => {
     setSamples((prev) =>
       prev.map((s) => (s.id === sampleId ? { ...s, favorite: !s.favorite } : s))
@@ -488,7 +617,6 @@ export default function App() {
 
   const handleDeleteSample = (sampleId: string) => {
     setSamples((prev) => prev.filter((s) => s.id !== sampleId));
-    setSelectedSampleIds((prev) => prev.filter((id) => id !== sampleId));
     if (selectedSampleId === sampleId) {
       setSelectedSampleId(null);
     }
@@ -498,6 +626,57 @@ export default function App() {
     if (selectedSampleIds.length === 0) return;
     setSamples((prev) => prev.filter((s) => !selectedSampleIds.includes(s.id)));
     setSelectedSampleIds([]);
+  };
+
+  const handleAutoOrganizeLibrary = () => {
+    const { organizedSamples } = autoOrganizeLibrary(samples);
+    setSamples(organizedSamples);
+  };
+
+  const handleApplyCuration = (curatedSamples: SampleItem[]) => {
+    setSamples(curatedSamples);
+  };
+
+  const handleExportEp133Pack = async () => {
+    if (samples.length === 0) {
+      alert('Aucun sample dans la bibliothèque à exporter.');
+      return;
+    }
+    try {
+      const zipBlob = await exportEp133ProjectPack(samples, {
+        useMono: true,
+        sampleRate: 46875,
+        loudnessMatch: true,
+      });
+      triggerFileDownload(zipBlob, `Resonance_EP133_KO_II_Pack_${Date.now().toString(36)}.zip`);
+    } catch (err) {
+      console.error('Erreur export EP-133:', err);
+      alert("Une erreur est survenue lors de l'exportation du pack EP-133.");
+    }
+  };
+
+  const handleExportZip = async () => {
+    const targetSamples =
+      selectedSampleIds.length > 0
+        ? samples.filter((s) => selectedSampleIds.includes(s.id))
+        : filteredSamples;
+
+    if (targetSamples.length === 0) {
+      alert('Aucun sample à exporter.');
+      return;
+    }
+
+    try {
+      const itemsToExport = targetSamples.map((s) => ({
+        sample: s,
+        destinationPath: `${s.category === 'loop' ? 'Loops' : `${s.type.toUpperCase()}S`}/${s.name}.wav`,
+      }));
+      const zipBlob = await exportMultipleWavsAsZip(itemsToExport);
+      triggerFileDownload(zipBlob, `Resonance_Selection_${Date.now().toString(36)}.zip`);
+    } catch (err) {
+      console.error('Erreur export ZIP:', err);
+      alert("Une erreur est survenue lors de l'exportation ZIP.");
+    }
   };
 
   const handleUpdateSampleSlices = (sampleId: string, newSlices: SliceRegion[]) => {
@@ -580,6 +759,33 @@ export default function App() {
       setSampleForFxRack(s);
       setIsFxRackOpen(true);
     }
+  };
+
+  const handleOpenLoudnessStandard = (targetSample?: SampleItem) => {
+    const s = targetSample || selectedSample;
+    if (s) {
+      setSampleForLoudness(s);
+      setIsLoudnessModalOpen(true);
+    }
+  };
+
+  const handleApplyLoudnessNormalization = (updatedSample: SampleItem, report: LoudnessAuditReport) => {
+    setSamples((prev) =>
+      prev.map((s) => (s.id === updatedSample.id ? updatedSample : s))
+    );
+    if (updatedSample.audioBuffer) {
+      audioEngine.play(updatedSample.audioBuffer, updatedSample.id, 0);
+    }
+  };
+
+  const handleBatchApplyLoudnessNormalization = (
+    updatedList: SampleItem[],
+    standardKey: LoudnessStandardKey
+  ) => {
+    setSamples((prev) => {
+      const map = new Map(updatedList.map((item) => [item.id, item]));
+      return prev.map((s) => map.get(s.id) || s);
+    });
   };
 
   const handleSaveProcessedAsNew = (newSample: SampleItem) => {
@@ -692,6 +898,7 @@ export default function App() {
         onImportFiles={() => menuFileInputRef.current?.click()}
         onImportFolder={() => menuFolderInputRef.current?.click()}
         onImportOp1Patch={() => menuOp1InputRef.current?.click()}
+        onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
         onOpenSmartIngest={() => setIsSmartIngestOpen(true)}
         onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
         onOpenBatchConverter={() => setIsBatchConverterOpen(true)}
@@ -700,15 +907,18 @@ export default function App() {
           setIsDspModalOpen(true);
         }}
         onOpenFxRack={() => handleOpenFxRack()}
+        onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
         onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
         onOpenEp133Export={handleExportEp133Pack}
         onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
         onOpenRecorder={() => setIsRecorderOpen(true)}
         onOpenBenchmark={() => setIsBenchmarkOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenDocumentation={() => setIsDocOpen(true)}
         onSelectAll={() => handleSelectAllSamples(true)}
         onDeselectAll={() => handleSelectAllSamples(false)}
         onDeleteSelected={handleDeleteSelectedSamples}
+        onExportZip={handleExportZip}
         autoLoudnessLeveling={autoLoudnessLeveling}
         onToggleAutoLoudness={handleToggleAutoLoudness}
         activeView={activeView}
@@ -722,6 +932,8 @@ export default function App() {
         onSearchChange={(q) => setFilterState((prev) => ({ ...prev, searchQuery: q }))}
         onImportFiles={handleImportFiles}
         onOpenSmartIngest={() => setIsSmartIngestOpen(true)}
+        onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
+        onOpenDocumentation={() => setIsDocOpen(true)}
         onOpenBenchmark={() => setIsBenchmarkOpen(true)}
         onExportEp133Pack={handleExportEp133Pack}
         onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
@@ -734,15 +946,25 @@ export default function App() {
           setIsDspModalOpen(true);
         }}
         onOpenFxRack={() => handleOpenFxRack()}
+        onOpenAutoSlicer={() => {
+          if (selectedSample) setSlicerSample(selectedSample);
+        }}
+        onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
+        isPlaying={isPlaying}
+        onTogglePlayPause={handleTogglePlayPause}
+        onPlayNext={handlePlayNext}
+        onPlayPrev={handlePlayPrev}
+        currentSampleName={selectedSample?.name}
         autoLoudnessLeveling={autoLoudnessLeveling}
         onToggleAutoLoudness={handleToggleAutoLoudness}
         samplesCount={samples.length}
       />
 
-      {/* 3. MAIN WORKSPACE */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* 3. MAIN WORKSPACE WITH RESIZABLE SPLITTERS */}
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Sidebar */}
         <Sidebar
+          width={sidebarWidth}
           folders={folders}
           samples={samples}
           filterState={filterState}
@@ -752,9 +974,23 @@ export default function App() {
           onOpenRecorder={() => setIsRecorderOpen(true)}
           onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
           onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+          onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
+          onOpenDocumentation={() => setIsDocOpen(true)}
+          onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
           activeView={activeView}
           onViewChange={setActiveView}
         />
+
+        {/* Vertical Splitter Handle (Resize Sidebar Width with Mouse Drag) */}
+        <div
+          onMouseDown={handleStartSidebarResize}
+          className={`w-2 hover:w-2.5 bg-[#141420] hover:bg-[#00F0FF] cursor-col-resize flex-shrink-0 transition-colors z-20 flex items-center justify-center group select-none ${
+            isResizingSidebar ? 'bg-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.5)]' : ''
+          }`}
+          title="Glisser pour redimensionner la barre latérale"
+        >
+          <div className="w-0.5 h-6 bg-[#33334A] group-hover:bg-black rounded-full" />
+        </div>
 
         {/* Center Content Pane */}
         <main className="flex-1 flex flex-col p-2.5 overflow-hidden gap-2 bg-[#060609]">
@@ -763,6 +999,7 @@ export default function App() {
               {/* Top Waveform Visualizer with Compact Transport Bar on Top & Draggable Markers */}
               {selectedSample ? (
                 <WaveformCanvas
+                  height={waveformHeight}
                   sample={selectedSample}
                   onOpenSlicer={() => setSlicerSample(selectedSample)}
                   onOpenDspAnalyzer={() => {
@@ -791,11 +1028,22 @@ export default function App() {
                 />
               ) : (
                 <div className="h-36 bg-[#0E0E14] border-2 border-[#1E1E26] flex items-center justify-center text-[10px] font-pixel text-[#8E8E93] pixel-box">
-                  CHOISISSEZ UN SAMPLE POUR INSPECTER L'ONDE ET LE TRANSPORT
+                  CHOISISSEZ UN SAMPLE POUR INSPECTER L&apos;ONDE ET LE TRANSPORT
                 </div>
               )}
 
-              {/* Sample Table */}
+              {/* Horizontal Splitter Handle (Resize Waveform Height with Mouse Drag) */}
+              <div
+                onMouseDown={handleStartWaveformResize}
+                className={`h-2 hover:h-2.5 bg-[#141420] hover:bg-[#00F0FF] cursor-row-resize flex-shrink-0 transition-colors z-10 flex items-center justify-center group select-none rounded ${
+                  isResizingWaveform ? 'bg-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.5)]' : ''
+                }`}
+                title="Glisser pour redimensionner la hauteur de la forme d'onde"
+              >
+                <div className="h-0.5 w-8 bg-[#33334A] group-hover:bg-black rounded-full" />
+              </div>
+
+              {/* Spreadsheet Resizable Sample Table */}
               <SampleTable
                 samples={filteredSamples}
                 selectedSampleId={selectedSampleId}
@@ -806,6 +1054,7 @@ export default function App() {
                   setIsDspModalOpen(true);
                 }}
                 onOpenFxRack={(s) => handleOpenFxRack(s)}
+                onOpenLoudnessStandard={(s) => handleOpenLoudnessStandard(s)}
                 onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
                 onToggleFavorite={handleToggleFavorite}
                 onSetRating={handleSetRating}
@@ -845,6 +1094,14 @@ export default function App() {
             }
           }
         }}
+      />
+
+      {/* Auto-Curator Studio DSP Pipeline Modal */}
+      <AutoCuratorModal
+        isOpen={isAutoCuratorOpen}
+        onClose={() => setIsAutoCuratorOpen(false)}
+        onApplyCuration={handleApplyCuration}
+        onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
       />
 
       {/* Market Benchmark Modal */}
@@ -926,7 +1183,7 @@ export default function App() {
         onUpdateSample={handleUpdateSampleFromDsp}
       />
 
-      {/* Creative Studio DSP Effects Rack Modal */}
+      {/* Creative Studio DSP Effects Rack & Pitch Tuner Modal */}
       {isFxRackOpen && (
         <AudioEffectsRackModal
           isOpen={isFxRackOpen}
@@ -940,12 +1197,42 @@ export default function App() {
         />
       )}
 
+      {/* International Loudness Standard Modal (ITU-R BS.1770-4 / EBU R128) */}
+      <LoudnessStandardModal
+        isOpen={isLoudnessModalOpen}
+        onClose={() => {
+          setIsLoudnessModalOpen(false);
+          setSampleForLoudness(null);
+        }}
+        sample={sampleForLoudness || selectedSample}
+        allSelectedSamples={
+          selectedSampleIds.length > 0
+            ? samples.filter((s) => selectedSampleIds.includes(s.id))
+            : filteredSamples
+        }
+        onApplyNormalization={handleApplyLoudnessNormalization}
+        onBatchApplyNormalization={handleBatchApplyLoudnessNormalization}
+      />
+
       {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
       />
+
+      {/* Documentation & Naming Conventions Modal */}
+      <DocumentationModal
+        isOpen={isDocOpen}
+        onClose={() => setIsDocOpen(false)}
+        onOpenAutoCurator={() => {
+          setIsDocOpen(false);
+          setIsAutoCuratorOpen(true);
+        }}
+        onOpenGitHubSync={() => {
+          setIsDocOpen(false);
+          setIsGitHubSyncOpen(true);
+        }}
+      />
     </div>
   );
 }
-

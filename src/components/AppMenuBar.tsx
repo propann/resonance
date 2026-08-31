@@ -27,23 +27,28 @@ import {
   Trash2,
   Bookmark,
   Flame,
+  BookOpen,
+  ShieldCheck,
 } from 'lucide-react';
 
 export interface AppMenuBarProps {
   onImportFiles: () => void;
   onImportFolder: () => void;
   onImportOp1Patch?: () => void;
+  onOpenAutoCurator?: () => void;
   onOpenSmartIngest: () => void;
   onOpenBatchNaming: () => void;
   onOpenBatchConverter: () => void;
   onOpenDspAnalyzer: () => void;
   onOpenFxRack?: () => void;
+  onOpenLoudnessStandard?: () => void;
   onOpenOp1Studio?: () => void;
   onOpenEp133Export: () => void;
   onOpenGitHubSync?: () => void;
   onOpenRecorder: () => void;
   onOpenBenchmark: () => void;
   onOpenShortcuts: () => void;
+  onOpenDocumentation?: () => void;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
   onDeleteSelected?: () => void;
@@ -62,17 +67,20 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onImportFiles,
   onImportFolder,
   onImportOp1Patch,
+  onOpenAutoCurator,
   onOpenSmartIngest,
   onOpenBatchNaming,
   onOpenBatchConverter,
   onOpenDspAnalyzer,
   onOpenFxRack,
+  onOpenLoudnessStandard,
   onOpenOp1Studio,
   onOpenEp133Export,
   onOpenGitHubSync,
   onOpenRecorder,
   onOpenBenchmark,
   onOpenShortcuts,
+  onOpenDocumentation,
   onSelectAll,
   onDeselectAll,
   onDeleteSelected,
@@ -170,6 +178,21 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+Shift+O</span>
               </button>
+              {onOpenAutoCurator && (
+                <button
+                  onClick={() => {
+                    onOpenAutoCurator();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#00F0FF] hover:bg-[#00F0FF] hover:text-black transition font-bold"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]" />
+                    <span>Studio Auto-Curateur & Rangement...</span>
+                  </div>
+                  <span className="text-[8px] bg-[#00F0FF]/20 px-1 text-[#00F0FF]">DSP TRI</span>
+                </button>
+              )}
               {onImportOp1Patch && (
                 <button
                   onClick={() => {
@@ -458,6 +481,21 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   {autoLoudnessLeveling ? 'ACTIF' : 'OFF'}
                 </span>
               </button>
+              {onOpenLoudnessStandard && (
+                <button
+                  onClick={() => {
+                    onOpenLoudnessStandard();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#10B981]" />
+                    <span>Étalon Officiel (ITU-R BS.1770 / EBU R128)...</span>
+                  </div>
+                  <span className="text-[8px] text-[#10B981] font-bold">LUFS</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   onOpenSmartIngest();
@@ -602,7 +640,22 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
             AIDE
           </button>
           {activeMenu === 'help' && (
-            <div className="absolute left-0 top-full mt-0.5 w-60 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+            <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              {onOpenDocumentation && (
+                <button
+                  onClick={() => {
+                    onOpenDocumentation();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#00F0FF] hover:bg-[#00F0FF] hover:text-black transition font-bold"
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-3.5 h-3.5 text-[#00F0FF]" />
+                    <span>Documentation & Conventions...</span>
+                  </div>
+                  <span className="text-[8px] bg-[#00F0FF]/20 px-1 text-[#00F0FF]">F1</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   onOpenShortcuts();
@@ -630,9 +683,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               </button>
               <div className="h-px bg-[#1E1E2C] my-1" />
               <div className="px-2 py-1 text-[8px] text-[#8E8E98]">
-                Resonance Pro Studio v2.4
+                Resonance Pro Studio v2.4 Master
                 <br />
-                Moteur DSP 64-bit AudioWorklet
+                Norme officielle : propann/az-sample
               </div>
             </div>
           )}

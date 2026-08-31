@@ -239,6 +239,8 @@ export async function buildRepositoryZip(
 
   // 1. Root files
   zip.file('README.md', generateRepositoryReadme(samples, `${config.owner}/${config.repo}`));
+  zip.file('CONVENTION.md', generateRepositoryConvention());
+  zip.file('DOCS.md', generateRepositoryDocs());
   zip.file('manifest.json', generateRepositoryManifest(samples));
   zip.file('.gitattributes', generateGitAttributes());
   zip.file('scripts/push_to_az_sample.sh', generatePushScript(config.repoUrl));
@@ -248,9 +250,9 @@ export async function buildRepositoryZip(
     const totalSamples = samples.length;
     for (let i = 0; i < totalSamples; i++) {
       const sample = samples[i];
-      const categoryFolder = getCategoryFolderName(sample.type);
+      const categoryFolder = getCategoryFolderName(sample.type, sample.category === 'loop');
       const safeName = sample.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const fileName = `samples/${categoryFolder}/${safeName}.wav`;
+      const fileName = `${categoryFolder}/${safeName}.wav`;
 
       onProgress?.({
         stage: 'uploading',
@@ -418,6 +420,12 @@ export async function pushToGitHubDirect(
     const readmeBlobSha = await createTextBlob(generateRepositoryReadme(samples, `${owner}/${repo}`), owner, repo, headers);
     treeItems.push({ path: 'README.md', mode: '100644', type: 'blob', sha: readmeBlobSha });
 
+    const conventionBlobSha = await createTextBlob(generateRepositoryConvention(), owner, repo, headers);
+    treeItems.push({ path: 'CONVENTION.md', mode: '100644', type: 'blob', sha: conventionBlobSha });
+
+    const docsBlobSha = await createTextBlob(generateRepositoryDocs(), owner, repo, headers);
+    treeItems.push({ path: 'DOCS.md', mode: '100644', type: 'blob', sha: docsBlobSha });
+
     const manifestBlobSha = await createTextBlob(generateRepositoryManifest(samples), owner, repo, headers);
     treeItems.push({ path: 'manifest.json', mode: '100644', type: 'blob', sha: manifestBlobSha });
 
@@ -431,9 +439,9 @@ export async function pushToGitHubDirect(
     const totalSamples = samples.length;
     for (let i = 0; i < totalSamples; i++) {
       const s = samples[i];
-      const categoryFolder = getCategoryFolderName(s.type);
+      const categoryFolder = getCategoryFolderName(s.type, s.category === 'loop');
       const safeName = s.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filePath = `samples/${categoryFolder}/${safeName}.wav`;
+      const filePath = `${categoryFolder}/${safeName}.wav`;
 
       onProgress?.({
         stage: 'uploading',
@@ -593,31 +601,94 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function getCategoryFolderName(type: string): string {
+function getCategoryFolderName(type: string, isLoop: boolean = false): string {
+  if (isLoop || type === 'loop') return '06_LOOPS';
   switch (type) {
     case 'kick':
-      return 'kicks';
     case 'snare':
-      return 'snares';
     case 'clap':
-      return 'claps';
     case 'hihat':
-      return 'hihats';
     case 'percussion':
     case 'other':
-      return 'percussions';
+      return '01_DRUMS';
     case '808':
     case 'bass':
-      return 'bass_808';
+      return '02_BASS_808';
     case 'lead':
-      return 'leads';
     case 'pad':
-      return 'pads_chords';
+    case 'synth':
+      return '03_MELODIC';
     case 'vocal':
-      return 'vocals';
+      return '04_VOCALS';
     case 'fx':
-      return 'fx_textures';
+      return '05_FX_TEXTURES';
+    case 'instrument':
+    case 'piano':
+    case 'guitar':
+      return '07_INSTRUMENTS';
     default:
-      return 'misc';
+      return '01_DRUMS';
   }
+}
+
+export function generateRepositoryConvention(): string {
+  return `# 🏷️ Standard Naming Convention & Curation Guidelines (\`az-sample\`)
+
+> **Projet :** \`propann/az-sample\` & **Engineering Studio**  
+> **Version :** \`2.4.0 (Studio Production Master)\`
+
+---
+
+## 📐 Syntaxe Standard du Nom de Fichier
+\`\`\`
+[PREFIX]_[TYPE]_[DESCRIPTIVE_NAME]_[KEY]_[BPM]_[FORMAT]_[INDEX].wav
+\`\`\`
+*Exemple :* \`AZ_KCK_PunchyHard_F#m_140BPM_24b48k_01.wav\`
+
+## 🗂️ Table des Codes d'Instruments
+- \`KCK\` : Grosse Caisse (Kick) -> \`01_DRUMS/\`
+- \`SNR\` : Caisse Claire (Snare) -> \`01_DRUMS/\`
+- \`CLP\` : Clap / Handclap -> \`01_DRUMS/\`
+- \`HAT\` : Hi-Hat (Fermé / Ouvert) -> \`01_DRUMS/\`
+- \`CYM\` : Cymbale (Crash / Ride) -> \`01_DRUMS/\`
+- \`PRC\` : Percussion (Tom, Bongo, Shaker) -> \`01_DRUMS/\`
+- \`808\` : Sub 808 Saturé / Trap Bass -> \`02_BASS_808/\`
+- \`BAS\` : Basse Synthé / Acoustic Bass -> \`02_BASS_808/\`
+- \`SYN\` : Synth Lead / Pluck / Key -> \`03_MELODIC/\`
+- \`PAD\` : Nappe / Chord / Ambient Pad -> \`03_MELODIC/\`
+- \`VOC\` : Vocal Chop / Vox FX -> \`04_VOCALS/\`
+- \`SFX\` : Effet Sonore / Riser / Impact -> \`05_FX_TEXTURES/\`
+- \`LOP\` : Boucle Complète (Full Loop) -> \`06_LOOPS/\`
+- \`DLP\` : Boucle de Batterie (Drum Loop) -> \`06_LOOPS/\`
+- \`INS\` : Instrument Acoustique / Guitare -> \`07_INSTRUMENTS/\`
+
+## 📂 7 Dossiers Studio Immuables
+- \`01_DRUMS/\`
+- \`02_BASS_808/\`
+- \`03_MELODIC/\`
+- \`04_VOCALS/\`
+- \`05_FX_TEXTURES/\`
+- \`06_LOOPS/\`
+- \`07_INSTRUMENTS/\`
+
+## 🎚️ Normes Audio EBU R128
+- **Master WAV :** 24-bit / 48kHz ou 44.1kHz PCM
+- **Loudness :** -14.0 LUFS (Loops) / -18.0 LUFS (One-Shots)
+- **True Peak :** Max -0.5 dBFS
+`;
+}
+
+export function generateRepositoryDocs(): string {
+  return `# 📘 Resonance Studio — Guide Utilisateur & Documentation
+
+> **Dépôt Git :** \`propann/az-sample\`  
+> **Plateforme :** Engineering Studio
+
+## ⚡ Flux de Travail en 5 Étapes
+1. **Import :** Glissez un dossier brut de sons sur l'application.
+2. **Auto-Curateur DSP :** Cliquez sur [CURATEUR PRO] pour l'analyse spectrale, détection de tonalité, BPM et normalisation.
+3. **Découpe & Slicer :** Isolez les transitoires ou fabriquez un kit de 24 pads OP-1.
+4. **Rangement :** Organisation automatique dans les 7 dossiers fondamentaux.
+5. **Sync Git :** Push direct vers https://github.com/propann/az-sample.
+`;
 }

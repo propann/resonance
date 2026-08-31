@@ -2,14 +2,17 @@ import { SampleItem, FolderItem } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { audioBufferToWavBlob } from '../services/audioConverter';
 import { calculateAudioMetrics, detectAutoSlices } from '../services/audioAnalyzer';
+import { PRO_STUDIO_FOLDER_DEFINITIONS, generateProFolderHierarchy, classifySampleToProFolder } from '../services/proFolderOrganizer';
 
-export const DEFAULT_FOLDERS: FolderItem[] = [
-  { id: 'f-drums', name: 'Drum Kit 2026', path: '/Drum Kit 2026', color: '#06b6d4', icon: 'Drum', count: 5 },
-  { id: 'f-bass', name: '808 & Sub Bass', path: '/808 & Sub Bass', color: '#8b5cf6', icon: 'Zap', count: 1 },
-  { id: 'f-melodic', name: 'Melodic & Loops', path: '/Melodic & Loops', color: '#ec4899', icon: 'Music', count: 2 },
-  { id: 'f-fx', name: 'FX & Risers', path: '/FX & Risers', color: '#eab308', icon: 'Sparkles', count: 1 },
-  { id: 'f-stems', name: 'Multi-Sound Stems (Sliceable)', path: '/Multi-Sound Stems', color: '#10b981', icon: 'Scissors', count: 1 },
-];
+export const DEFAULT_FOLDERS: FolderItem[] = PRO_STUDIO_FOLDER_DEFINITIONS.map((def) => ({
+  id: def.id,
+  name: def.name,
+  path: def.path,
+  color: def.color,
+  icon: def.icon,
+  count: 0,
+  parentId: def.parentId,
+}));
 
 /**
  * Procedurally synthesizes high-quality audio buffers for the starter library
@@ -477,8 +480,8 @@ export async function generateDefaultLibrary(): Promise<SampleItem[]> {
       isLoop: false,
       genre: 'Synthwave / Retro',
       tags: ['fx', 'riser', 'transition', 'build-up', 'cyber'],
-      folderId: 'f-fx',
-      folderPath: '/FX & Risers',
+      folderId: 'f-os-fx',
+      folderPath: '/01_ONE_SHOTS/05_FX_Transitions',
       favorite: false,
       rating: 4,
       spectralCentroid: 4200,
@@ -496,5 +499,15 @@ export async function generateDefaultLibrary(): Promise<SampleItem[]> {
     });
   }
 
-  return samples;
+  // Ensure all starter samples are perfectly organized in the Pro Folders
+  return samples.map((s) => {
+    const { folderPath, folderId, category } = classifySampleToProFolder(s);
+    return {
+      ...s,
+      folderPath,
+      folderId,
+      category,
+      isLoop: category === 'loop',
+    };
+  });
 }

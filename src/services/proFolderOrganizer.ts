@@ -1,0 +1,465 @@
+import { FolderItem, SampleItem, SampleType, SampleCategory, MusicGenre } from '../types/sample';
+import {
+  calculateAudioMetrics,
+  classifySample,
+  detectBpm,
+  detectPitchAndKey,
+  detectLoopVsOneShot,
+  classifyGenre,
+  assignEp133Slot,
+} from './audioAnalyzer';
+import { audioBufferToWavBlob } from './audioConverter';
+
+export interface ProFolderDefinition {
+  id: string;
+  name: string;
+  path: string;
+  category: 'one-shot' | 'loop' | 'multi-sound' | 'root';
+  color: string;
+  icon: string;
+  parentId?: string;
+  description: string;
+  targetTypes: SampleType[];
+}
+
+/**
+ * Standard Golden Industry Folder Structure (inspired by Splice, Native Instruments, Ableton Live 12, FL Studio & Loopcloud)
+ */
+export const PRO_STUDIO_FOLDER_DEFINITIONS: ProFolderDefinition[] = [
+  // === ROOT CATEGORIES ===
+  {
+    id: 'f-root-oneshots',
+    name: '01_ONE_SHOTS',
+    path: '/01_ONE_SHOTS',
+    category: 'one-shot',
+    color: '#00F0FF',
+    icon: 'Zap',
+    description: 'Éléments percussifs et notes isolées',
+    targetTypes: ['kick', 'snare', 'hihat', 'clap', 'cymbal', 'percussion', 'bass', '808', 'lead', 'pad', 'vocal', 'fx'],
+  },
+  {
+    id: 'f-root-loops',
+    name: '02_LOOPS',
+    path: '/02_LOOPS',
+    category: 'loop',
+    color: '#10B981',
+    icon: 'Repeat',
+    description: 'Boucles rythmiques et mélodiques calées au BPM',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-root-multisound',
+    name: '03_MULTI_SOUND_KITS',
+    path: '/03_MULTI_SOUND_KITS',
+    category: 'multi-sound',
+    color: '#FF7A00',
+    icon: 'Scissors',
+    description: 'Kits multipistes et stems découpables',
+    targetTypes: ['multi-sound'],
+  },
+
+  // === ONE-SHOTS SUB-FOLDERS ===
+  // 1. Drums & Percussion
+  {
+    id: 'f-os-drums',
+    name: '01_Drums_Percussion',
+    path: '/01_ONE_SHOTS/01_Drums_Percussion',
+    category: 'one-shot',
+    color: '#00F0FF',
+    icon: 'Drum',
+    parentId: 'f-root-oneshots',
+    description: 'Batteries, percussions et bruits de frappe',
+    targetTypes: ['kick', 'snare', 'hihat', 'clap', 'cymbal', 'percussion'],
+  },
+  {
+    id: 'f-os-kicks',
+    name: '01_Kicks',
+    path: '/01_ONE_SHOTS/01_Drums_Percussion/01_Kicks',
+    category: 'one-shot',
+    color: '#00F0FF',
+    icon: 'Disc',
+    parentId: 'f-os-drums',
+    description: 'Grosses caisses acoustiques, trap & punchy',
+    targetTypes: ['kick'],
+  },
+  {
+    id: 'f-os-snares',
+    name: '02_Snares_Claps',
+    path: '/01_ONE_SHOTS/01_Drums_Percussion/02_Snares_Claps',
+    category: 'one-shot',
+    color: '#EF4444',
+    icon: 'Layers',
+    parentId: 'f-os-drums',
+    description: 'Caisses claires, claps claquants et rimshots',
+    targetTypes: ['snare', 'clap'],
+  },
+  {
+    id: 'f-os-hihats',
+    name: '03_HiHats_Cymbals',
+    path: '/01_ONE_SHOTS/01_Drums_Percussion/03_HiHats_Cymbals',
+    category: 'one-shot',
+    color: '#F59E0B',
+    icon: 'Sparkles',
+    parentId: 'f-os-drums',
+    description: 'Charlestons fermés/ouverts, rides et crashs',
+    targetTypes: ['hihat', 'cymbal'],
+  },
+  {
+    id: 'f-os-percs',
+    name: '04_Toms_Percussion',
+    path: '/01_ONE_SHOTS/01_Drums_Percussion/04_Toms_Percussion',
+    category: 'one-shot',
+    color: '#14B8A6',
+    icon: 'CircleDot',
+    parentId: 'f-os-drums',
+    description: 'Toms, shakers, bongos, congas et cloches',
+    targetTypes: ['percussion'],
+  },
+
+  // 2. Bass & 808
+  {
+    id: 'f-os-bass',
+    name: '02_Bass_808',
+    path: '/01_ONE_SHOTS/02_Bass_808',
+    category: 'one-shot',
+    color: '#8B5CF6',
+    icon: 'Zap',
+    parentId: 'f-root-oneshots',
+    description: 'Basses synthétiques et sub-basses 808',
+    targetTypes: ['808', 'bass'],
+  },
+  {
+    id: 'f-os-808',
+    name: '01_808_SubHits',
+    path: '/01_ONE_SHOTS/02_Bass_808/01_808_SubHits',
+    category: 'one-shot',
+    color: '#A855F7',
+    icon: 'Flame',
+    parentId: 'f-os-bass',
+    description: 'Sub 808 saturées, glide hits et sub drops',
+    targetTypes: ['808'],
+  },
+  {
+    id: 'f-os-synthbass',
+    name: '02_SynthBass_Plucks',
+    path: '/01_ONE_SHOTS/02_Bass_808/02_SynthBass_Plucks',
+    category: 'one-shot',
+    color: '#7C3AED',
+    icon: 'Activity',
+    parentId: 'f-os-bass',
+    description: 'Basses analogiques, reeses et stabs de basse',
+    targetTypes: ['bass'],
+  },
+
+  // 3. Melodic & Instruments
+  {
+    id: 'f-os-melodic',
+    name: '03_Melodic_Instruments',
+    path: '/01_ONE_SHOTS/03_Melodic_Instruments',
+    category: 'one-shot',
+    color: '#3B82F6',
+    icon: 'Music',
+    parentId: 'f-root-oneshots',
+    description: 'Instruments mélodiques et accords isolés',
+    targetTypes: ['lead', 'pad'],
+  },
+  {
+    id: 'f-os-leads',
+    name: '01_Synth_Leads_Plucks',
+    path: '/01_ONE_SHOTS/03_Melodic_Instruments/01_Synth_Leads_Plucks',
+    category: 'one-shot',
+    color: '#3B82F6',
+    icon: 'Sliders',
+    parentId: 'f-os-melodic',
+    description: 'Leads, synth plucks et notes uniques',
+    targetTypes: ['lead'],
+  },
+  {
+    id: 'f-os-pads',
+    name: '02_Pads_Chords',
+    path: '/01_ONE_SHOTS/03_Melodic_Instruments/02_Pads_Chords',
+    category: 'one-shot',
+    color: '#6366F1',
+    icon: 'Layers',
+    parentId: 'f-os-melodic',
+    description: 'Accords de piano, rhodes et nappes synthé',
+    targetTypes: ['pad'],
+  },
+
+  // 4. Vocals
+  {
+    id: 'f-os-vocals',
+    name: '04_Vocals',
+    path: '/01_ONE_SHOTS/04_Vocals',
+    category: 'one-shot',
+    color: '#EC4899',
+    icon: 'Mic',
+    parentId: 'f-root-oneshots',
+    description: 'Voix, chants, ad-libs et chops de voix',
+    targetTypes: ['vocal'],
+  },
+
+  // 5. FX & Transitions
+  {
+    id: 'f-os-fx',
+    name: '05_FX_Transitions',
+    path: '/01_ONE_SHOTS/05_FX_Transitions',
+    category: 'one-shot',
+    color: '#EAB308',
+    icon: 'Sparkles',
+    parentId: 'f-root-oneshots',
+    description: 'Impacts, risers, textures foley et downlifters',
+    targetTypes: ['fx'],
+  },
+
+  // === LOOPS SUB-FOLDERS ===
+  // 1. Drum Loops
+  {
+    id: 'f-lp-drums',
+    name: '01_Drum_Loops',
+    path: '/02_LOOPS/01_Drum_Loops',
+    category: 'loop',
+    color: '#10B981',
+    icon: 'Drum',
+    parentId: 'f-root-loops',
+    description: 'Boucles complètes de batterie et rythmiques',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-lp-fullbeats',
+    name: '01_Full_Beats',
+    path: '/02_LOOPS/01_Drum_Loops/01_Full_Beats',
+    category: 'loop',
+    color: '#10B981',
+    icon: 'Disc',
+    parentId: 'f-lp-drums',
+    description: 'Kits complets de batterie avec kick et snare',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-lp-toploops',
+    name: '02_Top_Loops_NoKick',
+    path: '/02_LOOPS/01_Drum_Loops/02_Top_Loops_NoKick',
+    category: 'loop',
+    color: '#34D399',
+    icon: 'Sparkles',
+    parentId: 'f-lp-drums',
+    description: 'Boucles de hi-hats et percussions sans grosse caisse',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-lp-perc',
+    name: '03_Percussion_Grooves',
+    path: '/02_LOOPS/01_Drum_Loops/03_Percussion_Grooves',
+    category: 'loop',
+    color: '#059669',
+    icon: 'CircleDot',
+    parentId: 'f-lp-drums',
+    description: 'Grooves afro, shakers, bongos et rythmes organiques',
+    targetTypes: ['loop'],
+  },
+
+  // 2. Melodic & Bass Loops
+  {
+    id: 'f-lp-melodic',
+    name: '02_Melodic_Loops',
+    path: '/02_LOOPS/02_Melodic_Loops',
+    category: 'loop',
+    color: '#06B6D4',
+    icon: 'Music',
+    parentId: 'f-root-loops',
+    description: 'Lignes de basse, synth leads, guitares et pianos',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-lp-basslines',
+    name: '01_Basslines_808',
+    path: '/02_LOOPS/02_Melodic_Loops/01_Basslines_808',
+    category: 'loop',
+    color: '#8B5CF6',
+    icon: 'Zap',
+    parentId: 'f-lp-melodic',
+    description: 'Lignes de basse continues et drill slides',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-lp-chords',
+    name: '02_Chord_Progressions',
+    path: '/02_LOOPS/02_Melodic_Loops/02_Chord_Progressions',
+    category: 'loop',
+    color: '#3B82F6',
+    icon: 'Layers',
+    parentId: 'f-lp-melodic',
+    description: 'Progressions d accords de piano, synthé et guitare',
+    targetTypes: ['loop'],
+  },
+  {
+    id: 'f-lp-leads',
+    name: '03_Lead_Melodies',
+    path: '/02_LOOPS/02_Melodic_Loops/03_Lead_Melodies',
+    category: 'loop',
+    color: '#00F0FF',
+    icon: 'Sliders',
+    parentId: 'f-lp-melodic',
+    description: 'Mélodies principales de synthé, flûtes et cloches',
+    targetTypes: ['loop'],
+  },
+
+  // 3. Atmospheres & Textures
+  {
+    id: 'f-lp-atmo',
+    name: '03_Atmospheres_Textures',
+    path: '/02_LOOPS/03_Atmospheres_Textures',
+    category: 'loop',
+    color: '#6366F1',
+    icon: 'Cloud',
+    parentId: 'f-root-loops',
+    description: 'Nappes ambiantes, drones et textures lo-fi',
+    targetTypes: ['loop'],
+  },
+
+  // 4. Vocal Loops
+  {
+    id: 'f-lp-vocals',
+    name: '04_Vocal_Loops',
+    path: '/02_LOOPS/04_Vocal_Loops',
+    category: 'loop',
+    color: '#EC4899',
+    icon: 'Mic',
+    parentId: 'f-root-loops',
+    description: 'Toplines vocales, phrases et boucles vocoder',
+    targetTypes: ['loop'],
+  },
+];
+
+/**
+ * Returns clean list of FolderItem objects calculated with real-time sample counts
+ */
+export function generateProFolderHierarchy(samples: SampleItem[]): FolderItem[] {
+  return PRO_STUDIO_FOLDER_DEFINITIONS.map((def) => {
+    // Count samples that match this folder path or start with this folder path
+    const count = samples.filter((s) => {
+      if (s.folderId === def.id) return true;
+      if (s.folderPath && s.folderPath.startsWith(def.path)) return true;
+      return false;
+    }).length;
+
+    return {
+      id: def.id,
+      name: def.name,
+      path: def.path,
+      color: def.color,
+      icon: def.icon,
+      count,
+      parentId: def.parentId,
+    };
+  });
+}
+
+/**
+ * Intelligent Classifier for Auto-Organizing a sample into the Pro Industry Hierarchy
+ */
+export function classifySampleToProFolder(sample: SampleItem): { folderPath: string; folderId: string; category: SampleCategory } {
+  const isLoop = sample.isLoop || sample.duration >= 1.6 || sample.type === 'loop' || /loop|bpm|beat/i.test(sample.name);
+  const isMultiSound = sample.isMultiSound || sample.type === 'multi-sound' || (sample.slices && sample.slices.length >= 3);
+  const name = (sample.name + ' ' + (sample.originalFileName || '')).toLowerCase();
+
+  // Multi-Sound Stems
+  if (isMultiSound) {
+    return {
+      folderPath: '/03_MULTI_SOUND_KITS',
+      folderId: 'f-root-multisound',
+      category: 'multi-sound',
+    };
+  }
+
+  // LOOPS
+  if (isLoop) {
+    if (/drum|beat|break|groove|rhythm/i.test(name) || sample.type === 'kick' || sample.type === 'snare') {
+      if (/top|nohits|hat|perc|shaker/i.test(name)) {
+        return { folderPath: '/02_LOOPS/01_Drum_Loops/02_Top_Loops_NoKick', folderId: 'f-lp-toploops', category: 'loop' };
+      }
+      if (/perc|conga|bongo|afro/i.test(name)) {
+        return { folderPath: '/02_LOOPS/01_Drum_Loops/03_Percussion_Grooves', folderId: 'f-lp-perc', category: 'loop' };
+      }
+      return { folderPath: '/02_LOOPS/01_Drum_Loops/01_Full_Beats', folderId: 'f-lp-fullbeats', category: 'loop' };
+    }
+
+    if (/bass|808|sub|reese/i.test(name) || sample.type === '808' || sample.type === 'bass') {
+      return { folderPath: '/02_LOOPS/02_Melodic_Loops/01_Basslines_808', folderId: 'f-lp-basslines', category: 'loop' };
+    }
+
+    if (/chord|prog|piano|rhodes|guitar|strum/i.test(name) || sample.type === 'pad') {
+      return { folderPath: '/02_LOOPS/02_Melodic_Loops/02_Chord_Progressions', folderId: 'f-lp-chords', category: 'loop' };
+    }
+
+    if (/vox|vocal|sing|chant|choir/i.test(name) || sample.type === 'vocal') {
+      return { folderPath: '/02_LOOPS/04_Vocal_Loops', folderId: 'f-lp-vocals', category: 'loop' };
+    }
+
+    if (/atmo|pad|ambient|drone|lofi|vinyl/i.test(name)) {
+      return { folderPath: '/02_LOOPS/03_Atmospheres_Textures', folderId: 'f-lp-atmo', category: 'loop' };
+    }
+
+    // Default Melodic Loop
+    return { folderPath: '/02_LOOPS/02_Melodic_Loops/03_Lead_Melodies', folderId: 'f-lp-leads', category: 'loop' };
+  }
+
+  // ONE-SHOTS
+  const type = sample.type;
+  switch (type) {
+    case 'kick':
+      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/01_Kicks', folderId: 'f-os-kicks', category: 'one-shot' };
+    case 'snare':
+    case 'clap':
+      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/02_Snares_Claps', folderId: 'f-os-snares', category: 'one-shot' };
+    case 'hihat':
+    case 'cymbal':
+      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/03_HiHats_Cymbals', folderId: 'f-os-hihats', category: 'one-shot' };
+    case 'percussion':
+      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/04_Toms_Percussion', folderId: 'f-os-percs', category: 'one-shot' };
+    case '808':
+      return { folderPath: '/01_ONE_SHOTS/02_Bass_808/01_808_SubHits', folderId: 'f-os-808', category: 'one-shot' };
+    case 'bass':
+      return { folderPath: '/01_ONE_SHOTS/02_Bass_808/02_SynthBass_Plucks', folderId: 'f-os-synthbass', category: 'one-shot' };
+    case 'lead':
+      return { folderPath: '/01_ONE_SHOTS/03_Melodic_Instruments/01_Synth_Leads_Plucks', folderId: 'f-os-leads', category: 'one-shot' };
+    case 'pad':
+      return { folderPath: '/01_ONE_SHOTS/03_Melodic_Instruments/02_Pads_Chords', folderId: 'f-os-pads', category: 'one-shot' };
+    case 'vocal':
+      return { folderPath: '/01_ONE_SHOTS/04_Vocals', folderId: 'f-os-vocals', category: 'one-shot' };
+    case 'fx':
+      return { folderPath: '/01_ONE_SHOTS/05_FX_Transitions', folderId: 'f-os-fx', category: 'one-shot' };
+    default:
+      if (/kick|bd/i.test(name)) return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/01_Kicks', folderId: 'f-os-kicks', category: 'one-shot' };
+      if (/snare|clap|rim/i.test(name)) return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/02_Snares_Claps', folderId: 'f-os-snares', category: 'one-shot' };
+      if (/hat|cymbal|ride|crash/i.test(name)) return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/03_HiHats_Cymbals', folderId: 'f-os-hihats', category: 'one-shot' };
+      if (/808|sub/i.test(name)) return { folderPath: '/01_ONE_SHOTS/02_Bass_808/01_808_SubHits', folderId: 'f-os-808', category: 'one-shot' };
+      if (/bass/i.test(name)) return { folderPath: '/01_ONE_SHOTS/02_Bass_808/02_SynthBass_Plucks', folderId: 'f-os-synthbass', category: 'one-shot' };
+      if (/vox|vocal/i.test(name)) return { folderPath: '/01_ONE_SHOTS/04_Vocals', folderId: 'f-os-vocals', category: 'one-shot' };
+      if (/fx|riser|impact|down|sweep/i.test(name)) return { folderPath: '/01_ONE_SHOTS/05_FX_Transitions', folderId: 'f-os-fx', category: 'one-shot' };
+      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/04_Toms_Percussion', folderId: 'f-os-percs', category: 'one-shot' };
+  }
+}
+
+/**
+ * Automatically reorganizes an entire sample collection into the Pro Structure
+ */
+export function autoOrganizeLibrary(samples: SampleItem[]): { organizedSamples: SampleItem[]; totalMoved: number } {
+  let totalMoved = 0;
+  const organizedSamples = samples.map((sample) => {
+    const { folderPath, folderId, category } = classifySampleToProFolder(sample);
+    const isDifferent = sample.folderPath !== folderPath || sample.folderId !== folderId;
+    if (isDifferent) totalMoved++;
+
+    return {
+      ...sample,
+      folderPath,
+      folderId,
+      category,
+      isLoop: category === 'loop',
+    };
+  });
+
+  return { organizedSamples, totalMoved };
+}
