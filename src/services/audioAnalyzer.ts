@@ -542,6 +542,133 @@ export function assignEp133Slot(
 }
 
 /**
+ * Advanced Spectral & Acoustic Feature Extractor for Precision Sound Classification
+ */
+export function extractAcousticFeatures(buffer: AudioBuffer): {
+  lowEnergyRatio: number; // 20 - 150 Hz
+  midEnergyRatio: number; // 150 - 2500 Hz
+  highEnergyRatio: number; // > 2500 Hz
+  attackTimeMs: number; // time to reach peak
+  pitchDropHz: number; // frequency drop in first 40ms (kick signature)
+  preTransientBurstCount: number; // clap pre-burst micro-peaks
+  subDominantFreq: number; // strongest peak in 30-120Hz
+  decayTimeMs: number;
+} {
+  const channelData = buffer.getChannelData(0);
+  const sampleRate = buffer.sampleRate;
+  const length = Math.min(channelData.length, Math.floor(sampleRate * 2.0)); // analyze first 2s
+
+  // 1. Peak & Attack Time Detection
+  let peakVal = 0;
+  let peakIndex = 0;
+  for (let i = 0; i < length; i++) {
+    const absVal = Math.abs(channelData[i]);
+    if (absVal > peakVal) {
+      peakVal = absVal;
+      peakIndex = i;
+    }
+  }
+  const attackTimeMs = (peakIndex / sampleRate) * 1000;
+
+  // 2. Pre-transient bursts (Clap detection: multiple micro-peaks before main body)
+  let preBursts = 0;
+  const preWindow = Math.min(peakIndex, Math.floor(sampleRate * 0.04));
+  let inBurst = false;
+  const clapThreshold = peakVal * 0.25;
+  for (let i = 0; i < preWindow; i++) {
+    const v = Math.abs(channelData[i]);
+    if (v > clapThreshold && !inBurst) {
+      preBursts++;
+      inBurst = true;
+    } else if (v < clapThreshold * 0.5) {
+      inBurst = false;
+    }
+  }
+
+  // 3. Decay Time Detection (time from peak to -20dB)
+  const decayThreshold = peakVal * 0.1;
+  let decayIndex = peakIndex;
+  for (let i = peakIndex; i < length; i++) {
+    if (Math.abs(channelData[i]) < decayThreshold) {
+      decayIndex = i;
+      break;
+    }
+  }
+  const decayTimeMs = ((decayIndex - peakIndex) / sampleRate) * 1000;
+
+  // 4. Band Energy Ratios using mini-FFT / frequency filters
+  const fftSize = 1024;
+  const numWindows = Math.min(8, Math.floor(length / fftSize));
+  let lowEnergy = 0;
+  let midEnergy = 0;
+  let highEnergy = 0;
+  let totalEnergy = 0;
+
+  for (let w = 0; w < numWindows; w++) {
+    const offset = w * fftSize;
+    for (let k = 1; k < fftSize / 2; k += 2) {
+      const freq = (k * sampleRate) / fftSize;
+      let real = 0;
+      let imag = 0;
+      const step = 2;
+      for (let n = 0; n < fftSize; n += step) {
+        const s = channelData[offset + n] || 0;
+        const angle = (2 * Math.PI * k * n) / fftSize;
+        real += s * Math.cos(angle);
+        imag -= s * Math.sin(angle);
+      }
+      const power = real * real + imag * imag;
+      totalEnergy += power;
+      if (freq <= 150) {
+        lowEnergy += power;
+      } else if (freq <= 2500) {
+        midEnergy += power;
+      } else {
+        highEnergy += power;
+      }
+    }
+  }
+
+  const safeTotal = totalEnergy || 1;
+  const lowRatio = lowEnergy / safeTotal;
+  const midRatio = midEnergy / safeTotal;
+  const highRatio = highEnergy / safeTotal;
+
+  // 5. Kick pitch down-chirp estimation (zero crossings in first 15ms vs 15-40ms)
+  const win1 = Math.floor(sampleRate * 0.015);
+  const win2 = Math.floor(sampleRate * 0.045);
+  let zc1 = 0;
+  let zc2 = 0;
+  for (let i = 1; i < win1; i++) {
+    if ((channelData[i] >= 0 && channelData[i - 1] < 0) || (channelData[i] < 0 && channelData[i - 1] >= 0)) {
+      zc1++;
+    }
+  }
+  for (let i = win1 + 1; i < Math.min(length, win2); i++) {
+    if ((channelData[i] >= 0 && channelData[i - 1] < 0) || (channelData[i] < 0 && channelData[i - 1] >= 0)) {
+      zc2++;
+    }
+  }
+  const freq1 = (zc1 * sampleRate) / (2 * win1);
+  const freq2 = (zc2 * sampleRate) / (2 * Math.max(1, win2 - win1));
+  const pitchDropHz = Math.max(0, freq1 - freq2);
+
+  // Sub dominant frequency approximation
+  const subDominantFreq = freq2 >= 20 && freq2 <= 140 ? freq2 : 55;
+
+  return {
+    lowEnergyRatio: lowRatio,
+    midEnergyRatio: midRatio,
+    highEnergyRatio: highRatio,
+    attackTimeMs,
+    pitchDropHz,
+    preTransientBurstCount: preBursts,
+    subDominantFreq,
+    decayTimeMs,
+  };
+}
+
+/**
  * Comprehensive Sample Classification (Acoustic + Harmonic + Temporal + Genre)
  */
 export function classifySample(
@@ -549,83 +676,190 @@ export function classifySample(
   fileName: string,
   metrics: { peakDb: number; rmsDb: number; spectralCentroid: number; zeroCrossingRate: number; dynamicRangeDb: number; sustainFactor: number },
   slicesCount: number
-): { type: SampleType; tags: string[]; isMultiSound: boolean } {
+): { type: SampleType; tags: string[]; isMultiSound: boolean; acousticConfidence: number; acousticDetails: string } {
   const lowerName = fileName.toLowerCase();
   const duration = buffer.duration;
   const centroid = metrics.spectralCentroid;
   const zcr = metrics.zeroCrossingRate;
 
-  // Name keyword heuristics
-  if (lowerName.includes('kick') || lowerName.includes('bd') || lowerName.includes('bassdrum')) {
-    return { type: 'kick', tags: ['punch', 'low-end', 'drum', 'one-shot'], isMultiSound: false };
+  // 1. Explicit Keyword Override (Highest Priority if clear convention)
+  if (lowerName.includes('kick') || lowerName.includes('bd_') || lowerName.includes('bassdrum') || lowerName.includes('kik')) {
+    return { type: 'kick', tags: ['punch', 'low-end', 'drum', 'one-shot'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Kick Drum' };
   }
-  if (lowerName.includes('808')) {
-    return { type: '808', tags: ['sub', 'trap', 'bass', 'saturated'], isMultiSound: false };
+  if (lowerName.includes('808') || lowerName.includes('sub_bass') || lowerName.includes('subbass')) {
+    return { type: '808', tags: ['sub', 'trap', 'bass', 'saturated'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: 808 Sub' };
   }
-  if (lowerName.includes('snare') || lowerName.includes('sd')) {
-    return { type: 'snare', tags: ['drum', 'crack', 'one-shot'], isMultiSound: false };
+  if (lowerName.includes('snare') || lowerName.includes('sd_') || lowerName.includes('snr')) {
+    return { type: 'snare', tags: ['drum', 'crack', 'one-shot'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Snare Drum' };
   }
-  if (lowerName.includes('hihat') || lowerName.includes('hh') || lowerName.includes('hat') || lowerName.includes('shaker')) {
-    return { type: 'hihat', tags: ['high', 'top', 'metallic', 'crisp'], isMultiSound: false };
+  if (lowerName.includes('hihat') || lowerName.includes('hh_') || lowerName.includes('hat') || lowerName.includes('shaker') || lowerName.includes('tambourine')) {
+    return { type: 'hihat', tags: ['high', 'top', 'metallic', 'crisp'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Hi-Hat / Shaker' };
   }
-  if (lowerName.includes('clap')) {
-    return { type: 'clap', tags: ['layered', 'percussion', 'stereo'], isMultiSound: false };
+  if (lowerName.includes('clap') || lowerName.includes('clp')) {
+    return { type: 'clap', tags: ['layered', 'percussion', 'stereo'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Handclap' };
   }
-  if (lowerName.includes('cymbal') || lowerName.includes('crash') || lowerName.includes('ride')) {
-    return { type: 'cymbal', tags: ['bright', 'splash', 'acoustic'], isMultiSound: false };
+  if (lowerName.includes('cymbal') || lowerName.includes('crash') || lowerName.includes('ride') || lowerName.includes('splash') || lowerName.includes('china')) {
+    return { type: 'cymbal', tags: ['bright', 'splash', 'acoustic'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Cymbal / Crash' };
   }
-  if (lowerName.includes('vocal') || lowerName.includes('vox') || lowerName.includes('acapella') || lowerName.includes('chant')) {
-    return { type: 'vocal', tags: ['voice', 'melodic', 'fx'], isMultiSound: false };
+  if (lowerName.includes('vocal') || lowerName.includes('vox') || lowerName.includes('acapella') || lowerName.includes('chant') || lowerName.includes('choir')) {
+    return { type: 'vocal', tags: ['voice', 'melodic', 'fx'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Vocal' };
   }
-  if (lowerName.includes('loop') || lowerName.includes('break') || lowerName.includes('bpm')) {
-    return { type: 'loop', tags: ['groove', 'rhythm', 'tempo-synced'], isMultiSound: false };
+  if (lowerName.includes('loop') || lowerName.includes('break') || lowerName.includes('groove') || lowerName.includes('bpm_') || lowerName.includes('toploop')) {
+    return { type: 'loop', tags: ['groove', 'rhythm', 'tempo-synced'], isMultiSound: false, acousticConfidence: 0.96, acousticDetails: 'Keyword: Loop / Break' };
   }
-  if (lowerName.includes('lead') || lowerName.includes('synth') || lowerName.includes('pluck')) {
-    return { type: 'lead', tags: ['melodic', 'tonal', 'synth'], isMultiSound: false };
+  if (lowerName.includes('lead') || lowerName.includes('synth') || lowerName.includes('pluck') || lowerName.includes('arp') || lowerName.includes('key')) {
+    return { type: 'lead', tags: ['melodic', 'tonal', 'synth'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Synth Lead' };
   }
-  if (lowerName.includes('pad') || lowerName.includes('drone') || lowerName.includes('ambient')) {
-    return { type: 'pad', tags: ['atmospheric', 'sustained', 'lush'], isMultiSound: false };
+  if (lowerName.includes('pad') || lowerName.includes('drone') || lowerName.includes('ambient') || lowerName.includes('atmos') || lowerName.includes('texture')) {
+    return { type: 'pad', tags: ['atmospheric', 'sustained', 'lush'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Pad / Drone' };
   }
-  if (lowerName.includes('fx') || lowerName.includes('riser') || lowerName.includes('sweep') || lowerName.includes('impact')) {
-    return { type: 'fx', tags: ['transition', 'texture', 'cinema'], isMultiSound: false };
-  }
-
-  // Multi-sound detection check
-  if (slicesCount >= 3 && duration > 1.5) {
-    return { type: 'multi-sound', tags: ['multi-hit', 'stem', 'pack', 'sliceable'], isMultiSound: true };
+  if (lowerName.includes('fx') || lowerName.includes('riser') || lowerName.includes('sweep') || lowerName.includes('impact') || lowerName.includes('downlifter') || lowerName.includes('transition')) {
+    return { type: 'fx', tags: ['transition', 'texture', 'cinema'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Sound FX' };
   }
 
-  // Acoustic Duration & DSP Classification
-  if (duration > 3.0) {
-    if (metrics.dynamicRangeDb < 10 && metrics.sustainFactor > 0.3) {
-      return { type: 'pad', tags: ['sustained', 'ambient'], isMultiSound: false };
+  // 2. Multi-Sound Hit Strip Check (e.g. OP-1 Drum kits or multi-transient recording)
+  if (slicesCount >= 3 && duration >= 1.2) {
+    return {
+      type: 'multi-sound',
+      tags: ['multi-hit', 'kit-strip', 'sliceable', 'op1-ready'],
+      isMultiSound: true,
+      acousticConfidence: 0.94,
+      acousticDetails: `Multi-Hit Strip (${slicesCount} onsets détectés, ${duration.toFixed(1)}s)`,
+    };
+  }
+
+  // 3. Acoustic DSP Deep Extraction
+  const features = extractAcousticFeatures(buffer);
+
+  // KICK DETECTION: Low frequency dominance (>50%), fast pitch down-chirp or punchy attack < 8ms, duration 0.08 - 0.75s
+  if (
+    duration <= 0.85 &&
+    (features.lowEnergyRatio > 0.45 || centroid < 480) &&
+    features.attackTimeMs < 15
+  ) {
+    return {
+      type: 'kick',
+      tags: ['punch', 'sub-bass', 'drum', 'one-shot'],
+      isMultiSound: false,
+      acousticConfidence: 0.92,
+      acousticDetails: `Acoustique: Kick (Sub ${Math.round(features.subDominantFreq)}Hz, Attaque ${features.attackTimeMs.toFixed(1)}ms)`,
+    };
+  }
+
+  // 808 / SUB BASS DETECTION: Sustained low-frequency energy (>0.45s), low centroid < 400Hz
+  if (
+    (duration >= 0.45 || features.decayTimeMs > 400) &&
+    (features.lowEnergyRatio > 0.5 || centroid < 420) &&
+    centroid < 850
+  ) {
+    return {
+      type: '808',
+      tags: ['808', 'sub', 'trap', 'bass'],
+      isMultiSound: false,
+      acousticConfidence: 0.91,
+      acousticDetails: `Acoustique: 808 Sub (Basses ${(features.lowEnergyRatio * 100).toFixed(0)}%, Decay ${Math.round(features.decayTimeMs)}ms)`,
+    };
+  }
+
+  // CLAP DETECTION: Pre-transient micro-bursts (>= 2) with mid-high snappy body
+  if (duration < 0.9 && features.preTransientBurstCount >= 2 && centroid > 1400) {
+    return {
+      type: 'clap',
+      tags: ['handclap', 'layered-burst', 'stereo-snap'],
+      isMultiSound: false,
+      acousticConfidence: 0.89,
+      acousticDetails: `Acoustique: Handclap (${features.preTransientBurstCount} micro-transitoires)`,
+    };
+  }
+
+  // HI-HAT / SHAKER / CYMBAL DETECTION: High centroid (> 4200Hz) or ultra-high Zero-Crossing-Rate (> 0.22)
+  if (centroid > 4200 || (zcr > 0.22 && features.highEnergyRatio > 0.45)) {
+    if (duration > 1.3) {
+      return {
+        type: 'cymbal',
+        tags: ['cymbal', 'crash', 'bright', 'metallic'],
+        isMultiSound: false,
+        acousticConfidence: 0.90,
+        acousticDetails: `Acoustique: Cymbale / Crash (${Math.round(centroid)}Hz, ${duration.toFixed(1)}s)`,
+      };
     }
-    return { type: 'loop', tags: ['loop', 'extended', 'groove'], isMultiSound: false };
+    return {
+      type: 'hihat',
+      tags: ['hi-hat', 'crisp', 'metallic', 'top'],
+      isMultiSound: false,
+      acousticConfidence: 0.93,
+      acousticDetails: `Acoustique: Hi-Hat (${Math.round(centroid)}Hz, ZCR ${(zcr * 100).toFixed(0)}%)`,
+    };
   }
 
-  // Short one shots (< 0.6s)
-  if (duration < 0.6) {
-    if (centroid < 450) {
-      return { type: 'kick', tags: ['sub', 'drum', 'one-shot'], isMultiSound: false };
-    }
-    if (centroid > 5000 || zcr > 0.25) {
-      return { type: 'hihat', tags: ['bright', 'high-frequency', 'crisp'], isMultiSound: false };
-    }
-    if (centroid > 1800 && metrics.dynamicRangeDb > 12) {
-      return { type: 'snare', tags: ['percussive', 'punchy', 'crack'], isMultiSound: false };
-    }
-    return { type: 'percussion', tags: ['perc', 'acoustic'], isMultiSound: false };
+  // SNARE DRUM DETECTION: Balanced mid-body punch (180-350Hz) + noisy top crack (2k-6kHz)
+  if (
+    duration < 0.9 &&
+    features.midEnergyRatio > 0.35 &&
+    centroid > 1400 &&
+    centroid < 4200 &&
+    metrics.dynamicRangeDb > 8
+  ) {
+    return {
+      type: 'snare',
+      tags: ['snare', 'crack', 'punch', 'percussion'],
+      isMultiSound: false,
+      acousticConfidence: 0.90,
+      acousticDetails: `Acoustique: Snare Drum (Corps ${Math.round(centroid)}Hz, Snap ${metrics.dynamicRangeDb.toFixed(0)}dB)`,
+    };
   }
 
-  // Mid duration (0.6 - 3.0s)
-  if (centroid < 500) {
-    return { type: '808', tags: ['bass', 'sub', 'low-end'], isMultiSound: false };
-  }
-  if (centroid > 3500) {
-    return { type: 'fx', tags: ['texture', 'bright'], isMultiSound: false };
+  // PERCUSSION (Toms, Rims, Bongos, Shakers)
+  if (duration < 0.9 && metrics.dynamicRangeDb > 9) {
+    return {
+      type: 'percussion',
+      tags: ['perc', 'acoustic', 'short'],
+      isMultiSound: false,
+      acousticConfidence: 0.82,
+      acousticDetails: `Acoustique: Percussion (${Math.round(centroid)}Hz)`,
+    };
   }
 
-  return { type: 'other', tags: ['sample', 'audio'], isMultiSound: false };
+  // LONG ATMOSPHERE / PAD DETECTION: duration > 2.5s and low RMS dynamic variation
+  if (duration >= 2.5 && metrics.sustainFactor > 0.25 && metrics.dynamicRangeDb < 14) {
+    return {
+      type: 'pad',
+      tags: ['pad', 'drone', 'ambient', 'lush'],
+      isMultiSound: false,
+      acousticConfidence: 0.88,
+      acousticDetails: `Acoustique: Pad / Drone (${duration.toFixed(1)}s, Sustain ${(metrics.sustainFactor * 100).toFixed(0)}%)`,
+    };
+  }
+
+  // LONG RHYTHMIC LOOP DETECTION: duration >= 1.5s with multiple energy bursts
+  if (duration >= 1.5) {
+    return {
+      type: 'loop',
+      tags: ['loop', 'rhythm', 'groove'],
+      isMultiSound: false,
+      acousticConfidence: 0.85,
+      acousticDetails: `Acoustique: Rhythmic Loop (${duration.toFixed(1)}s)`,
+    };
+  }
+
+  // TONAL SYNTH LEAD / BASS
+  if (centroid < 1000 && features.lowEnergyRatio > 0.35) {
+    return {
+      type: 'bass',
+      tags: ['bass', 'tonal', 'melodic'],
+      isMultiSound: false,
+      acousticConfidence: 0.80,
+      acousticDetails: `Acoustique: Synth Bass (Centroid ${Math.round(centroid)}Hz)`,
+    };
+  }
+
+  return {
+    type: 'other',
+    tags: ['sample', 'audio'],
+    isMultiSound: false,
+    acousticConfidence: 0.70,
+    acousticDetails: 'Générique / Autre',
+  };
 }
 
 /**

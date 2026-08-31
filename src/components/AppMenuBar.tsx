@@ -1,0 +1,649 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  FileAudio,
+  FolderOpen,
+  Upload,
+  FolderUp,
+  Download,
+  Github,
+  Scissors,
+  Sparkles,
+  Sliders,
+  Activity,
+  Mic,
+  FileCode2,
+  FolderTree,
+  Repeat,
+  Volume2,
+  CheckSquare,
+  Square,
+  HelpCircle,
+  Cpu,
+  Layers,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RefreshCw,
+  Trash2,
+  Bookmark,
+  Flame,
+} from 'lucide-react';
+
+export interface AppMenuBarProps {
+  onImportFiles: () => void;
+  onImportFolder: () => void;
+  onImportOp1Patch?: () => void;
+  onOpenSmartIngest: () => void;
+  onOpenBatchNaming: () => void;
+  onOpenBatchConverter: () => void;
+  onOpenDspAnalyzer: () => void;
+  onOpenFxRack?: () => void;
+  onOpenOp1Studio?: () => void;
+  onOpenEp133Export: () => void;
+  onOpenGitHubSync?: () => void;
+  onOpenRecorder: () => void;
+  onOpenBenchmark: () => void;
+  onOpenShortcuts: () => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
+  onDeleteSelected?: () => void;
+  onExportZip?: () => void;
+  autoLoudnessLeveling: boolean;
+  onToggleAutoLoudness: () => void;
+  activeView: 'library' | 'timbre';
+  onViewChange: (view: 'library' | 'timbre') => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetZoom?: () => void;
+  samplesCount: number;
+}
+
+export const AppMenuBar: React.FC<AppMenuBarProps> = ({
+  onImportFiles,
+  onImportFolder,
+  onImportOp1Patch,
+  onOpenSmartIngest,
+  onOpenBatchNaming,
+  onOpenBatchConverter,
+  onOpenDspAnalyzer,
+  onOpenFxRack,
+  onOpenOp1Studio,
+  onOpenEp133Export,
+  onOpenGitHubSync,
+  onOpenRecorder,
+  onOpenBenchmark,
+  onOpenShortcuts,
+  onSelectAll,
+  onDeselectAll,
+  onDeleteSelected,
+  onExportZip,
+  autoLoudnessLeveling,
+  onToggleAutoLoudness,
+  activeView,
+  onViewChange,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+  samplesCount,
+}) => {
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const menuBarRef = useRef<HTMLDivElement>(null);
+
+  // Close menus on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuBarRef.current && !menuBarRef.current.contains(e.target as Node)) {
+        setActiveMenu(null);
+      }
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleMenuTrigger = (menuKey: string) => {
+    setActiveMenu((prev) => (prev === menuKey ? null : menuKey));
+  };
+
+  const handleMenuHover = (menuKey: string) => {
+    if (activeMenu !== null && activeMenu !== menuKey) {
+      setActiveMenu(menuKey);
+    }
+  };
+
+  const closeMenus = () => {
+    setActiveMenu(null);
+  };
+
+  return (
+    <div
+      ref={menuBarRef}
+      id="app-menu-bar"
+      className="relative z-50 bg-[#08080C] border-b border-[#1A1A24] px-2 py-0.5 flex items-center justify-between text-[10px] font-pixel select-none"
+    >
+      {/* Top Level Menu Items */}
+      <div className="flex items-center gap-1">
+        {/* Brand Chip */}
+        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#00F0FF]/15 border border-[#00F0FF]/30 text-[#00F0FF] mr-2">
+          <span className="w-1.5 h-1.5 bg-[#00F0FF] animate-pulse" />
+          <span className="font-bold tracking-wider">RESONANCE DSP</span>
+        </div>
+
+        {/* 1. FICHIER */}
+        <div className="relative">
+          <button
+            id="menu-file-btn"
+            onClick={() => handleMenuTrigger('file')}
+            onMouseEnter={() => handleMenuHover('file')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'file'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            FICHIER
+          </button>
+          {activeMenu === 'file' && (
+            <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              <button
+                onClick={() => {
+                  onImportFiles();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Importer Fichiers Audio...</span>
+                </div>
+                <span className="text-[8px] opacity-60">Ctrl+O</span>
+              </button>
+              <button
+                onClick={() => {
+                  onImportFolder();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <FolderUp className="w-3.5 h-3.5" />
+                  <span>Importer Dossier Entier...</span>
+                </div>
+                <span className="text-[8px] opacity-60">Ctrl+Shift+O</span>
+              </button>
+              {onImportOp1Patch && (
+                <button
+                  onClick={() => {
+                    onImportOp1Patch();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileAudio className="w-3.5 h-3.5 text-[#FF7A00]" />
+                    <span>Importer Patch OP-1 (.aif)...</span>
+                  </div>
+                  <span className="text-[8px] text-[#FF7A00]">24 PADS</span>
+                </button>
+              )}
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              {onExportZip && (
+                <button
+                  onClick={() => {
+                    onExportZip();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Exporter la Sélection en ZIP...</span>
+                  </div>
+                  <span className="text-[8px] opacity-60">Ctrl+E</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  onOpenEp133Export();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-3.5 h-3.5 text-[#FFE600]" />
+                  <span>Exporter Pack EP-133 K.O. II...</span>
+                </div>
+                <span className="text-[8px] text-[#FFE600]">EP-133</span>
+              </button>
+              {onOpenOp1Studio && (
+                <button
+                  onClick={() => {
+                    onOpenOp1Studio();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-[#FF7A00]" />
+                    <span>Studio Kit OP-1 (.aif APPL)...</span>
+                  </div>
+                  <span className="text-[8px] text-[#FF7A00]">OP-1</span>
+                </button>
+              )}
+              {onOpenGitHubSync && (
+                <>
+                  <div className="h-px bg-[#1E1E2C] my-1" />
+                  <button
+                    onClick={() => {
+                      onOpenGitHubSync();
+                      closeMenus();
+                    }}
+                    className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Github className="w-3.5 h-3.5" />
+                      <span>Synchronisation GitHub...</span>
+                    </div>
+                    <span className="text-[8px] text-[#00F0FF]">az-sample</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 2. ÉDITION */}
+        <div className="relative">
+          <button
+            id="menu-edit-btn"
+            onClick={() => handleMenuTrigger('edit')}
+            onMouseEnter={() => handleMenuHover('edit')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'edit'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            ÉDITION
+          </button>
+          {activeMenu === 'edit' && (
+            <div className="absolute left-0 top-full mt-0.5 w-60 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              {onSelectAll && (
+                <button
+                  onClick={() => {
+                    onSelectAll();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Tout Sélectionner</span>
+                  </div>
+                  <span className="text-[8px] opacity-60">Ctrl+A</span>
+                </button>
+              )}
+              {onDeselectAll && (
+                <button
+                  onClick={() => {
+                    onDeselectAll();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Square className="w-3.5 h-3.5" />
+                    <span>Désélectionner Tout</span>
+                  </div>
+                  <span className="text-[8px] opacity-60">Échap</span>
+                </button>
+              )}
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              <button
+                onClick={() => {
+                  onOpenBatchNaming();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <FolderTree className="w-3.5 h-3.5 text-[#A855F7]" />
+                  <span>Convention de Nommage Pro...</span>
+                </div>
+                <span className="text-[8px] opacity-60">Ctrl+R</span>
+              </button>
+              {onDeleteSelected && (
+                <>
+                  <div className="h-px bg-[#1E1E2C] my-1" />
+                  <button
+                    onClick={() => {
+                      onDeleteSelected();
+                      closeMenus();
+                    }}
+                    className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#FF3366] hover:bg-[#FF3366] hover:text-white transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Supprimer la sélection</span>
+                    </div>
+                    <span className="text-[8px] opacity-60">Suppr</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 3. AFFICHAGE */}
+        <div className="relative">
+          <button
+            id="menu-view-btn"
+            onClick={() => handleMenuTrigger('view')}
+            onMouseEnter={() => handleMenuHover('view')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'view'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            AFFICHAGE
+          </button>
+          {activeMenu === 'view' && (
+            <div className="absolute left-0 top-full mt-0.5 w-60 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              <button
+                onClick={() => {
+                  onViewChange('library');
+                  closeMenus();
+                }}
+                className={`w-full flex items-center justify-between px-2 py-1.5 text-left transition ${
+                  activeView === 'library'
+                    ? 'bg-[#00F0FF]/20 text-[#00F0FF] font-bold'
+                    : 'text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black'
+                }`}
+              >
+                <span>Vue Bibliothèque & Onde</span>
+                <span className="text-[8px]">F1</span>
+              </button>
+              <button
+                onClick={() => {
+                  onViewChange('timbre');
+                  closeMenus();
+                }}
+                className={`w-full flex items-center justify-between px-2 py-1.5 text-left transition ${
+                  activeView === 'timbre'
+                    ? 'bg-[#00F0FF]/20 text-[#00F0FF] font-bold'
+                    : 'text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black'
+                }`}
+              >
+                <span>Carte Timbrale 2D (Atlas/XO)</span>
+                <span className="text-[8px]">F2</span>
+              </button>
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              {onZoomIn && (
+                <button
+                  onClick={() => {
+                    onZoomIn();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <ZoomIn className="w-3.5 h-3.5" />
+                    <span>Zoomer Forme d'Onde</span>
+                  </div>
+                  <span className="text-[8px] opacity-60">Ctrl +</span>
+                </button>
+              )}
+              {onZoomOut && (
+                <button
+                  onClick={() => {
+                    onZoomOut();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <ZoomOut className="w-3.5 h-3.5" />
+                    <span>Dézoomer</span>
+                  </div>
+                  <span className="text-[8px] opacity-60">Ctrl -</span>
+                </button>
+              )}
+              {onResetZoom && (
+                <button
+                  onClick={() => {
+                    onResetZoom();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Réinitialiser Zoom (1x)</span>
+                  </div>
+                  <span className="text-[8px] opacity-60">Ctrl 0</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 4. AUDIO / DSP */}
+        <div className="relative">
+          <button
+            id="menu-audio-btn"
+            onClick={() => handleMenuTrigger('audio')}
+            onMouseEnter={() => handleMenuHover('audio')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'audio'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            AUDIO / DSP
+          </button>
+          {activeMenu === 'audio' && (
+            <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              <button
+                onClick={() => {
+                  onToggleAutoLoudness();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Auto-Gain EBU R128 (-14 LUFS)</span>
+                </div>
+                <span className={`text-[8px] font-bold ${autoLoudnessLeveling ? 'text-[#00F0FF]' : 'text-[#6E6E80]'}`}>
+                  {autoLoudnessLeveling ? 'ACTIF' : 'OFF'}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  onOpenSmartIngest();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]" />
+                  <span>Ingestion Intelligente (Auto-Triage)...</span>
+                </div>
+                <span className="text-[8px] opacity-60">Ctrl+I</span>
+              </button>
+              {onOpenFxRack && (
+                <button
+                  onClick={() => {
+                    onOpenFxRack();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-3.5 h-3.5 text-[#00F0FF]" />
+                    <span>Rack d'Effets DSP & Sound Design...</span>
+                  </div>
+                  <span className="text-[8px] text-[#00F0FF] font-bold">Ctrl+E</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  onOpenDspAnalyzer();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-[#00F0FF]" />
+                  <span>Laboratoire Acoustique DSP...</span>
+                </div>
+                <span className="text-[8px]">F4</span>
+              </button>
+              <button
+                onClick={() => {
+                  onOpenBatchConverter();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <FileCode2 className="w-3.5 h-3.5" />
+                  <span>Convertisseur de Formats par Lot...</span>
+                </div>
+              </button>
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              <button
+                onClick={() => {
+                  onOpenRecorder();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Mic className="w-3.5 h-3.5 text-[#EF4444]" />
+                  <span>Enregistreur Audio Studio...</span>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 5. HARDWARE */}
+        <div className="relative">
+          <button
+            id="menu-hardware-btn"
+            onClick={() => handleMenuTrigger('hardware')}
+            onMouseEnter={() => handleMenuHover('hardware')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'hardware'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            HARDWARE
+          </button>
+          {activeMenu === 'hardware' && (
+            <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              {onOpenOp1Studio && (
+                <button
+                  onClick={() => {
+                    onOpenOp1Studio();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-[#FF7A00]" />
+                    <span>Teenage Engineering OP-1 (24 Pads)</span>
+                  </div>
+                  <span className="text-[8px] text-[#FF7A00]">.AIF</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  onOpenEp133Export();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-3.5 h-3.5 text-[#FFE600]" />
+                  <span>Teenage Engineering EP-133 K.O. II</span>
+                </div>
+                <span className="text-[8px] text-[#FFE600]">001-999</span>
+              </button>
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              <div className="px-2 py-1 text-[8px] text-[#6E6E80] uppercase">
+                Égalisation de Fréquence & Mapping :
+              </div>
+              <div className="px-2 py-1 text-[9px] text-[#8E8E98]">
+                ✓ AIFF Extended 80-Bit Float COMM
+                <br />
+                ✓ Balises temporelles JSON APPL 'op-1'
+                <br />
+                ✓ Micro-fades 5ms anti-clics
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 6. AIDE */}
+        <div className="relative">
+          <button
+            id="menu-help-btn"
+            onClick={() => handleMenuTrigger('help')}
+            onMouseEnter={() => handleMenuHover('help')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'help'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            AIDE
+          </button>
+          {activeMenu === 'help' && (
+            <div className="absolute left-0 top-full mt-0.5 w-60 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              <button
+                onClick={() => {
+                  onOpenShortcuts();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
+                  <span>Raccourcis Clavier Pro...</span>
+                </div>
+                <span className="text-[8px]">?</span>
+              </button>
+              <button
+                onClick={() => {
+                  onOpenBenchmark();
+                  closeMenus();
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>Étude Comparative Outils Pro...</span>
+                </div>
+              </button>
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              <div className="px-2 py-1 text-[8px] text-[#8E8E98]">
+                Resonance Pro Studio v2.4
+                <br />
+                Moteur DSP 64-bit AudioWorklet
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right status ticker */}
+      <div className="flex items-center gap-3 text-[9px] text-[#6E6E80]">
+        <span>{samplesCount} SAMPLES</span>
+        <span className="text-[#00F0FF]">48kHz / 24-BIT READY</span>
+      </div>
+    </div>
+  );
+};

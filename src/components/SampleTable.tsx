@@ -14,6 +14,7 @@ import {
   Disc,
   Activity,
   FolderTree,
+  Flame,
 } from 'lucide-react';
 import { SampleItem, SampleType, FilterState } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
@@ -26,6 +27,7 @@ interface SampleTableProps {
   onSelectSample: (sample: SampleItem) => void;
   onOpenSlicerForSample: (sample: SampleItem) => void;
   onOpenDspAnalyzer?: (sample: SampleItem) => void;
+  onOpenFxRack?: (sample: SampleItem) => void;
   onOpenBatchNaming?: () => void;
   onToggleFavorite: (sampleId: string) => void;
   onSetRating: (sampleId: string, rating: number) => void;
@@ -61,6 +63,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   onSelectSample,
   onOpenSlicerForSample,
   onOpenDspAnalyzer,
+  onOpenFxRack,
   onOpenBatchNaming,
   onToggleFavorite,
   onSetRating,
@@ -126,74 +129,74 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   };
 
   return (
-    <div id="sample-table-container" className="flex-1 flex flex-col bg-[#0D0D10] rounded-xl border border-[#222226] overflow-hidden shadow-lg select-none">
-      {/* Table Header */}
-      <div className="bg-[#141417] border-b border-[#222226] text-[#8E8E93] text-[10px] font-mono uppercase tracking-wider grid grid-cols-12 px-4 py-2 items-center select-none">
+    <div id="sample-table-container" className="flex-1 flex flex-col bg-[#0A0A0E] border-2 border-[#1E1E26] overflow-hidden select-none pixel-box">
+      {/* Pixel Hardware Table Header */}
+      <div className="bg-[#121218] border-b-2 border-[#1E1E26] text-[#8E8E93] text-[9px] font-pixel uppercase tracking-wide grid grid-cols-12 px-3 py-2 items-center select-none">
         {/* Checkbox & Play */}
-        <div className="col-span-1 flex items-center gap-2">
+        <div className="col-span-1 flex items-center gap-1.5">
           <input
             type="checkbox"
             checked={isAllSelected}
             onChange={(e) => onSelectAllSamples(e.target.checked)}
-            className="rounded border-[#26262B] text-[#00F0FF] focus:ring-0 w-3.5 h-3.5 bg-[#0A0A0B] accent-[#00F0FF] cursor-pointer"
+            className="rounded-none border-[#333344] text-[#00F0FF] focus:ring-0 w-3 h-3 bg-[#000000] accent-[#00F0FF] cursor-pointer"
           />
-          <span>Play</span>
+          <span>PLAY</span>
         </div>
 
         {/* Mini Waveform Visualizer */}
         <div className="col-span-2">
-          <span>Forme d'Onde</span>
+          <span>ONDE</span>
         </div>
 
         {/* Name */}
         <div
-          className="col-span-3 flex items-center gap-1 cursor-pointer hover:text-[#EDEDEE]"
+          className="col-span-3 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF]"
           onClick={() => handleSort('name')}
         >
-          <span>Nom du Sample</span>
-          <ArrowUpDown className="w-3 h-3" />
+          <span>NOM DU FICHIER</span>
+          <ArrowUpDown className="w-2.5 h-2.5" />
         </div>
 
         {/* Category / Type */}
         <div
-          className="col-span-2 flex items-center gap-1 cursor-pointer hover:text-[#EDEDEE]"
+          className="col-span-2 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF]"
           onClick={() => handleSort('type')}
         >
-          <span>Catégorie</span>
-          <ArrowUpDown className="w-3 h-3" />
+          <span>TYPE</span>
+          <ArrowUpDown className="w-2.5 h-2.5" />
         </div>
 
         {/* Key / BPM */}
         <div
-          className="col-span-1 flex items-center gap-1 cursor-pointer hover:text-[#EDEDEE]"
+          className="col-span-1 flex items-center gap-1 cursor-pointer hover:text-[#00F0FF]"
           onClick={() => handleSort('key')}
         >
-          <span>Clé / BPM</span>
-          <ArrowUpDown className="w-3 h-3" />
+          <span>KEY/BPM</span>
+          <ArrowUpDown className="w-2.5 h-2.5" />
         </div>
 
         {/* Genre */}
         <div className="col-span-1">
-          <span>Genre</span>
+          <span>GENRE</span>
         </div>
 
         {/* Loudness LUFS & Gain */}
         <div className="col-span-1">
-          <span>Loudness</span>
+          <span>LUFS</span>
         </div>
 
         {/* Actions */}
         <div className="col-span-1 text-right pr-2">
-          <span>Outils</span>
+          <span>OUTILS</span>
         </div>
       </div>
 
       {/* Table Rows */}
-      <div className="flex-1 overflow-y-auto divide-y divide-[#18181D]">
+      <div className="flex-1 overflow-y-auto divide-y-2 divide-[#14141C]">
         {samples.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center text-[#8E8E93] text-xs font-mono space-y-2">
+          <div className="h-64 flex flex-col items-center justify-center text-[#8E8E93] text-xs font-pixel space-y-2">
             <Disc className="w-8 h-8 text-[#5A5A62] animate-spin" style={{ animationDuration: '6s' }} />
-            <span>Aucun sample ne correspond aux filtres actuels.</span>
+            <span>AUCUN SAMPLE TROUVÉ</span>
           </div>
         ) : (
           samples.map((sample) => {
@@ -207,14 +210,14 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                 key={sample.id}
                 id={`sample-row-${sample.id}`}
                 onClick={() => onSelectSample(sample)}
-                className={`grid grid-cols-12 px-4 py-1.5 items-center text-xs transition select-none cursor-pointer group ${
+                className={`grid grid-cols-12 px-3 py-1.5 items-center text-xs transition select-none cursor-pointer group ${
                   isSelected
-                    ? 'bg-[#00F0FF]/10 border-l-2 border-[#00F0FF]'
-                    : 'hover:bg-[#141418]'
+                    ? 'bg-[#00F0FF]/15 border-l-4 border-[#00F0FF]'
+                    : 'hover:bg-[#12121A]'
                 }`}
               >
                 {/* Select Checkbox & Play Button */}
-                <div className="col-span-1 flex items-center gap-2">
+                <div className="col-span-1 flex items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={isChecked}
@@ -222,20 +225,20 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                       e.stopPropagation();
                       onToggleSelectSample(sample.id);
                     }}
-                    className="rounded border-[#26262B] text-[#00F0FF] focus:ring-0 w-3.5 h-3.5 bg-[#0A0A0B] accent-[#00F0FF] cursor-pointer"
+                    className="rounded-none border-[#333344] text-[#00F0FF] focus:ring-0 w-3 h-3 bg-[#000000] accent-[#00F0FF] cursor-pointer"
                   />
                   <button
                     onClick={(e) => handlePlaySample(e, sample)}
-                    className={`w-6 h-6 rounded-md flex items-center justify-center transition ${
+                    className={`w-5 h-5 flex items-center justify-center transition border pixel-btn ${
                       isPlaying
-                        ? 'bg-[#00F0FF] text-[#0A0A0B] font-bold shadow-xs'
-                        : 'bg-[#141417] hover:bg-[#1E1E23] text-[#EDEDEE] border border-[#26262B]'
+                        ? 'bg-[#FFE600] text-black font-bold border-[#FFE600]'
+                        : 'bg-[#14141C] hover:bg-[#1E1E28] text-[#00F0FF] border-[#2A2A3A]'
                     }`}
                   >
                     {isPlaying ? (
-                      <Pause className="w-3 h-3 fill-current" />
+                      <Pause className="w-2.5 h-2.5 fill-current" />
                     ) : (
-                      <Play className="w-3 h-3 fill-current ml-0.5" />
+                      <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
                     )}
                   </button>
                 </div>
@@ -248,92 +251,101 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                     type={sample.type}
                     isPlaying={isPlaying}
                     progress={isPlaying ? playbackProgress : 0}
-                    width={115}
-                    height={24}
+                    width={110}
+                    height={22}
                     slices={sample.slices}
                     onClick={(e) => handlePlaySample(e, sample)}
                   />
                 </div>
 
                 {/* Name & Multi-sound slices tag */}
-                <div className="col-span-3 flex items-center gap-2 truncate pr-2">
+                <div className="col-span-3 flex items-center gap-1.5 truncate pr-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onToggleFavorite(sample.id);
                     }}
-                    className="text-[#5A5A62] hover:text-[#F59E0B] transition"
+                    className="text-[#5A5A62] hover:text-[#FFE600] transition"
                   >
                     <Star
-                      className={`w-3.5 h-3.5 ${
-                        sample.favorite ? 'fill-[#F59E0B] text-[#F59E0B]' : ''
+                      className={`w-3 h-3 ${
+                        sample.favorite ? 'fill-[#FFE600] text-[#FFE600]' : ''
                       }`}
                     />
                   </button>
 
-                  <span className="font-semibold text-[#EDEDEE] truncate group-hover:text-[#00F0FF] transition">
+                  <span className="font-pixel text-[10px] text-[#EDEDEE] truncate group-hover:text-[#00F0FF] transition">
                     {sample.name}
                   </span>
 
                   {sample.isMultiSound && (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 flex items-center gap-1 flex-shrink-0">
-                      <Scissors className="w-2.5 h-2.5" />
-                      <span>{sample.slices?.length || 1} hits</span>
+                    <span className="px-1 py-0.2 text-[8px] font-pixel bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/40 flex items-center gap-0.5 flex-shrink-0">
+                      <Scissors className="w-2 h-2" />
+                      <span>{sample.slices?.length || 1}</span>
                     </span>
                   )}
                 </div>
 
                 {/* Category & Type Badge */}
-                <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
+                <div className="col-span-2 flex items-center gap-1 flex-wrap">
                   {sample.isLoop ? (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#8B5CF6]/20 text-[#A78BFA] border border-[#8B5CF6]/30 font-mono">
-                      LOOP {sample.loopBars ? `${sample.loopBars}B` : ''}
+                    <span className="px-1 py-0.2 text-[8px] font-pixel bg-[#A855F7]/20 text-[#A855F7] border border-[#A855F7]/40">
+                      LOOP
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-mono">
+                    <span className="px-1 py-0.2 text-[8px] font-pixel bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30">
                       1-SHOT
                     </span>
                   )}
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border capitalize ${badge.bg} ${badge.text}`}
+                    className={`px-1 py-0.2 text-[8px] font-pixel border uppercase ${badge.bg} ${badge.text}`}
                   >
                     {badge.label}
                   </span>
                 </div>
 
                 {/* Musical Key & BPM */}
-                <div className="col-span-1 font-mono flex flex-col gap-0.5 text-[10px]">
+                <div className="col-span-1 font-pixel flex flex-col gap-0.5 text-[9px]">
                   {sample.key ? (
-                    <span className="text-[#8B5CF6] font-bold">
+                    <span className="text-[#FFE600]">
                       {sample.key}
                     </span>
                   ) : null}
                   {sample.bpm ? (
-                    <span className="text-[#10B981] font-semibold">{sample.bpm} BPM</span>
+                    <span className="text-[#34D399]">{sample.bpm} BPM</span>
                   ) : (
                     !sample.key && <span className="text-[#5A5A62]">—</span>
                   )}
                 </div>
 
                 {/* Genre */}
-                <div className="col-span-1 truncate pr-2 text-[11px] text-[#8E8E93]">
+                <div className="col-span-1 truncate pr-1 text-[9px] font-pixel text-[#8E8E93]">
                   <span>{sample.genre?.split('/')[0] || 'Universal'}</span>
                 </div>
 
                 {/* Loudness LUFS & Gain Matching */}
-                <div className="col-span-1 font-mono text-[10px]">
-                  <div className={sample.lufs && sample.lufs > -10 ? 'text-amber-400 font-bold' : 'text-[#EDEDEE]'}>
-                    {sample.lufs ? `${sample.lufs.toFixed(0)} LUFS` : `${(sample.rmsDb || -14).toFixed(0)} dB`}
+                <div className="col-span-1 font-pixel text-[9px]">
+                  <div className={sample.lufs && sample.lufs > -10 ? 'text-[#FFE600]' : 'text-[#EDEDEE]'}>
+                    {sample.lufs ? `${sample.lufs.toFixed(0)} LUF` : `${(sample.rmsDb || -14).toFixed(0)} dB`}
                   </div>
-                  {sample.loudnessGainDb !== undefined && Math.abs(sample.loudnessGainDb) > 0.1 && (
-                    <span className={`text-[9px] ${sample.loudnessGainDb > 0 ? 'text-[#10B981]' : 'text-amber-400'}`}>
-                      {sample.loudnessGainDb > 0 ? `+${sample.loudnessGainDb.toFixed(1)}dB` : `${sample.loudnessGainDb.toFixed(1)}dB`}
-                    </span>
-                  )}
                 </div>
 
                 {/* Quick Action Tools */}
                 <div className="col-span-1 flex items-center justify-end gap-1">
+                  {/* DSP FX Rack & Sound Transformer Button */}
+                  {onOpenFxRack && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenFxRack(sample);
+                      }}
+                      className="p-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border border-[#00F0FF]/40 pixel-btn"
+                      title="Rack d'Effets DSP & Sound Design"
+                    >
+                      <Flame className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+
                   {/* DSP Audio Analysis Button */}
                   {onOpenDspAnalyzer && (
                     <button
@@ -341,10 +353,10 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                         e.stopPropagation();
                         onOpenDspAnalyzer(sample);
                       }}
-                      className="p-1 rounded-md bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30 transition"
-                      title="Ouvrir le Laboratoire d'Analyse Acoustique DSP"
+                      className="p-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border border-[#A855F7]/40 pixel-btn"
+                      title="DSP Lab"
                     >
-                      <Activity className="w-3 h-3" />
+                      <Activity className="w-2.5 h-2.5" />
                     </button>
                   )}
 
@@ -354,19 +366,19 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                       e.stopPropagation();
                       onOpenSlicerForSample(sample);
                     }}
-                    className="p-1 rounded-md bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/30 transition"
-                    title="Découpe automatique de ce sample"
+                    className="p-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border border-[#00F0FF]/40 pixel-btn"
+                    title="Découpe"
                   >
-                    <Scissors className="w-3 h-3" />
+                    <Scissors className="w-2.5 h-2.5" />
                   </button>
 
                   {/* Export Single WAV */}
                   <button
                     onClick={(e) => handleDownloadSingleWav(e, sample)}
-                    className="p-1 rounded-md bg-[#141417] hover:bg-[#1E1E23] text-[#EDEDEE] border border-[#26262B] transition"
-                    title="Télécharger WAV 24-bit"
+                    className="p-1 bg-[#14141C] hover:bg-[#1E1E28] text-[#EDEDEE] border border-[#26262B] pixel-btn"
+                    title="Télécharger WAV"
                   >
-                    <Download className="w-3 h-3" />
+                    <Download className="w-2.5 h-2.5" />
                   </button>
 
                   {/* Delete */}
@@ -375,10 +387,10 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                       e.stopPropagation();
                       onDeleteSample(sample.id);
                     }}
-                    className="p-1 rounded-md text-[#5A5A62] hover:text-[#EF4444] hover:bg-[#1E1E23] transition"
+                    className="p-1 text-[#5A5A62] hover:text-[#EF4444] pixel-btn"
                     title="Supprimer"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-2.5 h-2.5" />
                   </button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   generateDefaultLibrary,
   DEFAULT_FOLDERS,
@@ -9,12 +9,12 @@ import {
   FilterState,
   SliceRegion,
 } from './types/sample';
+import { AppMenuBar } from './components/AppMenuBar';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { SampleTable } from './components/SampleTable';
 import { WaveformCanvas } from './components/WaveformCanvas';
 import { TimbreMap } from './components/TimbreMap';
-import { AudioPlayerBottomBar } from './components/AudioPlayerBottomBar';
 import { AutoSlicerModal } from './components/AutoSlicerModal';
 import { BatchConverterModal } from './components/BatchConverterModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
@@ -24,6 +24,8 @@ import { Op1KitBuilderModal } from './components/Op1KitBuilderModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { BatchNamingModal } from './components/BatchNamingModal';
 import { AudioAnalysisModal } from './components/AudioAnalysisModal';
+import { AudioEffectsRackModal } from './components/AudioEffectsRackModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { audioEngine } from './services/audioEngine';
 import {
   calculateAudioMetrics,
@@ -37,6 +39,7 @@ import {
   assignEp133Slot,
 } from './services/audioAnalyzer';
 import { audioBufferToWavBlob, triggerFileDownload } from './services/audioConverter';
+import { parseOp1AiffPatch, extractSlicesToWavBlobs } from './services/op1PatchEncoder';
 
 export default function App() {
   const [samples, setSamples] = useState<SampleItem[]>([]);
@@ -55,11 +58,19 @@ export default function App() {
   const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
   const [isBatchNamingOpen, setIsBatchNamingOpen] = useState<boolean>(false);
   const [isDspModalOpen, setIsDspModalOpen] = useState<boolean>(false);
+  const [isFxRackOpen, setIsFxRackOpen] = useState<boolean>(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [sampleForDsp, setSampleForDsp] = useState<SampleItem | null>(null);
+  const [sampleForFxRack, setSampleForFxRack] = useState<SampleItem | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [autoLoudnessLeveling, setAutoLoudnessLeveling] = useState<boolean>(
     audioEngine.isAutoLoudnessEnabled()
   );
+
+  // Hidden File Inputs for Menu Bar actions
+  const menuFileInputRef = useRef<HTMLInputElement>(null);
+  const menuFolderInputRef = useRef<HTMLInputElement>(null);
+  const menuOp1InputRef = useRef<HTMLInputElement>(null);
 
   // Filters State
   const [filterState, setFilterState] = useState<FilterState>({
@@ -197,7 +208,7 @@ export default function App() {
     return samples.find((s) => s.id === selectedSampleId) || filteredSamples[0] || null;
   }, [samples, selectedSampleId, filteredSamples]);
 
-  // Global Keyboard Shortcuts (Spacebar to play/pause, Arrow keys to navigate)
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
@@ -240,6 +251,21 @@ export default function App() {
         audioEngine.toggleReverse();
       } else if (e.key.toLowerCase() === 's' && selectedSample) {
         setSlicerSample(selectedSample);
+      } else if (e.key.toLowerCase() === 'e' && selectedSample) {
+        setSampleForFxRack(selectedSample);
+        setIsFxRackOpen(true);
+      } else if (e.key === '?') {
+        setIsShortcutsOpen(true);
+      } else if (e.key === 'F1') {
+        e.preventDefault();
+        setActiveView('library');
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        setActiveView('timbre');
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        setSampleForDsp(selectedSample);
+        setIsDspModalOpen(true);
       }
     };
 
@@ -261,7 +287,7 @@ export default function App() {
       const audioFiles = files.filter(
         (f) =>
           f.type.startsWith('audio/') ||
-          /\.(wav|mp3|ogg|flac|aiff|m4a|webm)$/i.test(f.name)
+          /\.(wav|mp3|ogg|flac|aiff|aif|m4a|webm)$/i.test(f.name)
       );
 
       if (audioFiles.length === 0) return;
@@ -348,7 +374,66 @@ export default function App() {
     []
   );
 
-  // Drag and drop handlers - Open Smart Ingestion modal for pro automated workflow
+  // Import OP-1 Drum Kit Patch (.aif with APPL JSON chunk)
+  const handleImportOp1Patch = async (file: File) => {
+    try {
+      const parsed = await parseOp1AiffPatch(file);
+      const metrics = calculateAudioMetrics(parsed.audioBuffer);
+      const wavBlob = audioBufferToWavBlob(parsed.audioBuffer, { bitDepth: 24 });
+      const blobUrl = URL.createObjectURL(wavBlob);
+
+      const slices: SliceRegion[] = parsed.slices.map((s, idx) => ({
+        id: `op1-slice-${idx + 1}-${Date.now().toString(36)}`,
+        index: idx + 1,
+        startSec: s.startSec,
+        endSec: s.endSec,
+        label: s.name || `Pad ${idx + 1}`,
+        color: s.color || '#00F0FF',
+        detectedType: s.type,
+      }));
+
+      const op1Item: SampleItem = {
+        id: `op1-kit-${Date.now().toString(36)}`,
+        name: parsed.name || file.name.replace(/\.[^/.]+$/, ''),
+        originalFileName: file.name,
+        format: 'aiff',
+        size: file.size,
+        duration: parsed.audioBuffer.duration,
+        sampleRate: parsed.audioBuffer.sampleRate,
+        bitDepth: 16,
+        channels: parsed.audioBuffer.numberOfChannels,
+        type: 'multi-sound',
+        category: 'multi-sound',
+        genre: 'Universal / Multi-Genre',
+        isLoop: false,
+        lufs: metrics.lufs,
+        loudnessGainDb: 0,
+        tags: ['op1-patch', '24-pads', 'drum-kit', 'sliceable'],
+        folderId: 'f-drums',
+        folderPath: '/OP1_Patches',
+        favorite: true,
+        rating: 5,
+        spectralCentroid: metrics.spectralCentroid,
+        dynamicRangeDb: metrics.dynamicRangeDb,
+        peakDb: metrics.peakDb,
+        rmsDb: metrics.rmsDb,
+        zeroCrossingRate: metrics.zeroCrossingRate,
+        slices,
+        blobUrl,
+        audioBuffer: parsed.audioBuffer,
+        dateAdded: Date.now(),
+        isMultiSound: true,
+      };
+
+      setSamples((prev) => [op1Item, ...prev]);
+      setSelectedSampleId(op1Item.id);
+      audioEngine.play(parsed.audioBuffer, op1Item.id, 0);
+    } catch (err) {
+      console.error('Failed to parse OP-1 Patch:', err);
+    }
+  };
+
+  // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(true);
@@ -363,7 +448,6 @@ export default function App() {
     e.preventDefault();
     setIsDraggingOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // Open the smart ingestion pipeline modal for automatic analysis and leveling
       setIsSmartIngestOpen(true);
     }
   };
@@ -410,6 +494,12 @@ export default function App() {
     }
   };
 
+  const handleDeleteSelectedSamples = () => {
+    if (selectedSampleIds.length === 0) return;
+    setSamples((prev) => prev.filter((s) => !selectedSampleIds.includes(s.id)));
+    setSelectedSampleIds([]);
+  };
+
   const handleUpdateSampleSlices = (sampleId: string, newSlices: SliceRegion[]) => {
     setSamples((prev) =>
       prev.map((s) =>
@@ -424,8 +514,54 @@ export default function App() {
     );
   };
 
-  const handleExtractSlicesToLibrary = (newSamples: SampleItem[]) => {
-    setSamples((prev) => [...newSamples, ...prev]);
+  const handleAddExtractedSamples = (
+    extracted: Array<{ fileName: string; blob: Blob; audioBuffer: AudioBuffer; duration: number }>
+  ) => {
+    const newItems: SampleItem[] = extracted.map((ex, i) => {
+      const metrics = calculateAudioMetrics(ex.audioBuffer);
+      const pitchKey = detectPitchAndKey(ex.audioBuffer);
+      const classification = classifySample(ex.audioBuffer, ex.fileName, metrics, 0);
+
+      return {
+        id: `extracted-${Date.now().toString(36)}-${i}`,
+        name: ex.fileName.replace(/\.[^/.]+$/, ''),
+        originalFileName: ex.fileName,
+        format: 'wav',
+        size: ex.blob.size,
+        duration: ex.duration,
+        sampleRate: ex.audioBuffer.sampleRate,
+        bitDepth: 24,
+        channels: ex.audioBuffer.numberOfChannels,
+        type: classification.type,
+        category: 'one-shot',
+        genre: 'Universal / Multi-Genre',
+        isLoop: false,
+        lufs: metrics.lufs,
+        loudnessGainDb: 0,
+        key: pitchKey?.keyString,
+        tags: [...classification.tags, 'extracted-slice'],
+        folderId: 'f-drums',
+        folderPath: '/Extracted_Slices',
+        favorite: false,
+        rating: 4,
+        spectralCentroid: metrics.spectralCentroid,
+        dynamicRangeDb: metrics.dynamicRangeDb,
+        peakDb: metrics.peakDb,
+        rmsDb: metrics.rmsDb,
+        zeroCrossingRate: metrics.zeroCrossingRate,
+        slices: [],
+        blobUrl: URL.createObjectURL(ex.blob),
+        audioBuffer: ex.audioBuffer,
+        dateAdded: Date.now(),
+        isMultiSound: false,
+      };
+    });
+
+    setSamples((prev) => [...newItems, ...prev]);
+    if (newItems.length > 0) {
+      setSelectedSampleId(newItems[0].id);
+      audioEngine.play(newItems[0].audioBuffer!, newItems[0].id, 0);
+    }
   };
 
   const handleApplyBatchRename = (updatedSamples: SampleItem[]) => {
@@ -436,6 +572,30 @@ export default function App() {
     setSamples((prev) =>
       prev.map((s) => (s.id === updatedSample.id ? updatedSample : s))
     );
+  };
+
+  const handleOpenFxRack = (targetSample?: SampleItem) => {
+    const s = targetSample || selectedSample;
+    if (s) {
+      setSampleForFxRack(s);
+      setIsFxRackOpen(true);
+    }
+  };
+
+  const handleSaveProcessedAsNew = (newSample: SampleItem) => {
+    setSamples((prev) => [newSample, ...prev]);
+    setSelectedSampleId(newSample.id);
+    if (newSample.audioBuffer) {
+      audioEngine.play(newSample.audioBuffer, newSample.id, newSample.loudnessGainDb);
+    }
+  };
+
+  const handleOverwriteSample = (updatedSample: SampleItem) => {
+    setSamples((prev) => prev.map((s) => (s.id === updatedSample.id ? updatedSample : s)));
+    setSelectedSampleId(updatedSample.id);
+    if (updatedSample.audioBuffer) {
+      audioEngine.play(updatedSample.audioBuffer, updatedSample.id, updatedSample.loudnessGainDb);
+    }
   };
 
   const handleCreateFolder = (name: string, color: string) => {
@@ -478,6 +638,42 @@ export default function App() {
       onDrop={handleDrop}
       className="flex flex-col h-screen w-screen bg-[#0A0A0B] text-[#EDEDEE] overflow-hidden font-sans relative antialiased"
     >
+      {/* Hidden File Inputs for Menu Bar Actions */}
+      <input
+        ref={menuFileInputRef}
+        type="file"
+        multiple
+        accept="audio/*,.wav,.mp3,.ogg,.flac,.aiff,.aif,.webm,.m4a"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleImportFiles(e.target.files);
+          }
+        }}
+        className="hidden"
+      />
+      <input
+        ref={menuFolderInputRef}
+        type="file"
+        {...({ webkitdirectory: '', directory: '', multiple: true } as React.InputHTMLAttributes<HTMLInputElement>)}
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleImportFiles(e.target.files);
+          }
+        }}
+        className="hidden"
+      />
+      <input
+        ref={menuOp1InputRef}
+        type="file"
+        accept=".aif,.aiff"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleImportOp1Patch(e.target.files[0]);
+          }
+        }}
+        className="hidden"
+      />
+
       {/* Drag & Drop Fullscreen Overlay */}
       {isDraggingOver && (
         <div className="absolute inset-0 z-50 bg-[#0A0A0B]/90 backdrop-blur-md border-2 border-dashed border-[#00F0FF] flex flex-col items-center justify-center pointer-events-none animate-in fade-in">
@@ -486,12 +682,41 @@ export default function App() {
           </div>
           <h2 className="text-lg font-bold text-[#EDEDEE] tracking-tight">Déposez vos Samples ou Dossiers Audio</h2>
           <p className="text-xs font-mono text-[#00F0FF] mt-1">
-            Décodage DSP, auto-triage BPM / Tonalité, égalisation LUFS & export EP-133
+            Décodage DSP, auto-triage BPM / Tonalité, égalisation LUFS & export EP-133 / OP-1
           </p>
         </div>
       )}
 
-      {/* Header */}
+      {/* 1. TOP CLASSIC DAW MENU BAR */}
+      <AppMenuBar
+        onImportFiles={() => menuFileInputRef.current?.click()}
+        onImportFolder={() => menuFolderInputRef.current?.click()}
+        onImportOp1Patch={() => menuOp1InputRef.current?.click()}
+        onOpenSmartIngest={() => setIsSmartIngestOpen(true)}
+        onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
+        onOpenBatchConverter={() => setIsBatchConverterOpen(true)}
+        onOpenDspAnalyzer={() => {
+          setSampleForDsp(selectedSample);
+          setIsDspModalOpen(true);
+        }}
+        onOpenFxRack={() => handleOpenFxRack()}
+        onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
+        onOpenEp133Export={handleExportEp133Pack}
+        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+        onOpenRecorder={() => setIsRecorderOpen(true)}
+        onOpenBenchmark={() => setIsBenchmarkOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onSelectAll={() => handleSelectAllSamples(true)}
+        onDeselectAll={() => handleSelectAllSamples(false)}
+        onDeleteSelected={handleDeleteSelectedSamples}
+        autoLoudnessLeveling={autoLoudnessLeveling}
+        onToggleAutoLoudness={handleToggleAutoLoudness}
+        activeView={activeView}
+        onViewChange={setActiveView}
+        samplesCount={samples.length}
+      />
+
+      {/* 2. COMPACT HEADER */}
       <Header
         searchQuery={filterState.searchQuery}
         onSearchChange={(q) => setFilterState((prev) => ({ ...prev, searchQuery: q }))}
@@ -508,12 +733,13 @@ export default function App() {
           setSampleForDsp(selectedSample);
           setIsDspModalOpen(true);
         }}
+        onOpenFxRack={() => handleOpenFxRack()}
         autoLoudnessLeveling={autoLoudnessLeveling}
         onToggleAutoLoudness={handleToggleAutoLoudness}
         samplesCount={samples.length}
       />
 
-      {/* Main Workspace */}
+      {/* 3. MAIN WORKSPACE */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <Sidebar
@@ -531,18 +757,41 @@ export default function App() {
         />
 
         {/* Center Content Pane */}
-        <main className="flex-1 flex flex-col p-3 overflow-hidden gap-3 studio-grid-bg">
+        <main className="flex-1 flex flex-col p-2.5 overflow-hidden gap-2 bg-[#060609]">
           {activeView === 'library' ? (
             <>
-              {/* Top Waveform Visualizer for Selected Sample */}
+              {/* Top Waveform Visualizer with Compact Transport Bar on Top & Draggable Markers */}
               {selectedSample ? (
                 <WaveformCanvas
                   sample={selectedSample}
                   onOpenSlicer={() => setSlicerSample(selectedSample)}
+                  onOpenDspAnalyzer={() => {
+                    setSampleForDsp(selectedSample);
+                    setIsDspModalOpen(true);
+                  }}
+                  onOpenFxRack={() => handleOpenFxRack(selectedSample)}
+                  onUpdateSlices={handleUpdateSampleSlices}
+                  onAddExtractedSamples={handleAddExtractedSamples}
+                  onNextSample={() => {
+                    if (filteredSamples.length > 0) {
+                      const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
+                      const next = filteredSamples[(idx + 1) % filteredSamples.length];
+                      setSelectedSampleId(next.id);
+                      if (next.audioBuffer) audioEngine.play(next.audioBuffer, next.id, next.loudnessGainDb);
+                    }
+                  }}
+                  onPrevSample={() => {
+                    if (filteredSamples.length > 0) {
+                      const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
+                      const prev = filteredSamples[(idx - 1 + filteredSamples.length) % filteredSamples.length];
+                      setSelectedSampleId(prev.id);
+                      if (prev.audioBuffer) audioEngine.play(prev.audioBuffer, prev.id, prev.loudnessGainDb);
+                    }
+                  }}
                 />
               ) : (
-                <div className="h-44 bg-[#111114] rounded-xl border border-[#222226] flex items-center justify-center text-xs font-mono text-[#8E8E93]">
-                  Sélectionnez un sample pour inspecter son onde, ses transitoires et ses découpes
+                <div className="h-36 bg-[#0E0E14] border-2 border-[#1E1E26] flex items-center justify-center text-[10px] font-pixel text-[#8E8E93] pixel-box">
+                  CHOISISSEZ UN SAMPLE POUR INSPECTER L'ONDE ET LE TRANSPORT
                 </div>
               )}
 
@@ -552,10 +801,11 @@ export default function App() {
                 selectedSampleId={selectedSampleId}
                 onSelectSample={(s) => setSelectedSampleId(s.id)}
                 onOpenSlicerForSample={(s) => setSlicerSample(s)}
-                onOpenDspForSample={(s) => {
+                onOpenDspAnalyzer={(s) => {
                   setSampleForDsp(s);
                   setIsDspModalOpen(true);
                 }}
+                onOpenFxRack={(s) => handleOpenFxRack(s)}
                 onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
                 onToggleFavorite={handleToggleFavorite}
                 onSetRating={handleSetRating}
@@ -577,27 +827,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      {/* Bottom Transport Master Player */}
-      <AudioPlayerBottomBar
-        currentSample={selectedSample}
-        onNextSample={() => {
-          if (filteredSamples.length > 0) {
-            const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
-            const next = filteredSamples[(idx + 1) % filteredSamples.length];
-            setSelectedSampleId(next.id);
-            if (next.audioBuffer) audioEngine.play(next.audioBuffer, next.id, next.loudnessGainDb);
-          }
-        }}
-        onPrevSample={() => {
-          if (filteredSamples.length > 0) {
-            const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
-            const prev = filteredSamples[(idx - 1 + filteredSamples.length) % filteredSamples.length];
-            setSelectedSampleId(prev.id);
-            if (prev.audioBuffer) audioEngine.play(prev.audioBuffer, prev.id, prev.loudnessGainDb);
-          }
-        }}
-      />
 
       {/* Smart Ingestion Magic Drop Modal */}
       <SmartIngestionModal
@@ -631,7 +860,7 @@ export default function App() {
           isOpen={!!slicerSample}
           onClose={() => setSlicerSample(null)}
           onUpdateSampleSlices={handleUpdateSampleSlices}
-          onExtractSlicesToLibrary={handleExtractSlicesToLibrary}
+          onExtractSlicesToLibrary={(extracted) => setSamples((prev) => [...extracted, ...prev])}
         />
       )}
 
@@ -695,6 +924,26 @@ export default function App() {
         }}
         sample={sampleForDsp || selectedSample}
         onUpdateSample={handleUpdateSampleFromDsp}
+      />
+
+      {/* Creative Studio DSP Effects Rack Modal */}
+      {isFxRackOpen && (
+        <AudioEffectsRackModal
+          isOpen={isFxRackOpen}
+          onClose={() => {
+            setIsFxRackOpen(false);
+            setSampleForFxRack(null);
+          }}
+          sample={sampleForFxRack || selectedSample}
+          onSaveAsNewSample={handleSaveProcessedAsNew}
+          onOverwriteSample={handleOverwriteSample}
+        />
+      )}
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
   );

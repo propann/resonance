@@ -543,6 +543,179 @@ export function encodeOp1SynthPatch(
 }
 
 /**
+ * Parses an OP-1 Drum Kit AIFF patch (.aif) and extracts embedded 24-pad APPL JSON timestamps & metadata
+ */
+export async function parseOp1AiffPatch(
+  data: ArrayBuffer | Blob | File
+): Promise<{
+  name: string;
+  slices: Op1DrumSlice[];
+  audioBuffer: AudioBuffer;
+  rawJson?: any;
+}> {
+  let arrayBuffer: ArrayBuffer;
+  if (data instanceof Blob || (typeof File !== 'undefined' && data instanceof File)) {
+    arrayBuffer = await data.arrayBuffer();
+  } else {
+    arrayBuffer = data;
+  }
+
+  // 1. Decode Audio Buffer via Web Audio
+  const audioBuffer = await audioEngine.getAudioContext().decodeAudioData(arrayBuffer.slice(0));
+
+  // 2. Parse AIFF Chunks manually to find 'APPL' op-1 metadata chunk
+  const u8 = new Uint8Array(arrayBuffer);
+  const view = new DataView(arrayBuffer);
+  let offset = 0;
+
+  function readString(len: number): string {
+    let str = '';
+    for (let i = 0; i < len; i++) {
+      str += String.fromCharCode(u8[offset++]);
+    }
+    return str;
+  }
+
+  let op1Json: any = null;
+
+  try {
+    const magic = readString(4);
+    if (magic === 'FORM') {
+      const formSize = view.getUint32(offset, false);
+      offset += 4;
+      const formType = readString(4); // AIFF or AIFC
+
+      while (offset < arrayBuffer.byteLength - 8) {
+        const chunkId = readString(4);
+        const chunkSize = view.getUint32(offset, false);
+        offset += 4;
+
+        if (chunkId === 'APPL') {
+          const appType = readString(4); // 'op-1'
+          if (appType === 'op-1') {
+            const jsonBytes = u8.subarray(offset, offset + chunkSize - 4);
+            const jsonText = new TextDecoder('utf-8').decode(jsonBytes);
+            try {
+              op1Json = JSON.parse(jsonText);
+            } catch (e) {
+              console.warn('Could not parse OP-1 JSON in APPL chunk:', e);
+            }
+          }
+          offset += (chunkSize - 4);
+        } else {
+          offset += chunkSize;
+        }
+
+        // Align to word boundary
+        if (chunkSize % 2 !== 0) {
+          offset++;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error parsing AIFF chunks:', e);
+  }
+
+  const duration = audioBuffer.duration;
+  const sampleRate = audioBuffer.sampleRate;
+  const slices: Op1DrumSlice[] = [];
+
+  if (op1Json && Array.isArray(op1Json.start) && Array.isArray(op1Json.end)) {
+    const totalSlots = Math.min(24, op1Json.start.length);
+    for (let i = 0; i < totalSlots; i++) {
+      const startSample = (op1Json.start[i] || 0) / 4096;
+      const endSample = (op1Json.end[i] || 0) / 4096;
+      const startSec = Math.max(0, Math.min(duration, startSample / sampleRate));
+      const endSec = Math.max(startSec + 0.01, Math.min(duration, endSample / sampleRate));
+
+      const def = OP1_DEFAULT_CATEGORIES[i] || { suggestedType: 'other', label: `Pad ${i + 1}` };
+      slices.push({
+        id: `op1-parsed-pad-${i}`,
+        name: `${op1Json.name || 'OP-1 Patch'} - ${OP1_KEY_NAMES[i]} (${def.label})`,
+        type: def.suggestedType,
+        startSec,
+        endSec,
+        pitch: op1Json.pitch ? op1Json.pitch[i] : 0,
+        reverse: op1Json.reverse ? op1Json.reverse[i] === 1 : false,
+        playmode: op1Json.playmode ? op1Json.playmode[i] : 0,
+        volume: op1Json.volume ? op1Json.volume[i] : 8192,
+        color: OP1_KEY_COLORS[i],
+      });
+    }
+  } else {
+    // Fallback: 24 even slices across duration
+    for (let i = 0; i < 24; i++) {
+      const startSec = (i * duration) / 24;
+      const endSec = ((i + 1) * duration) / 24;
+      const def = OP1_DEFAULT_CATEGORIES[i] || { suggestedType: 'other', label: `Pad ${i + 1}` };
+      slices.push({
+        id: `op1-fallback-pad-${i}`,
+        name: `${OP1_KEY_NAMES[i]} - ${def.label}`,
+        type: def.suggestedType,
+        startSec,
+        endSec,
+        pitch: 0,
+        reverse: false,
+        playmode: 0,
+        volume: 8192,
+        color: OP1_KEY_COLORS[i],
+      });
+    }
+  }
+
+  return {
+    name: op1Json?.name || 'OP-1 Drum Patch',
+    slices,
+    audioBuffer,
+    rawJson: op1Json,
+  };
+}
+
+/**
+ * Extracts slice regions from an AudioBuffer into individual WAV blobs.
+ */
+export async function extractSlicesToWavBlobs(
+  buffer: AudioBuffer,
+  slices: Array<{ startSec: number; endSec: number; label?: string; index?: number }>,
+  baseName: string = 'Sample'
+): Promise<Array<{ fileName: string; blob: Blob; audioBuffer: AudioBuffer; duration: number }>> {
+  const sampleRate = buffer.sampleRate;
+  const numChannels = buffer.numberOfChannels;
+  const ctx = audioEngine.getAudioContext();
+  const results: Array<{ fileName: string; blob: Blob; audioBuffer: AudioBuffer; duration: number }> = [];
+
+  for (let i = 0; i < slices.length; i++) {
+    const s = slices[i];
+    const startSample = Math.max(0, Math.floor(s.startSec * sampleRate));
+    const endSample = Math.min(buffer.length, Math.floor(s.endSec * sampleRate));
+    const sliceLen = Math.max(1, endSample - startSample);
+
+    const sliceBuf = ctx.createBuffer(numChannels, sliceLen, sampleRate);
+    for (let c = 0; c < numChannels; c++) {
+      const srcData = buffer.getChannelData(c);
+      const dstData = sliceBuf.getChannelData(c);
+      for (let j = 0; j < sliceLen; j++) {
+        dstData[j] = srcData[startSample + j] || 0;
+      }
+    }
+
+    const wavBlob = audioBufferToWavBlob(sliceBuf);
+    const padNum = String(s.index || i + 1).padStart(2, '0');
+    const cleanLabel = (s.label || `Slice_${padNum}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const fileName = `${baseName}_P${padNum}_${cleanLabel}.wav`;
+
+    results.push({
+      fileName,
+      blob: wavBlob,
+      audioBuffer: sliceBuf,
+      duration: sliceBuf.duration,
+    });
+  }
+
+  return results;
+}
+
+/**
  * Automatically sorts an arbitrary pool of samples into 24 optimal OP-1 drum slots based on acoustic profiling & drum taxonomy.
  */
 export function autoPopulate24Op1Slots(samples: SampleItem[]): Op1DrumSlice[] {
