@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { DEFAULT_FOLDERS } from './data/defaultSampleLibrary';
 import { useResizablePanels } from './hooks/useResizablePanels';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import {
   SampleItem,
   FolderItem,
@@ -495,56 +496,29 @@ export default function App() {
     audioEngine.setAutoLoudness(newVal);
   };
 
-  // Keyboard Shortcuts (Space for Play/Pause, Up/Down for next/prev)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Avoid triggering when user is in input or textarea
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
-        return;
+  // Global transport & workspace keyboard shortcuts
+  useKeyboardShortcuts({
+    onTogglePlayPause: handleTogglePlayPause,
+    onPlayNext: handlePlayNext,
+    onPlayPrev: handlePlayPrev,
+    onToggleLoop: () => audioEngine.toggleLoop(),
+    onOpenBatchNaming: () => setIsBatchNamingOpen(true),
+    onReactivateWorkFolder: () => void handleReactivateWorkFolder(),
+    onOpenFxRackForSelected: () => {
+      if (selectedSample) {
+        setSampleForFxRack(selectedSample);
+        setIsFxRackOpen(true);
       }
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        handleTogglePlayPause();
-      } else if (e.code === 'ArrowDown' || e.code === 'KeyJ') {
-        e.preventDefault();
-        handlePlayNext();
-      } else if (e.code === 'ArrowUp' || e.code === 'KeyK') {
-        e.preventDefault();
-        handlePlayPrev();
-      } else if (e.code === 'KeyL') {
-        e.preventDefault();
-        audioEngine.toggleLoop();
-      } else if (e.code === 'KeyN' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setIsBatchNamingOpen(true);
-      } else if (e.code === 'KeyI' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        void handleReactivateWorkFolder();
-      } else if (e.code === 'KeyE' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        if (selectedSample) {
-          setSampleForFxRack(selectedSample);
-          setIsFxRackOpen(true);
-        }
-      } else if (e.code === 'F1') {
-        e.preventDefault();
-        setIsDocOpen(true);
-      } else if (e.code === 'F2') {
-        e.preventDefault();
-        setActiveView((prev) => (prev === 'library' ? 'timbre' : 'library'));
-      } else if (e.code === 'F4') {
-        e.preventDefault();
-        if (selectedSample) {
-          setSampleForDsp(selectedSample);
-          setIsDspModalOpen(true);
-        }
+    },
+    onOpenDocumentation: () => setIsDocOpen(true),
+    onToggleView: () => setActiveView((prev) => (prev === 'library' ? 'timbre' : 'library')),
+    onOpenDspForSelected: () => {
+      if (selectedSample) {
+        setSampleForDsp(selectedSample);
+        setIsDspModalOpen(true);
       }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlayPause, handlePlayNext, handlePlayPrev, selectedSample]);
+    },
+  });
 
   // All normal imports enter the curator so originals can be archived and
   // processing/classification uses one single pipeline.
