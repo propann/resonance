@@ -32,11 +32,18 @@ import {
 } from 'lucide-react';
 
 export interface AppMenuBarProps {
-  onImportFiles: () => void;
-  onImportFolder: () => void;
+  onImportFiles?: () => void;
+  onImportFolder?: () => void;
+  onChooseLibrary?: () => void;
+  onProcessReception?: () => void;
+  onRefreshLibrary?: () => void;
+  onCleanEmptyFolders?: () => void;
+  isBackgroundProcessing?: boolean;
+  onOpenBackgroundProcessing?: () => void;
+  libraryName?: string | null;
   onImportOp1Patch?: () => void;
   onOpenAutoCurator?: () => void;
-  onOpenSmartIngest: () => void;
+  onOpenSmartIngest?: () => void;
   onOpenBatchNaming: () => void;
   onOpenBatchConverter: () => void;
   onOpenDspAnalyzer: () => void;
@@ -66,6 +73,13 @@ export interface AppMenuBarProps {
 export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onImportFiles,
   onImportFolder,
+  onChooseLibrary,
+  onProcessReception,
+  onRefreshLibrary,
+  onCleanEmptyFolders,
+  isBackgroundProcessing = false,
+  onOpenBackgroundProcessing,
+  libraryName,
   onImportOp1Patch,
   onOpenAutoCurator,
   onOpenSmartIngest,
@@ -135,6 +149,16 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
           <span className="w-1.5 h-1.5 bg-[#00F0FF] animate-pulse" />
           <span className="font-bold tracking-wider">RESONANCE DSP</span>
         </div>
+        {isBackgroundProcessing && onOpenBackgroundProcessing && (
+          <button
+            onClick={onOpenBackgroundProcessing}
+            className="flex items-center gap-1 px-2 py-1 bg-[#EF4444] text-white font-bold animate-pulse hover:bg-[#F87171] transition"
+            title="Tri en cours : ouvrir le détail"
+          >
+            <Activity className="w-3 h-3" />
+            <span>TRI EN COURS</span>
+          </button>
+        )}
 
         {/* 1. FICHIER */}
         <div className="relative">
@@ -152,7 +176,63 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
           </button>
           {activeMenu === 'file' && (
             <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
-              <button
+              {onChooseLibrary && (
+                <button
+                  onClick={() => {
+                    onChooseLibrary();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-2 text-left bg-[#A855F7]/15 text-[#E9D5FF] hover:bg-[#A855F7] hover:text-white transition font-bold"
+                >
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>{libraryName ? 'Changer le dossier de travail...' : 'Choisir le dossier de travail...'}</span>
+                  </div>
+                </button>
+              )}
+              {libraryName && (
+                <div className="px-2 py-1 text-[9px] text-[#C084FC] truncate" title={libraryName}>
+                  Bibliothèque active : {libraryName}
+                </div>
+              )}
+              {onProcessReception && (
+                <button
+                  onClick={() => {
+                    onProcessReception();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[#00F0FF] hover:bg-[#00F0FF] hover:text-black transition font-bold"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Analyser les nouveaux sons de réception</span>
+                </button>
+              )}
+              {onRefreshLibrary && (
+                <button
+                  onClick={() => {
+                    onRefreshLibrary();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Rafraîchir la bibliothèque</span>
+                </button>
+              )}
+              {onCleanEmptyFolders && (
+                <button
+                  onClick={() => {
+                    onCleanEmptyFolders();
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Supprimer les dossiers vides</span>
+                </button>
+              )}
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              {onImportFiles && <button
                 onClick={() => {
                   onImportFiles();
                   closeMenus();
@@ -164,8 +244,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <span>Importer Fichiers Audio...</span>
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+O</span>
-              </button>
-              <button
+              </button>}
+              {onImportFolder && <button
                 onClick={() => {
                   onImportFolder();
                   closeMenus();
@@ -174,10 +254,10 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <FolderUp className="w-3.5 h-3.5" />
-                  <span>Importer Dossier Entier...</span>
+                  <span>Choisir le dossier source à analyser...</span>
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+Shift+O</span>
-              </button>
+              </button>}
               {onOpenAutoCurator && (
                 <button
                   onClick={() => {
@@ -321,7 +401,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 </button>
               )}
               <div className="h-px bg-[#1E1E2C] my-1" />
-              <button
+              {onOpenSmartIngest && <button
                 onClick={() => {
                   onOpenBatchNaming();
                   closeMenus();
@@ -333,7 +413,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <span>Convention de Nommage Pro...</span>
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+R</span>
-              </button>
+              </button>}
               {onDeleteSelected && (
                 <>
                   <div className="h-px bg-[#1E1E2C] my-1" />
@@ -496,7 +576,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <span className="text-[8px] text-[#10B981] font-bold">LUFS</span>
                 </button>
               )}
-              <button
+              {onOpenSmartIngest && <button
                 onClick={() => {
                   onOpenSmartIngest();
                   closeMenus();
@@ -508,7 +588,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <span>Ingestion Intelligente (Auto-Triage)...</span>
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+I</span>
-              </button>
+              </button>}
               {onOpenFxRack && (
                 <button
                   onClick={() => {

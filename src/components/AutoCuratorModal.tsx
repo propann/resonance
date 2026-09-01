@@ -53,7 +53,21 @@ import {
   DEFAULT_NAMING_CONFIG,
   NamingConventionPreset,
 } from '../services/sampleNamingConvention';
-import { classifySampleToProFolder } from '../services/proFolderOrganizer';
+import { classifySampleForLibrary } from '../services/proFolderOrganizer';
+import { parseOp1AiffPatch } from '../services/op1PatchEncoder';
+import {
+  archiveIncomingFiles,
+  chooseLibraryRoot,
+  getDirectoryForPath,
+  restoreLibraryRoot,
+  supportsLocalLibrary,
+  writeUniqueFile,
+  writeLibraryManifest,
+  getProcessedSourceFingerprints,
+  removeWorkFolderFiles,
+  type WorkFolderAudioFile,
+  type DirectoryHandle,
+} from '../services/localLibrary';
 
 export interface CuratorItem {
   id: string;
@@ -85,12 +99,26 @@ export interface CuratorItem {
   ep133Slot?: number;
   errorMessage?: string;
   sampleItem?: SampleItem;
+  archivedToReception?: boolean;
+  sourcePath?: string;
+  isOp1Patch?: boolean;
 }
 
 interface AutoCuratorModalProps {
   isOpen: boolean;
   onClose: () => void;
   librarySamples: SampleItem[];
+  initialFiles?: Array<File | WorkFolderAudioFile>;
+  initialFilesAlreadyArchived?: boolean;
+  onInitialFilesHandled?: () => void;
+  onReceptionFilesArchived?: (files: File[]) => void;
+  libraryRoot?: DirectoryHandle | null;
+  libraryName?: string | null;
+  onLibraryRootChange?: (root: DirectoryHandle) => void;
+  onLibraryChanged?: () => void;
+  onProcessingChange?: (isProcessing: boolean) => void;
+  onQueueResult?: (result: { ready: number; errors: number }) => void;
+  autoTransfer?: boolean;
   onApplyCuration: (curatedSamples: SampleItem[]) => void;
   onOpenGitHubSync?: () => void;
 }
@@ -141,6 +169,17 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   isOpen,
   onClose,
   librarySamples,
+  initialFiles = [],
+  initialFilesAlreadyArchived = false,
+  onInitialFilesHandled,
+  onReceptionFilesArchived,
+  libraryRoot: connectedLibraryRoot,
+  libraryName: connectedLibraryName,
+  onLibraryRootChange,
+  onLibraryChanged,
+  onProcessingChange,
+  onQueueResult,
+  autoTransfer = false,
   onApplyCuration,
   onOpenGitHubSync,
 }) => {
@@ -156,15 +195,19 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   const [trimSilence, setTrimSilence] = useState<boolean>(true);
   const [namingPreset, setNamingPreset] = useState<NamingConventionPreset>('splice_pro');
   const [namingPrefix, setNamingPrefix] = useState<string>('AZ');
-  const [folderScheme, setFolderScheme] = useState<'streamlined' | 'detailed'>('streamlined');
+  const [folderScheme, setFolderScheme] = useState<'streamlined' | 'detailed'>('detailed');
 
   // Currently playing sample in curator
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isExportingZip, setIsExportingZip] = useState<boolean>(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const workFolderOnly = true;
+  const autoTransferredSignature = useRef<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const [libraryRoot, setLibraryRoot] = useState<DirectoryHandle | null>(null);
+  const [libraryName, setLibraryName] = useState<string | null>(null);
 
   // Track playback
   useEffect(() => {
@@ -176,15 +219,57 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (connectedLibraryRoot) {
+      setLibraryRoot(connectedLibraryRoot);
+      setLibraryName(connectedLibraryName || connectedLibraryRoot.name);
+    }
+  }, [connectedLibraryRoot, connectedLibraryName]);
+
+  useEffect(() => {
+    restoreLibraryRoot().then((root) => {
+      if (root) {
+        setLibraryRoot(root);
+        setLibraryName(root.name);
+      }
+    });
+  }, []);
+
+  const handleChooseLibrary = async () => {
+    try {
+      const root = await chooseLibraryRoot();
+      setLibraryRoot(root);
+      setLibraryName(root.name);
+      onLibraryRootChange?.(root);
+      const pendingOriginals = items
+        .filter((item) => item.source === 'upload' && item.file && !item.archivedToReception)
+        .map((item) => item.file!);
+      if (pendingOriginals.length > 0) {
+        const archivedNames = await archiveIncomingFiles(root, pendingOriginals);
+        onReceptionFilesArchived?.(pendingOriginals);
+        setItems((current) => current.map((item) =>
+          item.file && pendingOriginals.includes(item.file)
+            ? {
+                ...item,
+                archivedToReception: true,
+                sourcePath: `00_RECEPTION/${archivedNames[pendingOriginals.indexOf(item.file)]}`,
+              }
+            : item
+        ));
+      }
+      setNotification(`Bibliothèque connectée : ${root.name}. Les dossiers de réception et de classement sont prêts.`);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setNotification(err instanceof Error ? err.message : 'Impossible de connecter ce dossier.');
+    }
+  };
+
   // Sync with library samples when choosing library source
   const handleLoadFromLibrary = () => {
     if (librarySamples.length === 0) return;
     const libraryItems: CuratorItem[] = librarySamples.map((s, i) => {
       const cleanName = cleanRawSampleName(s.name);
-      const folderInfo =
-        folderScheme === 'streamlined'
-          ? mapTypeToStreamlinedFolder(s.type, s.isLoop)
-          : classifySampleToProFolder(s);
+      const folderInfo = classifySampleForLibrary(s);
 
       return {
         id: `curate-lib-${s.id}`,
@@ -225,12 +310,15 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     }
   };
 
-  const handleFilesSelected = (files: FileList | File[]) => {
-    const rawFiles = Array.from(files).filter(
-      (f) => f.type.startsWith('audio/') || f.name.match(/\.(wav|mp3|aiff|flac|ogg|m4a)$/i)
+  const handleFilesSelected = async (files: FileList | Array<File | WorkFolderAudioFile>, alreadyArchived = false) => {
+    const fileEntries: Array<{ file: File; sourcePath?: string }> = Array.from(files).map((entry) =>
+      entry instanceof File ? { file: entry } : entry
+    );
+    const rawFiles = fileEntries.filter(({ file }) =>
+      file.type.startsWith('audio/') || file.name.match(/\.(wav|mp3|aif|aiff|flac|ogg|m4a|webm)$/i)
     );
 
-    const newItems: CuratorItem[] = rawFiles.map((file, i) => ({
+    const newItems: CuratorItem[] = rawFiles.map(({ file, sourcePath }, i) => ({
       id: `curate-up-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
       source: 'upload',
       file,
@@ -252,10 +340,27 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       gainAdjustmentDb: 0,
       targetFolderPath: '/01_DRUMS',
       targetFolderId: 'f-drums',
+      sourcePath: sourcePath || (alreadyArchived ? `00_RECEPTION/${file.name}` : undefined),
     }));
 
     if (newItems.length > 0) {
+      let originalsArchived = alreadyArchived;
+      if (libraryRoot && !alreadyArchived) {
+        try {
+          const archivedNames = await archiveIncomingFiles(libraryRoot, rawFiles.map(({ file }) => file));
+          onReceptionFilesArchived?.(rawFiles.map(({ file }) => file));
+          originalsArchived = true;
+          newItems.forEach((item, index) => { item.sourcePath = `00_RECEPTION/${archivedNames[index]}`; });
+          setNotification(`${rawFiles.length} original(aux) copié(s) dans 00_RECEPTION.`);
+        } catch (err) {
+          console.error('Erreur copie réception', err);
+          setNotification("Les sons sont analysés, mais leur copie dans 00_RECEPTION a échoué.");
+        }
+      }
       const merged = [...items, ...newItems];
+      if (originalsArchived) merged.forEach((item) => {
+        if (item.source === 'upload' && rawFiles.some(({ file }) => file.name === item.originalName)) item.archivedToReception = true;
+      });
       setItems(merged);
       processQueue(merged);
     }
@@ -264,6 +369,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   // DSP Study & Processing Pipeline
   const processQueue = async (queue: CuratorItem[]) => {
     setIsProcessing(true);
+    onProcessingChange?.(true);
     const updatedQueue = [...queue];
 
     for (let i = 0; i < updatedQueue.length; i++) {
@@ -276,11 +382,18 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
       try {
         let buffer = item.audioBuffer;
+        let isOp1Patch = false;
         if (!buffer && item.file) {
-          const arrayBuffer = await item.file.arrayBuffer();
           item.progress = 40;
           setItems([...updatedQueue]);
-          buffer = await audioEngine.decodeAudioData(arrayBuffer);
+          if (/\.aif{1,2}$/i.test(item.file.name)) {
+            const parsed = await parseOp1AiffPatch(item.file);
+            buffer = parsed.audioBuffer;
+            isOp1Patch = Boolean(parsed.rawJson);
+          } else {
+            const arrayBuffer = await item.file.arrayBuffer();
+            buffer = await audioEngine.decodeAudioData(arrayBuffer);
+          }
         }
 
         if (!buffer) {
@@ -303,14 +416,14 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         const detectedBpm = detectBpm(buffer);
 
         // 3. Loop vs One-shot classification
-        const loopAnalysis = detectLoopVsOneShot(buffer, item.originalName, detectedBpm);
+        const loopAnalysis = detectLoopVsOneShot(buffer, item.originalName, detectedBpm, metrics.sustainFactor);
 
         // 4. Slices detection
         const slices = detectAutoSlices(buffer, { sensitivity: 0.6, minSliceDurationMs: 120 });
 
         // 5. Sound Type & Genre
         const classification = classifySample(buffer, item.originalName, metrics, slices.length);
-        const sampleType = classification.type;
+        const sampleType = isOp1Patch ? 'multi-sound' : classification.type;
         const genre = classifyGenre(sampleType, detectedBpm, metrics, item.originalName);
 
         // 6. EP-133 Slot
@@ -321,13 +434,13 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         const enrichedTags = generateEnrichedTags(
           {
             type: sampleType,
-            category: loopAnalysis.isLoop ? 'loop' : 'one-shot',
-            isLoop: loopAnalysis.isLoop,
+            category: isOp1Patch ? 'multi-sound' : loopAnalysis.isLoop ? 'loop' : 'one-shot',
+            isLoop: isOp1Patch ? false : loopAnalysis.isLoop,
             key: pitchKey?.keyString,
             bpm: detectedBpm || loopAnalysis.bpm,
             loopBars: loopAnalysis.loopBars,
             genre,
-            tags: [...classification.tags, ...timbralTags],
+            tags: [...classification.tags, ...timbralTags, ...(isOp1Patch ? ['op-1', 'op1-drum-patch', '24-pad'] : [])],
             ep133Slot,
             sampleRate: targetFormat === '24b48k' ? 48000 : targetFormat === '16b46k' ? 46875 : 44100,
             bitDepth: targetFormat === '24b48k' ? 24 : 16,
@@ -354,7 +467,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
           id: item.id,
           name: cleanRawSampleName(item.originalName),
           originalFileName: item.originalName,
-          format: 'wav',
+          format: isOp1Patch ? 'aiff' : 'wav',
           size: 0,
           duration: buffer.duration,
           sampleRate: targetSampleRate,
@@ -364,8 +477,8 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
           key: pitchKey?.keyString,
           pitchHz: pitchKey?.pitchHz,
           type: sampleType,
-          category: loopAnalysis.isLoop ? 'loop' : 'one-shot',
-          isLoop: loopAnalysis.isLoop,
+          category: isOp1Patch ? 'multi-sound' : loopAnalysis.isLoop ? 'loop' : 'one-shot',
+          isLoop: isOp1Patch ? false : loopAnalysis.isLoop,
           loopBars: loopAnalysis.loopBars,
           genre,
           tags: enrichedTags,
@@ -389,10 +502,9 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         const standardCleanName = generateStandardSampleName(dummySample, namingConfig, i + 1);
 
         // 9. Clean Target Folder
-        const folderInfo =
-          folderScheme === 'streamlined'
-            ? mapTypeToStreamlinedFolder(sampleType, loopAnalysis.isLoop)
-            : classifySampleToProFolder(dummySample);
+        const folderInfo = isOp1Patch
+          ? { folderPath: '/03_HARDWARE/OP-1_DRUM_PATCHES', folderId: 'f-op1-patches', category: 'multi-sound' as const }
+          : classifySampleForLibrary(dummySample);
 
         // 10. Generate Final Standardized WAV Blob
         const wavBlob = audioBufferToWavBlob(buffer, {
@@ -407,7 +519,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
         const finalSampleItem: SampleItem = {
           ...dummySample,
-          name: standardCleanName,
+          name: isOp1Patch ? `OP1_${standardCleanName}` : standardCleanName,
           size: wavBlob.size,
           blobUrl,
           audioBuffer: buffer,
@@ -417,13 +529,14 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
         item.status = 'ready';
         item.progress = 100;
-        item.cleanName = standardCleanName;
+        item.cleanName = finalSampleItem.name;
         item.bpm = detectedBpm || loopAnalysis.bpm;
         item.key = pitchKey?.keyString;
         item.pitchHz = pitchKey?.pitchHz;
         item.type = sampleType;
         item.category = loopAnalysis.isLoop ? 'loop' : 'one-shot';
-        item.isLoop = loopAnalysis.isLoop;
+        item.category = isOp1Patch ? 'multi-sound' : item.category;
+        item.isLoop = isOp1Patch ? false : loopAnalysis.isLoop;
         item.loopBars = loopAnalysis.loopBars;
         item.genre = genre;
         item.tags = enrichedTags;
@@ -434,6 +547,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         item.targetFolderId = folderInfo.folderId;
         item.ep133Slot = ep133Slot;
         item.sampleItem = finalSampleItem;
+        item.isOp1Patch = isOp1Patch;
       } catch (err: unknown) {
         console.error('Curator DSP error on item', item.originalName, err);
         item.status = 'error';
@@ -444,6 +558,11 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     }
 
     setIsProcessing(false);
+    onProcessingChange?.(false);
+    onQueueResult?.({
+      ready: updatedQueue.filter((item) => item.status === 'ready').length,
+      errors: updatedQueue.filter((item) => item.status === 'error').length,
+    });
   };
 
   const handleTogglePlay = (item: CuratorItem) => {
@@ -501,6 +620,94 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (initialFiles.length === 0) return;
+    void handleFilesSelected(initialFiles, initialFilesAlreadyArchived);
+    onInitialFilesHandled?.();
+  }, [initialFiles, initialFilesAlreadyArchived]);
+
+  const handleExportToFolder = async () => {
+    const readyItems = items.filter((it) => it.status === 'ready' && it.sampleItem?.blobUrl);
+    if (readyItems.length === 0) return;
+
+    if (!supportsLocalLibrary()) {
+      setNotification('Cette fonction nécessite Chrome ou Edge sur ordinateur. Utilisez sinon Pack ZIP.');
+      return;
+    }
+
+    try {
+      const exportRoot = libraryRoot || await chooseLibraryRoot();
+      if (!libraryRoot) {
+        setLibraryRoot(exportRoot);
+        setLibraryName(exportRoot.name);
+      }
+
+      const processedFingerprints = await getProcessedSourceFingerprints(exportRoot);
+      const transferredSourceFiles: string[] = [];
+      for (const item of readyItems) {
+        const sourceFingerprint = item.sourcePath && item.file
+          ? `${item.sourcePath}:${item.file.size}:${item.file.lastModified}`
+          : undefined;
+        if (sourceFingerprint && processedFingerprints.has(sourceFingerprint)) {
+          transferredSourceFiles.push(item.sourcePath!);
+          continue;
+        }
+        const targetDirectory = await getDirectoryForPath(exportRoot, item.targetFolderPath);
+
+        const sourceBlob = item.isOp1Patch && item.file
+          ? item.file
+          : await fetch(item.sampleItem!.blobUrl).then((response) => response.blob());
+        const extension = item.isOp1Patch ? '.aif' : '.wav';
+        const filename = `${item.sampleItem!.name.replace(/\.(wav|aif|aiff)$/i, '')}${extension}`;
+        const writtenFileName = await writeUniqueFile(targetDirectory, filename, sourceBlob);
+        const manifestItem: Record<string, unknown> = {
+          name: item.sampleItem!.name,
+          fileName: writtenFileName,
+          originalName: item.originalName,
+          path: item.targetFolderPath,
+          type: item.type,
+          category: item.category,
+          bpm: item.bpm,
+          key: item.key,
+          tags: item.tags,
+          duration: item.duration,
+          sampleRate: item.sampleRate,
+          bitDepth: item.bitDepth,
+          format: item.isOp1Patch ? 'op-1-aiff' : 'wav',
+          sourceFingerprint,
+        };
+        // Commit each item immediately. If a later file fails, the next pass skips
+        // already written files instead of creating suffixed duplicates.
+        await writeLibraryManifest(exportRoot, [manifestItem]);
+        if (sourceFingerprint) processedFingerprints.add(sourceFingerprint);
+        if (item.sourcePath) transferredSourceFiles.push(item.sourcePath);
+      }
+      const removedCount = await removeWorkFolderFiles(exportRoot, transferredSourceFiles);
+      onLibraryChanged?.();
+
+      if (autoTransfer && !isOpen) {
+        const transferredIds = new Set(readyItems.map((item) => item.id));
+        setItems((current) => current.filter((item) => !transferredIds.has(item.id)));
+      }
+
+      setNotification(`${readyItems.length} sons exportés, sans écrasement, dans ${exportRoot.name}. ${removedCount} fichier(s) retiré(s) de 00_RECEPTION.`);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.error('Erreur export vers dossier', err);
+      setNotification("Impossible d'écrire dans ce dossier. Vérifiez l'autorisation puis réessayez.");
+    }
+  };
+
+  useEffect(() => {
+    if (!autoTransfer || isOpen || isProcessing || !libraryRoot) return;
+    const readyItems = items.filter((item) => item.status === 'ready' && item.sampleItem);
+    if (readyItems.length === 0) return;
+    const signature = readyItems.map((item) => item.id).join('|');
+    if (autoTransferredSignature.current === signature) return;
+    autoTransferredSignature.current = signature;
+    void handleExportToFolder();
+  }, [autoTransfer, isOpen, isProcessing, items, libraryRoot]);
+
   const readyCount = items.filter((i) => i.status === 'ready').length;
 
   if (!isOpen) return null;
@@ -533,12 +740,29 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={handleChooseLibrary}
+              className="px-3 py-1.5 rounded-lg bg-[#A855F7]/15 hover:bg-[#A855F7]/25 border border-[#A855F7]/40 text-xs font-semibold text-[#C084FC] flex items-center gap-1.5 transition"
+              title="Choisir la racine de votre bibliothèque locale"
+            >
+              <FolderTree className="w-3.5 h-3.5" />
+              <span>{libraryName ? `Bibliothèque : ${libraryName}` : 'Connecter bibliothèque'}</span>
+            </button>
+            <button
               disabled={readyCount === 0}
               onClick={handleExportZip}
               className="px-3 py-1.5 rounded-lg bg-[#181B26] hover:bg-[#222636] border border-[#2B2F40] text-xs font-semibold text-white flex items-center gap-1.5 transition disabled:opacity-40"
             >
               <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
               <span>Pack ZIP</span>
+            </button>
+            <button
+              disabled={readyCount === 0}
+              onClick={handleExportToFolder}
+              className="px-3 py-1.5 rounded-lg bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 border border-[#00F0FF]/40 text-xs font-semibold text-[#00F0FF] flex items-center gap-1.5 transition disabled:opacity-40"
+              title="Choisir un dossier de destination et y créer l'arborescence de classement"
+            >
+              <FolderTree className="w-3.5 h-3.5" />
+              <span>Exporter dans un dossier</span>
             </button>
 
             {onOpenGitHubSync && (
@@ -615,14 +839,14 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
             {/* Quick Actions */}
             <div className="flex items-center gap-2">
-              {sourceMode === 'upload' && (
+              {!workFolderOnly && sourceMode === 'upload' && (
                 <>
                   <button
                     onClick={() => folderInputRef.current?.click()}
                     className="px-3 py-1 rounded-lg bg-[#181B26] hover:bg-[#222636] border border-[#2B2F40] text-xs text-[#00F0FF] font-semibold flex items-center gap-1.5 transition"
                   >
                     <FolderUp className="w-3.5 h-3.5" />
-                    <span>+ Dossier</span>
+                    <span>Choisir le dossier source</span>
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
@@ -679,14 +903,9 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
             {/* Target Folder Layout Scheme */}
             <div className="bg-[#13151F] p-2 rounded-lg border border-[#222433] space-y-1">
               <span className="text-[10px] text-[#8E8E9A] block">Structure Dossiers :</span>
-              <select
-                value={folderScheme}
-                onChange={(e) => setFolderScheme(e.target.value as any)}
-                className="w-full bg-[#181B28] border border-[#2B2F40] rounded px-2 py-0.5 text-xs text-[#00F0FF] font-semibold focus:outline-none focus:border-[#00F0FF]"
-              >
-                <option value="streamlined">⚡ 7 Dossiers Épurés (Pro)</option>
-                <option value="detailed">📂 Hiérarchie Détaillée (Splice)</option>
-              </select>
+              <div className="w-full bg-[#181B28] border border-[#2B2F40] rounded px-2 py-0.5 text-xs text-[#00F0FF] font-semibold">
+                2 catégories : One-shots / Loops
+              </div>
             </div>
 
             {/* Target Loudness */}
@@ -741,7 +960,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
                 e.preventDefault();
                 setIsDragging(false);
                 if (e.dataTransfer.files) {
-                  handleFilesSelected(e.dataTransfer.files);
+                  setNotification("Déposez les fichiers dans le dossier de travail : ils seront détectés automatiquement.");
                 }
               }}
               className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all flex flex-col items-center justify-center gap-4 ${
@@ -764,13 +983,13 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
               <div className="flex items-center gap-3 pt-2">
                 <button
-                  onClick={() => folderInputRef.current?.click()}
+                  onClick={() => setNotification("Utilisez le dossier de travail connecté, pas un dossier source externe.")}
                   className="px-4 py-2 rounded-lg bg-[#00F0FF] text-[#0A0A0E] font-bold text-xs hover:bg-[#33F3FF] transition flex items-center gap-2 shadow"
                 >
                   <FolderUp className="w-4 h-4" /> Sélectionner un Dossier
                 </button>
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setNotification("Utilisez le dossier de travail connecté, pas une importation de fichiers.")}
                   className="px-4 py-2 rounded-lg bg-[#181B26] border border-[#2B2F40] text-white text-xs hover:bg-[#222636] transition flex items-center gap-2"
                 >
                   <FileAudio className="w-4 h-4" /> Sélectionner des Fichiers

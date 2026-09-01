@@ -1,8 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-  generateDefaultLibrary,
-  DEFAULT_FOLDERS,
-} from './data/defaultSampleLibrary';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { DEFAULT_FOLDERS } from './data/defaultSampleLibrary';
 import {
   SampleItem,
   FolderItem,
@@ -29,18 +26,14 @@ import { AudioEffectsRackModal } from './components/AudioEffectsRackModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { DocumentationModal } from './components/DocumentationModal';
 import { LoudnessStandardModal } from './components/LoudnessStandardModal';
+const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
+const AdvancedEngineRackModal = lazy(() => import('./components/AdvancedEngineRackModal').then((module) => ({ default: module.AdvancedEngineRackModal })));
 import { LoudnessAuditReport, LoudnessStandardKey } from './services/audioLoudnessStandard';
 import { audioEngine } from './services/audioEngine';
 import {
   calculateAudioMetrics,
   classifySample,
-  detectAutoSlices,
-  detectBpm,
-  detectPitch,
   detectPitchAndKey,
-  detectLoopVsOneShot,
-  classifyGenre,
-  assignEp133Slot,
 } from './services/audioAnalyzer';
 import {
   audioBufferToWavBlob,
@@ -50,9 +43,24 @@ import {
 } from './services/audioConverter';
 import { parseOp1AiffPatch, extractSlicesToWavBlobs } from './services/op1PatchEncoder';
 import {
-  classifySampleToProFolder,
   autoOrganizeLibrary,
+  classifySampleForLibrary,
 } from './services/proFolderOrganizer';
+import {
+  chooseLibraryRoot,
+  listWorkFolderAudioFiles,
+  removeEmptyManagedFolders,
+  restoreLibraryRoot,
+  scanManagedLibrary,
+  supportsLocalLibrary,
+  getDirectoryForPath,
+  writeUniqueFile,
+  writeLibraryManifest,
+  readLibraryManifest,
+  readLibraryAudioFile,
+  type DirectoryHandle,
+  type WorkFolderAudioFile,
+} from './services/localLibrary';
 
 export default function App() {
   const [samples, setSamples] = useState<SampleItem[]>([]);
@@ -97,9 +105,23 @@ export default function App() {
   const [isBatchNamingOpen, setIsBatchNamingOpen] = useState<boolean>(false);
   const [isDspModalOpen, setIsDspModalOpen] = useState<boolean>(false);
   const [isFxRackOpen, setIsFxRackOpen] = useState<boolean>(false);
+  const [isSynthRackOpen, setIsSynthRackOpen] = useState<boolean>(false);
+  const [isAdvancedRackOpen, setIsAdvancedRackOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isDocOpen, setIsDocOpen] = useState<boolean>(false);
   const [isLoudnessModalOpen, setIsLoudnessModalOpen] = useState<boolean>(false);
+  const [pendingCurationFiles, setPendingCurationFiles] = useState<Array<File | WorkFolderAudioFile>>([]);
+  const [pendingFilesAlreadyArchived, setPendingFilesAlreadyArchived] = useState(false);
+  const [libraryRoot, setLibraryRoot] = useState<DirectoryHandle | null>(null);
+  const [libraryName, setLibraryName] = useState<string | null>(null);
+  const [diskSampleCount, setDiskSampleCount] = useState(0);
+  const [diskFolderCounts, setDiskFolderCounts] = useState<Record<string, number>>({});
+  const [isCuratorProcessing, setIsCuratorProcessing] = useState(false);
+  const [workFolderStatus, setWorkFolderStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [incomingCount, setIncomingCount] = useState(0);
+  const [failedIncomingCount, setFailedIncomingCount] = useState(0);
+  const scanInFlightRef = useRef(false);
+  const queuedSourceKeysRef = useRef(new Set<string>());
   const [sampleForLoudness, setSampleForLoudness] = useState<SampleItem | null>(null);
 
   const [sampleForDsp, setSampleForDsp] = useState<SampleItem | null>(null);
@@ -109,10 +131,66 @@ export default function App() {
     audioEngine.isAutoLoudnessEnabled()
   );
 
+  const hydrateManifestSamples = (entries: Array<Record<string, unknown>>) => {
+    const allowedTypes = new Set(['kick', 'snare', 'hihat', 'clap', 'cymbal', 'percussion', 'bass', '808', 'lead', 'pad', 'vocal', 'fx', 'loop', 'multi-sound', 'other']);
+    const allowedCategories = new Set(['one-shot', 'loop', 'multi-sound']);
+    const allowedGenres = new Set(['Hip-Hop / BoomBap', 'Trap / Drill', 'House / EDM', 'Techno', 'Techno / Industrial', 'Lo-Fi / Chillhop', 'Synthwave / Retro', 'Drum & Bass', 'Drum & Bass / Jungle', 'Afrobeat / Dancehall', 'Ambient / Cinematic', 'Pop / R&B', 'Acoustic / Rock', 'Universal / Multi-Genre']);
+    const hydrated: SampleItem[] = entries.map((entry, index) => {
+      const type = typeof entry.type === 'string' && allowedTypes.has(entry.type) ? entry.type as SampleItem['type'] : 'other';
+      const category = typeof entry.category === 'string' && allowedCategories.has(entry.category) ? entry.category as SampleItem['category'] : 'one-shot';
+      const path = typeof entry.path === 'string' ? entry.path : '/01_ONE_SHOTS/05_FX_TEXTURES';
+      const fileName = typeof entry.fileName === 'string' ? entry.fileName : typeof entry.name === 'string' ? entry.name : `sample-${index}`;
+      return {
+        id: `disk-${path}-${fileName}`,
+        name: typeof entry.name === 'string' ? entry.name : fileName,
+        originalFileName: typeof entry.originalName === 'string' ? entry.originalName : fileName,
+        format: entry.format === 'op-1-aiff' ? 'aiff' : 'wav',
+        size: 0, duration: typeof entry.duration === 'number' ? entry.duration : 0,
+        sampleRate: typeof entry.sampleRate === 'number' ? entry.sampleRate : 48000,
+        bitDepth: typeof entry.bitDepth === 'number' ? entry.bitDepth : 24, channels: 2,
+        bpm: typeof entry.bpm === 'number' ? entry.bpm : undefined,
+        key: typeof entry.key === 'string' ? entry.key : undefined,
+        type, category, isLoop: category === 'loop', genre: allowedGenres.has(entry.genre as string) ? entry.genre as SampleItem['genre'] : 'Universal / Multi-Genre',
+        tags: Array.isArray(entry.tags) ? entry.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+        folderId: classifySampleForLibrary({ type, category, isLoop: category === 'loop', name: fileName, originalFileName: fileName } as SampleItem).folderId,
+        folderPath: path, favorite: false, rating: 0,
+        spectralCentroid: 0, dynamicRangeDb: 0, peakDb: 0, rmsDb: 0, lufs: 0, loudnessGainDb: 0, zeroCrossingRate: 0,
+        slices: [], blobUrl: '', dateAdded: 0, diskPath: `${path.replace(/^\//, '')}/${fileName}`,
+      };
+    });
+    setSamples((previous) => {
+      const byId = new Map(previous.map((sample) => [sample.id, sample]));
+      hydrated.forEach((sample) => { if (!byId.has(sample.id)) byId.set(sample.id, sample); });
+      return [...byId.values()];
+    });
+  };
+
   // Hidden File Inputs for Menu Bar actions
   const menuFileInputRef = useRef<HTMLInputElement>(null);
   const menuFolderInputRef = useRef<HTMLInputElement>(null);
   const menuOp1InputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const selected = samples.find((sample) => sample.id === selectedSampleId);
+    if (!selected || selected.audioBuffer || !selected.diskPath || !libraryRoot) return;
+    let cancelled = false;
+    const loadSelectedAudio = async () => {
+      try {
+        const file = await readLibraryAudioFile(libraryRoot, selected.diskPath!);
+        const audioBuffer = await audioEngine.decodeAudioData(await file.arrayBuffer());
+        if (cancelled) return;
+        const blobUrl = URL.createObjectURL(file);
+        setSamples((previous) => previous.map((sample) => sample.id === selected.id ? {
+          ...sample, audioBuffer, blobUrl, size: file.size, duration: audioBuffer.duration,
+          sampleRate: audioBuffer.sampleRate, channels: audioBuffer.numberOfChannels,
+        } : sample));
+      } catch (error) {
+        console.error('Impossible de charger le sample sélectionné depuis le dossier de travail', error);
+      }
+    };
+    void loadSelectedAudio();
+    return () => { cancelled = true; };
+  }, [selectedSampleId, samples, libraryRoot]);
 
   // Filters State
   const [filterState, setFilterState] = useState<FilterState>({
@@ -133,21 +211,147 @@ export default function App() {
     sortDirection: 'desc',
   });
 
-  // Load starter sound pack on mount
+  // The library intentionally starts empty: users import their own source material.
+
   useEffect(() => {
-    async function init() {
-      try {
-        const initialSamples = await generateDefaultLibrary();
-        setSamples(initialSamples);
-        if (initialSamples.length > 0) {
-          setSelectedSampleId(initialSamples[0].id);
-        }
-      } catch (err) {
-        console.error('Failed to init default sample library:', err);
+    restoreLibraryRoot().then((root) => {
+      if (root) {
+        setLibraryRoot(root);
+        setLibraryName(root.name);
+        setWorkFolderStatus('connected');
+        scanManagedLibrary(root).then((scan) => {
+          setDiskSampleCount(scan.totalSamples);
+          setDiskFolderCounts(scan.folderCounts);
+        });
+        readLibraryManifest(root).then(hydrateManifestSamples);
+      }
+    });
+  }, []);
+
+  const handleChooseLibrary = async () => {
+    if (!supportsLocalLibrary()) {
+      alert("Le choix d'un dossier de travail nécessite Chrome ou Microsoft Edge sur ordinateur. Ouvrez http://localhost:3000 dans l'un de ces navigateurs, puis réessayez.");
+      return;
+    }
+    try {
+      setWorkFolderStatus('connecting');
+      const root = await chooseLibraryRoot();
+      setLibraryRoot(root);
+      setLibraryName(root.name);
+      const scan = await scanManagedLibrary(root);
+      setDiskSampleCount(scan.totalSamples);
+      setDiskFolderCounts(scan.folderCounts);
+      hydrateManifestSamples(await readLibraryManifest(root));
+      setWorkFolderStatus('connected');
+    } catch (error) {
+      setWorkFolderStatus(libraryRoot ? 'connected' : 'error');
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.error('Erreur dossier de travail', error);
+        alert(error instanceof Error ? `Impossible de connecter ce dossier : ${error.message}` : "Impossible de connecter ce dossier de travail.");
       }
     }
-    init();
-  }, []);
+  };
+
+  const handleReactivateWorkFolder = async () => {
+    if (!libraryRoot) {
+      await handleChooseLibrary();
+      return;
+    }
+    try {
+      const permission = await libraryRoot.requestPermission?.({ mode: 'readwrite' });
+      if (permission === 'granted') {
+        await handleRefreshLibrary();
+        return;
+      }
+    } catch (error) {
+      console.warn('Autorisation du dossier à renouveler', error);
+    }
+    await handleChooseLibrary();
+  };
+
+  const handleRefreshLibrary = async () => {
+    if (!libraryRoot) return;
+    try {
+      const scan = await scanManagedLibrary(libraryRoot);
+      setDiskSampleCount(scan.totalSamples);
+      setDiskFolderCounts(scan.folderCounts);
+      hydrateManifestSamples(await readLibraryManifest(libraryRoot));
+      setWorkFolderStatus('connected');
+    } catch (error) {
+      setWorkFolderStatus('error');
+      console.error('Erreur rafraîchissement bibliothèque', error);
+      alert("Impossible de lire le dossier de travail. Reconnectez-le depuis Fichier.");
+    }
+  };
+
+  const handleCleanEmptyFolders = async () => {
+    if (!libraryRoot) return;
+    try {
+      const removed = await removeEmptyManagedFolders(libraryRoot);
+      await handleRefreshLibrary();
+      alert(removed > 0 ? `${removed} dossier(s) vide(s) supprimé(s).` : 'Aucun dossier vide à supprimer.');
+    } catch (error) {
+      console.error('Erreur nettoyage dossiers', error);
+      alert("Impossible de nettoyer les dossiers. Reconnectez le dossier de travail.");
+    }
+  };
+
+  const handleProcessReception = async () => {
+    if (!libraryRoot) return;
+    try {
+      const files = await listWorkFolderAudioFiles(libraryRoot);
+      queuedSourceKeysRef.current.clear();
+      if (files.length === 0) {
+        alert("Aucun nouveau fichier audio dans le dossier de travail. Déposez vos sons ou dossiers à sa racine, puis relancez cette commande.");
+        return;
+      }
+      setPendingFilesAlreadyArchived(true);
+      setPendingCurationFiles(files);
+      setIsAutoCuratorOpen(true);
+    } catch (error) {
+      console.error('Erreur analyse réception', error);
+      alert("Impossible de lire 00_RECEPTION. Reconnectez le dossier de travail depuis le menu Fichier.");
+    }
+  };
+
+  useEffect(() => {
+    if (!libraryRoot || isAutoCuratorOpen || isCuratorProcessing) return;
+    let cancelled = false;
+    const scanReception = async () => {
+      if (scanInFlightRef.current) return;
+      scanInFlightRef.current = true;
+      try {
+        const files = await listWorkFolderAudioFiles(libraryRoot);
+        if (cancelled) return;
+        setIncomingCount(files.length);
+        const currentKeys = new Set(files.map(({ sourcePath, file }) => `${sourcePath}:${file.size}:${file.lastModified}`));
+        for (const knownKey of queuedSourceKeysRef.current) {
+          if (!currentKeys.has(knownKey)) queuedSourceKeysRef.current.delete(knownKey);
+        }
+        const freshFiles = files.filter(({ sourcePath, file }) => {
+          const key = `${sourcePath}:${file.size}:${file.lastModified}`;
+          if (queuedSourceKeysRef.current.has(key)) return false;
+          queuedSourceKeysRef.current.add(key);
+          return true;
+        });
+        if (freshFiles.length === 0) return;
+        setPendingFilesAlreadyArchived(true);
+        setPendingCurationFiles(freshFiles);
+        // Keep automatic intake in the background; the red menu indicator opens details on demand.
+      } catch (error) {
+        console.error('Surveillance de réception indisponible', error);
+        setWorkFolderStatus('error');
+      } finally {
+        scanInFlightRef.current = false;
+      }
+    };
+    void scanReception();
+    const timer = window.setInterval(() => void scanReception(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [libraryRoot, isAutoCuratorOpen, isCuratorProcessing]);
 
   // Handlers pour le redimensionnement vertical à la souris (Sidebar Splitter)
   const handleStartSidebarResize = (e: React.MouseEvent) => {
@@ -293,7 +497,7 @@ export default function App() {
             return a.type.localeCompare(b.type) * dir;
           case 'dateAdded':
           default:
-            return (b.dateAdded - a.dateAdded) * (filterState.sortDirection === 'asc' ? -1 : 1);
+            return (a.dateAdded - b.dateAdded) * dir;
         }
       });
   }, [samples, filterState]);
@@ -381,7 +585,7 @@ export default function App() {
         setIsBatchNamingOpen(true);
       } else if (e.code === 'KeyI' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        setIsSmartIngestOpen(true);
+        void handleReactivateWorkFolder();
       } else if (e.code === 'KeyE' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         if (selectedSample) {
@@ -407,123 +611,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleTogglePlayPause, handlePlayNext, handlePlayPrev, selectedSample]);
 
-  // Import files pipeline
-  const handleImportFiles = async (fileList: FileList | File[]) => {
+  // All normal imports enter the curator so originals can be archived and
+  // processing/classification uses one single pipeline.
+  const handleImportFiles = (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
-    const audioFiles = files.filter((f) => {
-      return (
-        f.type.startsWith('audio/') ||
-        /\.(wav|mp3|ogg|flac|aiff|aif|webm|m4a)$/i.test(f.name)
-      );
-    });
-
-    if (audioFiles.length === 0) return;
-
-    const newSamples: SampleItem[] = [];
-
-    for (let i = 0; i < audioFiles.length; i++) {
-      const file = audioFiles[i];
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer);
-        const metrics = calculateAudioMetrics(audioBuffer);
-        const pitchKey = detectPitchAndKey(audioBuffer);
-        const autoSlices = detectAutoSlices(audioBuffer);
-        const loopInfo = detectLoopVsOneShot(audioBuffer);
-        const detectedGenre = classifyGenre(file.name, loopInfo.bpm, loopInfo.isLoop, 'other');
-
-        const classification = classifySample(audioBuffer, file.name, metrics, pitchKey?.pitchHz || 0);
-
-        const sampleType = classification.type;
-        const epSlot = assignEp133Slot(sampleType, i);
-
-        // Auto-Dossier Pro Standard
-        const sampleItemStub: SampleItem = {
-          id: `stub-${i}`,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          originalFileName: file.name,
-          format: (file.name.split('.').pop()?.toLowerCase() || 'wav') as 'wav' | 'mp3' | 'ogg' | 'flac' | 'aiff' | 'webm' | 'm4a',
-          size: file.size,
-          duration: audioBuffer.duration,
-          sampleRate: audioBuffer.sampleRate,
-          bitDepth: 24,
-          channels: audioBuffer.numberOfChannels,
-          type: sampleType,
-          category: autoSlices.length > 1 ? 'multi-sound' : loopInfo.isLoop ? 'loop' : 'one-shot',
-          genre: detectedGenre,
-          isLoop: loopInfo.isLoop,
-          bpm: loopInfo.bpm || undefined,
-          key: pitchKey?.keyString,
-          tags: [...classification.tags, detectedGenre.split('/')[0].toLowerCase().trim()],
-          folderId: 'f-root-oneshots',
-          folderPath: '/01_ONE_SHOTS',
-          favorite: false,
-          rating: 4,
-          spectralCentroid: metrics.spectralCentroid,
-          dynamicRangeDb: metrics.dynamicRangeDb,
-          peakDb: metrics.peakDb,
-          rmsDb: metrics.rmsDb,
-          zeroCrossingRate: metrics.zeroCrossingRate,
-          lufs: metrics.lufs,
-          loudnessGainDb: 0,
-          blobUrl: '',
-          slices: autoSlices,
-          audioBuffer,
-          dateAdded: Date.now(),
-          isMultiSound: autoSlices.length > 1,
-        };
-
-        const { folderId, folderPath, category } = classifySampleToProFolder(sampleItemStub);
-
-        const sampleItem: SampleItem = {
-          id: `sample-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          originalFileName: file.name,
-          format: (file.name.split('.').pop()?.toLowerCase() || 'wav') as 'wav' | 'mp3' | 'ogg' | 'flac' | 'aiff' | 'webm' | 'm4a',
-          size: file.size,
-          duration: audioBuffer.duration,
-          sampleRate: audioBuffer.sampleRate,
-          bitDepth: 24,
-          channels: audioBuffer.numberOfChannels,
-          type: sampleType,
-          category,
-          genre: detectedGenre,
-          isLoop: loopInfo.isLoop,
-          bpm: loopInfo.bpm || undefined,
-          key: pitchKey?.keyString,
-          tags: [...classification.tags, detectedGenre.split('/')[0].toLowerCase().trim()],
-          folderId,
-          folderPath,
-          favorite: false,
-          rating: 4,
-          spectralCentroid: metrics.spectralCentroid,
-          dynamicRangeDb: metrics.dynamicRangeDb,
-          peakDb: metrics.peakDb,
-          rmsDb: metrics.rmsDb,
-          zeroCrossingRate: metrics.zeroCrossingRate,
-          slices: autoSlices,
-          blobUrl: URL.createObjectURL(file),
-          audioBuffer,
-          dateAdded: Date.now(),
-          ep133Slot: epSlot,
-          isMultiSound: autoSlices.length > 1,
-          lufs: metrics.lufs,
-          loudnessGainDb: 0,
-        };
-
-        newSamples.push(sampleItem);
-      } catch (err) {
-        console.error(`Error loading file ${file.name}:`, err);
-      }
-    }
-
-    if (newSamples.length > 0) {
-      setSamples((prev) => [...newSamples, ...prev]);
-      setSelectedSampleId(newSamples[0].id);
-      if (newSamples[0].audioBuffer) {
-        audioEngine.play(newSamples[0].audioBuffer, newSamples[0].id, 0);
-      }
-    }
+    if (files.length === 0) return;
+    setPendingCurationFiles(files);
+    setIsAutoCuratorOpen(true);
   };
 
   // Import OP-1 Drum Kit AIFF Patch
@@ -598,9 +692,7 @@ export default function App() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleImportFiles(e.dataTransfer.files);
-    }
+    alert("Déposez les sons directement dans le dossier de travail : l'application les détecte et les trie automatiquement.");
   };
 
   const handleToggleFavorite = (sampleId: string) => {
@@ -634,7 +726,10 @@ export default function App() {
   };
 
   const handleApplyCuration = (curatedSamples: SampleItem[]) => {
-    setSamples(curatedSamples);
+    setSamples((current) => {
+      const curatedIds = new Set(curatedSamples.map((sample) => sample.id));
+      return [...curatedSamples, ...current.filter((sample) => !curatedIds.has(sample.id))];
+    });
   };
 
   const handleExportEp133Pack = async () => {
@@ -788,12 +883,58 @@ export default function App() {
     });
   };
 
-  const handleSaveProcessedAsNew = (newSample: SampleItem) => {
+  const handleSaveProcessedAsNew = async (newSample: SampleItem) => {
     setSamples((prev) => [newSample, ...prev]);
     setSelectedSampleId(newSample.id);
     if (newSample.audioBuffer) {
       audioEngine.play(newSample.audioBuffer, newSample.id, newSample.loudnessGainDb);
     }
+    if (!libraryRoot || !newSample.audioBuffer) return;
+    try {
+      const folder = classifySampleForLibrary(newSample);
+      const directory = await getDirectoryForPath(libraryRoot, folder.folderPath);
+      const blob = audioBufferToWavBlob(newSample.audioBuffer, { bitDepth: 24, normalize: false });
+      const fileName = await writeUniqueFile(directory, `${newSample.name}.wav`, blob);
+      await writeLibraryManifest(libraryRoot, [{
+        name: newSample.name,
+        fileName,
+        originalName: newSample.originalFileName,
+        path: folder.folderPath,
+        type: newSample.type,
+        category: folder.category,
+        bpm: newSample.bpm,
+        key: newSample.key,
+        tags: newSample.tags,
+        duration: newSample.duration,
+        sampleRate: newSample.sampleRate,
+        bitDepth: 24,
+        format: 'wav',
+        derivedFrom: newSample.id,
+        processing: 'dsp-rack',
+      }]);
+      await handleRefreshLibrary();
+    } catch (error) {
+      console.error('Impossible de sauvegarder le rendu DSP dans la bibliothèque', error);
+      alert("Le rendu DSP est visible dans l'application mais n'a pas pu être écrit dans le dossier de travail.");
+    }
+  };
+
+  const handleCreateSynthSample = (audioBuffer: AudioBuffer, name: string) => {
+    const metrics = calculateAudioMetrics(audioBuffer);
+    const blob = audioBufferToWavBlob(audioBuffer, { bitDepth: 24, normalize: false });
+    const sample: SampleItem = {
+      id: `synth-${Date.now().toString(36)}`,
+      name,
+      originalFileName: `${name}.wav`,
+      format: 'wav', size: blob.size, duration: audioBuffer.duration,
+      sampleRate: audioBuffer.sampleRate, bitDepth: 24, channels: audioBuffer.numberOfChannels,
+      type: 'lead', category: 'one-shot', isLoop: false, genre: 'Universal / Multi-Genre',
+      tags: ['synth', 'layer-rack', 'created'], folderId: 'f-os-melodic', folderPath: '/01_ONE_SHOTS/03_MELODIC',
+      favorite: false, rating: 0, spectralCentroid: metrics.spectralCentroid, dynamicRangeDb: metrics.dynamicRangeDb,
+      peakDb: metrics.peakDb, rmsDb: metrics.rmsDb, lufs: metrics.lufs, loudnessGainDb: metrics.loudnessGainDb,
+      zeroCrossingRate: metrics.zeroCrossingRate, slices: [], blobUrl: URL.createObjectURL(blob), audioBuffer, dateAdded: Date.now(),
+    };
+    void handleSaveProcessedAsNew(sample);
   };
 
   const handleOverwriteSample = (updatedSample: SampleItem) => {
@@ -886,20 +1027,23 @@ export default function App() {
           <div className="w-16 h-16 rounded-xl bg-[#00F0FF]/10 border border-[#00F0FF]/30 flex items-center justify-center text-[#00F0FF] mb-4 animate-bounce">
             <span className="text-3xl font-extrabold">+</span>
           </div>
-          <h2 className="text-lg font-bold text-[#EDEDEE] tracking-tight">Déposez vos Samples ou Dossiers Audio</h2>
+          <h2 className="text-lg font-bold text-[#EDEDEE] tracking-tight">Utilisez le dossier de travail</h2>
           <p className="text-xs font-mono text-[#00F0FF] mt-1">
-            Décodage DSP, auto-triage BPM / Tonalité, égalisation LUFS & export EP-133 / OP-1
+            Déposez vos sons dans le dossier connecté : Resonance les détecte et les classe automatiquement.
           </p>
         </div>
       )}
 
       {/* 1. TOP CLASSIC DAW MENU BAR */}
       <AppMenuBar
-        onImportFiles={() => menuFileInputRef.current?.click()}
-        onImportFolder={() => menuFolderInputRef.current?.click()}
-        onImportOp1Patch={() => menuOp1InputRef.current?.click()}
+        onChooseLibrary={handleChooseLibrary}
+        onProcessReception={libraryRoot ? handleProcessReception : undefined}
+        onRefreshLibrary={libraryRoot ? handleRefreshLibrary : undefined}
+        onCleanEmptyFolders={libraryRoot ? handleCleanEmptyFolders : undefined}
+        isBackgroundProcessing={isCuratorProcessing}
+        onOpenBackgroundProcessing={() => setIsAutoCuratorOpen(true)}
+        libraryName={libraryName}
         onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
-        onOpenSmartIngest={() => setIsSmartIngestOpen(true)}
         onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
         onOpenBatchConverter={() => setIsBatchConverterOpen(true)}
         onOpenDspAnalyzer={() => {
@@ -907,6 +1051,8 @@ export default function App() {
           setIsDspModalOpen(true);
         }}
         onOpenFxRack={() => handleOpenFxRack()}
+        onOpenSynthRack={() => setIsSynthRackOpen(true)}
+        onOpenAdvancedRack={() => setIsAdvancedRackOpen(true)}
         onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
         onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
         onOpenEp133Export={handleExportEp133Pack}
@@ -923,15 +1069,18 @@ export default function App() {
         onToggleAutoLoudness={handleToggleAutoLoudness}
         activeView={activeView}
         onViewChange={setActiveView}
-        samplesCount={samples.length}
+        samplesCount={Math.max(samples.length, diskSampleCount)}
       />
 
       {/* 2. COMPACT HEADER */}
       <Header
         searchQuery={filterState.searchQuery}
         onSearchChange={(q) => setFilterState((prev) => ({ ...prev, searchQuery: q }))}
-        onImportFiles={handleImportFiles}
-        onOpenSmartIngest={() => setIsSmartIngestOpen(true)}
+        onReactivateWorkFolder={() => void handleReactivateWorkFolder()}
+        workFolderName={libraryName}
+        workFolderStatus={workFolderStatus}
+        incomingCount={incomingCount}
+        failedIncomingCount={failedIncomingCount}
         onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
         onOpenDocumentation={() => setIsDocOpen(true)}
         onOpenBenchmark={() => setIsBenchmarkOpen(true)}
@@ -957,7 +1106,7 @@ export default function App() {
         currentSampleName={selectedSample?.name}
         autoLoudnessLeveling={autoLoudnessLeveling}
         onToggleAutoLoudness={handleToggleAutoLoudness}
-        samplesCount={samples.length}
+        samplesCount={Math.max(samples.length, diskSampleCount)}
       />
 
       {/* 3. MAIN WORKSPACE WITH RESIZABLE SPLITTERS */}
@@ -979,6 +1128,8 @@ export default function App() {
           onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
           activeView={activeView}
           onViewChange={setActiveView}
+          physicalSampleCount={diskSampleCount}
+          diskFolderCounts={diskFolderCounts}
         />
 
         {/* Vertical Splitter Handle (Resize Sidebar Width with Mouse Drag) */}
@@ -1100,6 +1251,23 @@ export default function App() {
       <AutoCuratorModal
         isOpen={isAutoCuratorOpen}
         onClose={() => setIsAutoCuratorOpen(false)}
+        librarySamples={samples}
+        initialFiles={pendingCurationFiles}
+        initialFilesAlreadyArchived={pendingFilesAlreadyArchived}
+        onInitialFilesHandled={() => {
+          setPendingCurationFiles([]);
+          setPendingFilesAlreadyArchived(false);
+        }}
+        libraryRoot={libraryRoot}
+        libraryName={libraryName}
+        onLibraryRootChange={(root) => {
+          setLibraryRoot(root);
+          setLibraryName(root.name);
+        }}
+        onLibraryChanged={() => void handleRefreshLibrary()}
+        onProcessingChange={setIsCuratorProcessing}
+        onQueueResult={({ errors }) => setFailedIncomingCount(errors)}
+        autoTransfer
         onApplyCuration={handleApplyCuration}
         onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
       />
@@ -1194,8 +1362,14 @@ export default function App() {
           sample={sampleForFxRack || selectedSample}
           onSaveAsNewSample={handleSaveProcessedAsNew}
           onOverwriteSample={handleOverwriteSample}
+          libraryRoot={libraryRoot}
         />
       )}
+
+      <Suspense fallback={isSynthRackOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
+        <LayerSynthRackModal isOpen={isSynthRackOpen} onClose={() => setIsSynthRackOpen(false)} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
+      </Suspense>
+      <Suspense fallback={null}><AdvancedEngineRackModal isOpen={isAdvancedRackOpen} onClose={() => setIsAdvancedRackOpen(false)} libraryRoot={libraryRoot} /></Suspense>
 
       {/* International Loudness Standard Modal (ITU-R BS.1770-4 / EBU R128) */}
       <LoudnessStandardModal

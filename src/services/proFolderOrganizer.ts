@@ -357,89 +357,49 @@ export function generateProFolderHierarchy(samples: SampleItem[]): FolderItem[] 
 }
 
 /**
- * Intelligent Classifier for Auto-Organizing a sample into the Pro Industry Hierarchy
+ * Canonical on-disk layout for Resonance. It deliberately has only two main
+ * sound families: one-shots and loops. Multi-hit kits live with one-shots.
  */
-export function classifySampleToProFolder(sample: SampleItem): { folderPath: string; folderId: string; category: SampleCategory } {
-  const isLoop = sample.isLoop || sample.duration >= 1.6 || sample.type === 'loop' || /loop|bpm|beat/i.test(sample.name);
-  const isMultiSound = sample.isMultiSound || sample.type === 'multi-sound' || (sample.slices && sample.slices.length >= 3);
-  const name = (sample.name + ' ' + (sample.originalFileName || '')).toLowerCase();
-
-  // Multi-Sound Stems
-  if (isMultiSound) {
-    return {
-      folderPath: '/03_MULTI_SOUND_KITS',
-      folderId: 'f-root-multisound',
-      category: 'multi-sound',
-    };
-  }
-
-  // LOOPS
+export function classifySampleForLibrary(sample: SampleItem): { folderPath: string; folderId: string; category: SampleCategory } {
+  const name = `${sample.name} ${sample.originalFileName || ''}`.toLowerCase();
+  const isLoop = sample.isLoop || sample.category === 'loop' || sample.type === 'loop';
   if (isLoop) {
-    if (/drum|beat|break|groove|rhythm/i.test(name) || sample.type === 'kick' || sample.type === 'snare') {
-      if (/top|nohits|hat|perc|shaker/i.test(name)) {
-        return { folderPath: '/02_LOOPS/01_Drum_Loops/02_Top_Loops_NoKick', folderId: 'f-lp-toploops', category: 'loop' };
-      }
-      if (/perc|conga|bongo|afro/i.test(name)) {
-        return { folderPath: '/02_LOOPS/01_Drum_Loops/03_Percussion_Grooves', folderId: 'f-lp-perc', category: 'loop' };
-      }
-      return { folderPath: '/02_LOOPS/01_Drum_Loops/01_Full_Beats', folderId: 'f-lp-fullbeats', category: 'loop' };
+    if (sample.type === 'vocal' || /vox|vocal|chant|choir/.test(name)) {
+      return { folderPath: '/02_LOOPS/03_VOCAL_LOOPS', folderId: 'f-lp-vocals', category: 'loop' };
     }
-
-    if (/bass|808|sub|reese/i.test(name) || sample.type === '808' || sample.type === 'bass') {
-      return { folderPath: '/02_LOOPS/02_Melodic_Loops/01_Basslines_808', folderId: 'f-lp-basslines', category: 'loop' };
+    if (sample.type === 'pad' || /ambient|texture|drone|atmo/.test(name)) {
+      return { folderPath: '/02_LOOPS/04_TEXTURES', folderId: 'f-lp-atmo', category: 'loop' };
     }
-
-    if (/chord|prog|piano|rhodes|guitar|strum/i.test(name) || sample.type === 'pad') {
-      return { folderPath: '/02_LOOPS/02_Melodic_Loops/02_Chord_Progressions', folderId: 'f-lp-chords', category: 'loop' };
+    if (sample.type === 'kick' || sample.type === 'snare' || sample.type === 'hihat' || sample.type === 'clap' || sample.type === 'percussion' || /drum|beat|break|groove|perc/.test(name)) {
+      return { folderPath: '/02_LOOPS/01_DRUM_LOOPS', folderId: 'f-lp-drums', category: 'loop' };
     }
-
-    if (/vox|vocal|sing|chant|choir/i.test(name) || sample.type === 'vocal') {
-      return { folderPath: '/02_LOOPS/04_Vocal_Loops', folderId: 'f-lp-vocals', category: 'loop' };
-    }
-
-    if (/atmo|pad|ambient|drone|lofi|vinyl/i.test(name)) {
-      return { folderPath: '/02_LOOPS/03_Atmospheres_Textures', folderId: 'f-lp-atmo', category: 'loop' };
-    }
-
-    // Default Melodic Loop
-    return { folderPath: '/02_LOOPS/02_Melodic_Loops/03_Lead_Melodies', folderId: 'f-lp-leads', category: 'loop' };
+    return { folderPath: '/02_LOOPS/02_MELODIC_LOOPS', folderId: 'f-lp-melodic', category: 'loop' };
   }
 
-  // ONE-SHOTS
-  const type = sample.type;
-  switch (type) {
-    case 'kick':
-      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/01_Kicks', folderId: 'f-os-kicks', category: 'one-shot' };
-    case 'snare':
-    case 'clap':
-      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/02_Snares_Claps', folderId: 'f-os-snares', category: 'one-shot' };
-    case 'hihat':
-    case 'cymbal':
-      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/03_HiHats_Cymbals', folderId: 'f-os-hihats', category: 'one-shot' };
-    case 'percussion':
-      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/04_Toms_Percussion', folderId: 'f-os-percs', category: 'one-shot' };
-    case '808':
-      return { folderPath: '/01_ONE_SHOTS/02_Bass_808/01_808_SubHits', folderId: 'f-os-808', category: 'one-shot' };
-    case 'bass':
-      return { folderPath: '/01_ONE_SHOTS/02_Bass_808/02_SynthBass_Plucks', folderId: 'f-os-synthbass', category: 'one-shot' };
-    case 'lead':
-      return { folderPath: '/01_ONE_SHOTS/03_Melodic_Instruments/01_Synth_Leads_Plucks', folderId: 'f-os-leads', category: 'one-shot' };
-    case 'pad':
-      return { folderPath: '/01_ONE_SHOTS/03_Melodic_Instruments/02_Pads_Chords', folderId: 'f-os-pads', category: 'one-shot' };
-    case 'vocal':
-      return { folderPath: '/01_ONE_SHOTS/04_Vocals', folderId: 'f-os-vocals', category: 'one-shot' };
-    case 'fx':
-      return { folderPath: '/01_ONE_SHOTS/05_FX_Transitions', folderId: 'f-os-fx', category: 'one-shot' };
-    default:
-      if (/kick|bd/i.test(name)) return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/01_Kicks', folderId: 'f-os-kicks', category: 'one-shot' };
-      if (/snare|clap|rim/i.test(name)) return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/02_Snares_Claps', folderId: 'f-os-snares', category: 'one-shot' };
-      if (/hat|cymbal|ride|crash/i.test(name)) return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/03_HiHats_Cymbals', folderId: 'f-os-hihats', category: 'one-shot' };
-      if (/808|sub/i.test(name)) return { folderPath: '/01_ONE_SHOTS/02_Bass_808/01_808_SubHits', folderId: 'f-os-808', category: 'one-shot' };
-      if (/bass/i.test(name)) return { folderPath: '/01_ONE_SHOTS/02_Bass_808/02_SynthBass_Plucks', folderId: 'f-os-synthbass', category: 'one-shot' };
-      if (/vox|vocal/i.test(name)) return { folderPath: '/01_ONE_SHOTS/04_Vocals', folderId: 'f-os-vocals', category: 'one-shot' };
-      if (/fx|riser|impact|down|sweep/i.test(name)) return { folderPath: '/01_ONE_SHOTS/05_FX_Transitions', folderId: 'f-os-fx', category: 'one-shot' };
-      return { folderPath: '/01_ONE_SHOTS/01_Drums_Percussion/04_Toms_Percussion', folderId: 'f-os-percs', category: 'one-shot' };
+  if (sample.type === 'multi-sound' || sample.isMultiSound) {
+    return { folderPath: '/01_ONE_SHOTS/06_KITS_MULTI', folderId: 'f-root-multisound', category: 'multi-sound' };
   }
+  if (['kick', 'snare', 'hihat', 'clap', 'cymbal', 'percussion'].includes(sample.type)) {
+    return { folderPath: '/01_ONE_SHOTS/01_DRUMS', folderId: 'f-os-drums', category: 'one-shot' };
+  }
+  if (sample.type === '808' || sample.type === 'bass') {
+    return { folderPath: '/01_ONE_SHOTS/02_BASS_808', folderId: 'f-os-bass', category: 'one-shot' };
+  }
+  if (sample.type === 'lead' || sample.type === 'pad') {
+    return { folderPath: '/01_ONE_SHOTS/03_MELODIC', folderId: 'f-os-melodic', category: 'one-shot' };
+  }
+  if (sample.type === 'vocal') {
+    return { folderPath: '/01_ONE_SHOTS/04_VOCALS', folderId: 'f-os-vocals', category: 'one-shot' };
+  }
+  if (sample.type === 'fx') {
+    return { folderPath: '/01_ONE_SHOTS/05_FX_TEXTURES', folderId: 'f-os-fx', category: 'one-shot' };
+  }
+  return { folderPath: '/01_ONE_SHOTS/05_FX_TEXTURES', folderId: 'f-os-fx', category: 'one-shot' };
+}
+
+/** Backwards-compatible API: all tools now use the single canonical layout. */
+export function classifySampleToProFolder(sample: SampleItem): { folderPath: string; folderId: string; category: SampleCategory } {
+  return classifySampleForLibrary(sample);
 }
 
 /**

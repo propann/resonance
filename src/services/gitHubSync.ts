@@ -210,7 +210,7 @@ fi
 echo "📋 Staging assets and metadata..."
 git add .
 
-COMMIT_MSG="feat(sound-lib): sync \$(ls -1 samples/ | wc -l) categories and OP-1 kits (\$(date +'%Y-%m-%d %H:%M'))"
+COMMIT_MSG="feat(sound-lib): sync $(ls -1 samples/ | wc -l) categories and OP-1 kits ($(date +'%Y-%m-%d %H:%M'))"
 echo "✍️ Committing: \${COMMIT_MSG}"
 git commit -m "\${COMMIT_MSG}" || echo "Nothing new to commit."
 

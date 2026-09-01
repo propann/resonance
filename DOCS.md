@@ -2,7 +2,7 @@
 
 > **Plateforme :** Engineering Studio — Station de Curation Audio, Laboratoire DSP & Synchronisation Hardware  
 > **Dépôt Git :** [`propann/az-sample`](https://github.com/propann/az-sample)  
-> **Version :** `v2.4.0 Studio Master`
+> **Version :** `v2.5.0 Local Work Folder + Creator`
 
 ---
 
@@ -225,8 +225,8 @@ git push origin main
 | :--- | :--- |
 | <kbd>Espace</kbd> | Lecture / Pause du sample sélectionné |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Naviguer vers le sample précédent / suivant |
-| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Importer des fichiers audio individuels |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> | Importer un dossier complet récursivement |
+| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Réactiver le dossier de travail |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> | Ouvrir le traitement du dossier de travail |
 | <kbd>Ctrl</kbd> + <kbd>K</kbd> | Ouvrir le Studio Auto-Curateur & Rangement DSP |
 | <kbd>Ctrl</kbd> + <kbd>S</kbd> | Découper le sample actif (Slicer) |
 | <kbd>Ctrl</kbd> + <kbd>G</kbd> | Ouvrir le Hub de Synchronisation GitHub |

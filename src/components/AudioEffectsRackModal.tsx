@@ -15,6 +15,7 @@ import {
   Volume2,
   Check,
   Zap,
+  Save,
 } from 'lucide-react';
 import { SampleItem } from '../types/sample';
 import {
@@ -27,13 +28,27 @@ import { DspSidebar } from './dsp/DspSidebar';
 import { DspWaveformMonitor } from './dsp/DspWaveformMonitor';
 import { DspControlsCards } from './dsp/DspControlsCards';
 import { EffectModuleKey, EFFECT_MODULES } from './dsp/dspTypes';
+import { readStudioSettings, writeStudioSettings, type DirectoryHandle } from '../services/localLibrary';
 
 interface AudioEffectsRackModalProps {
   sample: SampleItem;
   isOpen: boolean;
   onClose: () => void;
-  onSaveAsNewSample: (newSample: Partial<SampleItem> & { name: string; audioBuffer: AudioBuffer }) => void;
+  onSaveAsNewSample: (newSample: SampleItem) => void;
   onOverwriteSample?: (updatedSample: SampleItem) => void;
+  libraryRoot?: DirectoryHandle | null;
+}
+
+interface StoredDspPreset {
+  id: string;
+  name: string;
+  config: DspRackConfig;
+}
+
+const CUSTOM_DSP_PRESETS_KEY = 'resonance-custom-dsp-presets-v1';
+
+function cloneRackConfig(config: DspRackConfig): DspRackConfig {
+  return JSON.parse(JSON.stringify(config)) as DspRackConfig;
 }
 
 export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
@@ -42,9 +57,8 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
   onClose,
   onSaveAsNewSample,
   onOverwriteSample,
+  libraryRoot,
 }) => {
-  if (!isOpen) return null;
-
   // DSP Configuration state
   const [config, setConfig] = useState<DspRackConfig>(() => ({
     ...DEFAULT_DSP_RACK_CONFIG,
@@ -59,6 +73,15 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
   const [previewMode, setPreviewMode] = useState<'processed' | 'dry'>('processed');
   const [isLiveAuditionLoop, setIsLiveAuditionLoop] = useState<boolean>(true);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
+  const [customPresets, setCustomPresets] = useState<StoredDspPreset[]>(() => {
+    try {
+      const stored = localStorage.getItem(CUSTOM_DSP_PRESETS_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Layout focus state
   const [activeFocus, setActiveFocus] = useState<EffectModuleKey | 'all'>('all');
@@ -70,6 +93,17 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
   const startTimeRef = useRef<number>(0);
   const playheadRafRef = useRef<number | null>(null);
   const debounceTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    localStorage.setItem(CUSTOM_DSP_PRESETS_KEY, JSON.stringify(customPresets));
+  }, [customPresets]);
+
+  useEffect(() => {
+    if (!isOpen || !libraryRoot) return;
+    readStudioSettings(libraryRoot).then((settings) => {
+      if (Array.isArray(settings.dspPresets)) setCustomPresets(settings.dspPresets as StoredDspPreset[]);
+    });
+  }, [isOpen, libraryRoot]);
 
   // Check if a specific module is enabled
   const isModuleActive = useCallback(
@@ -387,7 +421,7 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
         case 'combResonator':
           next.combResonator = { ...next.combResonator, enabled: !next.combResonator.enabled };
           break;
-        case 'surgical':
+        case 'surgical': {
           const isActive =
             next.surgical.reverse ||
             next.surgical.tapeStopBrakeSec > 0 ||
@@ -411,6 +445,7 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
             };
           }
           break;
+        }
       }
       return next;
     });
@@ -495,6 +530,27 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
     }
   };
 
+  const handleSavePreset = () => {
+    const name = window.prompt('Nom du preset DSP :');
+    if (!name?.trim()) return;
+    const normalizedName = name.trim().slice(0, 60);
+    setCustomPresets((previous) => {
+      const nextPreset: StoredDspPreset = {
+        id: `custom-${Date.now().toString(36)}`,
+        name: normalizedName,
+        config: cloneRackConfig(config),
+      };
+      const next = [...previous.filter((preset) => preset.name.toLowerCase() !== normalizedName.toLowerCase()), nextPreset];
+      if (libraryRoot) void writeStudioSettings(libraryRoot, { dspPresets: next });
+      return next;
+    });
+  };
+
+  const handleLoadPreset = (presetId: string) => {
+    const preset = customPresets.find((item) => item.id === presetId);
+    if (preset) setConfig(cloneRackConfig(preset.config));
+  };
+
   // Download treated WAV file
   const handleDownloadWav = () => {
     const targetBuffer = processedBuffer || sample.audioBuffer;
@@ -515,14 +571,26 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
     const targetBuffer = processedBuffer || sample.audioBuffer;
     if (!targetBuffer) return;
 
+    const blob = audioBufferToWavBlob(targetBuffer, { bitDepth: 24, normalize: false });
+    const name = `${sample.name.replace(/\.[^/.]+$/, '')}_DSP`;
+
     onSaveAsNewSample({
-      name: `${sample.name.replace(/\.[^/.]+$/, '')} (DSP RACK)`,
+      ...sample,
+      id: `dsp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      originalFileName: sample.originalFileName || sample.name,
       audioBuffer: targetBuffer,
+      blobUrl: URL.createObjectURL(blob),
+      size: blob.size,
       duration: targetBuffer.duration,
+      sampleRate: targetBuffer.sampleRate,
+      channels: targetBuffer.numberOfChannels,
+      format: 'wav',
       category: sample.category,
       bpm: sample.bpm,
       key: sample.key,
       tags: Array.from(new Set([...(sample.tags || []), 'dsp-rack', 'processed'])),
+      dateAdded: Date.now(),
     });
     stopAudio();
     onClose();
@@ -543,6 +611,8 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
     stopAudio();
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md">
@@ -597,6 +667,26 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-2">
+            <select
+              defaultValue=""
+              onChange={(event) => {
+                if (event.target.value) handleLoadPreset(event.target.value);
+                event.currentTarget.value = '';
+              }}
+              className="max-w-32 bg-[#18182A] border border-[#303046] rounded px-2 py-1.5 text-xs font-mono text-white"
+              title="Charger un preset DSP sauvegardé"
+            >
+              <option value="">PRESET…</option>
+              {customPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+            </select>
+            <button
+              onClick={handleSavePreset}
+              className="px-2.5 py-1.5 bg-[#A855F7]/20 hover:bg-[#A855F7]/35 text-[#E9D5FF] border border-[#A855F7]/50 rounded text-xs font-mono font-bold flex items-center gap-1"
+              title="Sauvegarder ces réglages comme preset"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">SAUVER FX</span>
+            </button>
             {onOverwriteSample && (
               <button
                 onClick={handleOverwrite}

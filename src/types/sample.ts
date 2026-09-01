@@ -86,6 +86,8 @@ export interface SampleItem {
   colorTag?: string;
   isMultiSound?: boolean;
   ep133Slot?: number; // 1 - 999
+  /** Relative file path inside the connected working folder, when loaded from manifest. */
+  diskPath?: string;
 }
 
 export interface FolderItem {

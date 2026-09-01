@@ -403,14 +403,14 @@ export function encodeOp1AiffPatch(
 
   for (let i = 0; i < numFrames; i++) {
     // Left Channel (16-bit Big Endian)
-    let sL = Math.max(-1, Math.min(1, left[i]));
-    let valL = sL < 0 ? sL * 0x8000 : sL * 0x7fff;
+    const sL = Math.max(-1, Math.min(1, left[i]));
+    const valL = sL < 0 ? sL * 0x8000 : sL * 0x7fff;
     view.setInt16(offset, Math.floor(valL), false);
     offset += 2;
 
     if (numChannels > 1) {
-      let sR = Math.max(-1, Math.min(1, right[i]));
-      let valR = sR < 0 ? sR * 0x8000 : sR * 0x7fff;
+      const sR = Math.max(-1, Math.min(1, right[i]));
+      const valR = sR < 0 ? sR * 0x8000 : sR * 0x7fff;
       view.setInt16(offset, Math.floor(valR), false);
       offset += 2;
     }
@@ -524,14 +524,14 @@ export function encodeOp1SynthPatch(
   const right = numChannels > 1 ? buffer.getChannelData(1) : left;
 
   for (let i = 0; i < numFrames; i++) {
-    let sL = Math.max(-1, Math.min(1, left[i]));
-    let valL = sL < 0 ? sL * 0x8000 : sL * 0x7fff;
+    const sL = Math.max(-1, Math.min(1, left[i]));
+    const valL = sL < 0 ? sL * 0x8000 : sL * 0x7fff;
     view.setInt16(offset, Math.floor(valL), false);
     offset += 2;
 
     if (numChannels > 1) {
-      let sR = Math.max(-1, Math.min(1, right[i]));
-      let valR = sR < 0 ? sR * 0x8000 : sR * 0x7fff;
+      const sR = Math.max(-1, Math.min(1, right[i]));
+      const valR = sR < 0 ? sR * 0x8000 : sR * 0x7fff;
       view.setInt16(offset, Math.floor(valR), false);
       offset += 2;
     }

@@ -39,9 +39,30 @@ interface SidebarProps {
   onAutoOrganizeLibrary?: () => void;
   activeView: 'library' | 'timbre';
   onViewChange: (view: 'library' | 'timbre') => void;
+  physicalSampleCount?: number;
+  diskFolderCounts?: Record<string, number>;
 }
 
 const MUSICAL_KEYS = ['all', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+// The visual tree predates the on-disk structure. Map its useful category nodes
+// to the canonical folders so their badges always show physical file counts.
+const DISK_PATH_BY_FOLDER_ID: Record<string, string> = {
+  'f-root-oneshots': '01_ONE_SHOTS',
+  'f-os-drums': '01_ONE_SHOTS/01_DRUMS',
+  'f-os-bass': '01_ONE_SHOTS/02_BASS_808',
+  'f-os-melodic': '01_ONE_SHOTS/03_MELODIC',
+  'f-os-vocals': '01_ONE_SHOTS/04_VOCALS',
+  'f-os-fx': '01_ONE_SHOTS/05_FX_TEXTURES',
+  'f-root-loops': '02_LOOPS',
+  'f-lp-drums': '02_LOOPS/01_DRUM_LOOPS',
+  'f-lp-melodic': '02_LOOPS/02_MELODIC_LOOPS',
+  'f-lp-vocals': '02_LOOPS/03_VOCAL_LOOPS',
+  'f-lp-atmo': '02_LOOPS/04_TEXTURES',
+  'f-root-multisound': '01_ONE_SHOTS/06_KITS_MULTI',
+  'f-root-hardware': '03_HARDWARE',
+  'f-op1-patches': '03_HARDWARE/OP-1_DRUM_PATCHES',
+};
 
 const SAMPLE_TYPES: { id: SampleType | 'all'; label: string; color: string }[] = [
   { id: 'all', label: 'TOUS LES SONS', color: '#00F0FF' },
@@ -84,8 +105,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAutoOrganizeLibrary,
   activeView,
   onViewChange,
+  physicalSampleCount = 0,
+  diskFolderCounts = {},
 }) => {
   const [sidebarTab, setSidebarTab] = useState<'folders' | 'types' | 'hardware' | 'keys'>('folders');
+  const diskCountFor = (folder: FolderItem) => {
+    const path = DISK_PATH_BY_FOLDER_ID[folder.id] || folder.path.replace(/^\//, '');
+    return diskFolderCounts[path] || 0;
+  };
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderName, setNewFolderName] = useState<string>('');
   const [newFolderColor, setNewFolderColor] = useState<string>('#00F0FF');
@@ -386,7 +413,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="font-mono text-xs font-semibold">TOUS LES FICHIERS</span>
                 </div>
                 <span className="text-[10px] font-pixel px-1.5 py-0.2 bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30">
-                  {samples.length}
+                  {Math.max(samples.length, physicalSampleCount)}
                 </span>
               </button>
 
@@ -453,7 +480,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             backgroundColor: `${rootFolder.color || '#FFE600'}15`,
                           }}
                         >
-                          {totalCount}
+                          {Math.max(totalCount, diskCountFor(rootFolder))}
                         </span>
                         {!rootFolder.id.startsWith('f-') && (
                           <button
@@ -529,7 +556,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                       backgroundColor: `${subFolder.color || '#00F0FF'}15`,
                                     }}
                                   >
-                                    {subCount}
+                                  {Math.max(subCount, diskCountFor(subFolder))}
                                   </span>
                                   {!subFolder.id.startsWith('f-') && (
                                     <button
@@ -569,7 +596,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                           <span className="text-[10px] truncate">{leafFolder.name}</span>
                                         </button>
                                         <span className="text-[8px] font-pixel text-[#8E8E93] bg-[#14141E] px-1 py-0.2 border border-[#222230]">
-                                          {leafCount}
+                                          {Math.max(leafCount, diskCountFor(leafFolder))}
                                         </span>
                                       </div>
                                     );

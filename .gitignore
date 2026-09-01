@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Upstream DSP engine sources (Dexed, Mutable) — heavy, added out-of-band.
+# See vendor/README.md. To be pinned as submodules/sparse-checkout in Phase 6.
+vendor/

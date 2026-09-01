@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
-  Waves,
   Search,
   Upload,
   FolderUp,
+  FolderOpen,
   Mic,
   FileCode2,
   Sparkles,
@@ -27,8 +27,13 @@ import { audioEngine } from '../services/audioEngine';
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onImportFiles: (files: FileList | File[]) => void;
-  onOpenSmartIngest: () => void;
+  onImportFiles?: (files: FileList | File[]) => void;
+  onReactivateWorkFolder?: () => void;
+  workFolderName?: string | null;
+  workFolderStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
+  incomingCount?: number;
+  failedIncomingCount?: number;
+  onOpenSmartIngest?: () => void;
   onOpenBenchmark: () => void;
   onExportEp133Pack: () => void;
   onOpenOp1Studio?: () => void;
@@ -37,6 +42,8 @@ interface HeaderProps {
   onOpenBatchConverter: () => void;
   onOpenBatchNaming?: () => void;
   onOpenDspAnalyzer?: () => void;
+  onOpenSynthRack?: () => void;
+  onOpenAdvancedRack?: () => void;
   onOpenFxRack?: () => void;
   onOpenAutoSlicer?: () => void;
   onOpenAutoCurator?: () => void;
@@ -56,6 +63,11 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   onSearchChange,
   onImportFiles,
+  onReactivateWorkFolder,
+  workFolderName,
+  workFolderStatus = 'disconnected',
+  incomingCount = 0,
+  failedIncomingCount = 0,
   onOpenSmartIngest,
   onOpenBenchmark,
   onExportEp133Pack,
@@ -65,6 +77,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBatchConverter,
   onOpenBatchNaming,
   onOpenDspAnalyzer,
+  onOpenSynthRack,
+  onOpenAdvancedRack,
   onOpenFxRack,
   onOpenAutoSlicer,
   onOpenAutoCurator,
@@ -99,27 +113,27 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      onImportFiles(e.target.files);
+      onImportFiles?.(e.target.files);
     }
   };
 
   return (
-    <header id="app-header" className="h-12 bg-[#0E0E14] border-b-2 border-[#1E1E26] px-3 sm:px-4 flex items-center justify-between select-none z-30 pixel-box gap-2">
+    <header id="app-header" className="min-h-14 bg-[#0E0E14] border-b-2 border-[#1E1E26] px-3 sm:px-4 flex items-center justify-between select-none z-30 pixel-box gap-2">
       {/* Brand & Logo */}
       <div className="flex items-center gap-2 shrink-0">
-        <div className="w-7 h-7 bg-[#00F0FF] text-black font-extrabold flex items-center justify-center border border-[#00C8D6] pixel-btn">
-          <Waves className="w-4 h-4" />
+        <div className="w-8 h-8 bg-[#060609] flex items-center justify-center border border-[#00C8D6] rounded pixel-btn overflow-hidden" title="Resonance">
+          <img src="/resonance-logo.png" alt="Resonance" className="w-full h-full object-cover" />
         </div>
         <div className="hidden sm:block">
           <div className="flex items-center gap-1.5">
-            <h1 className="text-xs font-pixel font-bold tracking-wider text-[#EDEDEE] uppercase">
+            <h1 className="text-sm font-pixel font-bold tracking-wider text-[#EDEDEE] uppercase">
               RESONANCE
             </h1>
-            <span className="px-1 py-0.2 text-[8px] font-pixel bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/40">
+            <span className="px-1.5 py-0.5 text-[9px] font-pixel bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/40">
               PRO DSP
             </span>
           </div>
-          <p className="text-[8px] font-pixel text-[#8E8E93]">
+          <p className="text-[10px] font-pixel text-[#A9A9B2]">
             {samplesCount} SAMPLES • 48kHz
           </p>
         </div>
@@ -181,10 +195,10 @@ export const Header: React.FC<HeaderProps> = ({
           <input
             id="global-search-input"
             type="text"
-            placeholder="RECHERCHER SAMPLE, BPM, CLÉ..."
+            placeholder="Rechercher un sample, BPM, tonalité…"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-[#060609] border-2 border-[#242432] pl-7 pr-2 py-1 text-[10px] font-pixel text-[#00F0FF] placeholder-[#5A5A62] focus:outline-none focus:border-[#00F0FF] transition"
+            className="w-full bg-[#060609] border-2 border-[#242432] pl-7 pr-2 py-1.5 text-xs font-medium text-[#EDEDEE] placeholder-[#9696A2] focus:outline-none focus:border-[#00F0FF] transition"
           />
         </div>
       </div>
@@ -212,43 +226,57 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Hidden File / Folder Inputs */}
-        <input
+        {onImportFiles && <input
           ref={fileInputRef}
           type="file"
           multiple
           accept="audio/*,.wav,.mp3,.ogg,.flac,.aiff,.webm,.m4a"
           onChange={handleFileInputChange}
           className="hidden"
-        />
-        <input
+        />}
+        {onImportFiles && <input
           ref={folderInputRef}
           type="file"
           {...({ webkitdirectory: '', directory: '', multiple: true } as React.InputHTMLAttributes<HTMLInputElement>)}
           onChange={handleFileInputChange}
           className="hidden"
-        />
+        />}
 
         {/* Import Files Button */}
-        <button
+        {onImportFiles && <button
           id="import-files-btn"
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1 px-2 py-1 bg-[#14141C] hover:bg-[#1E1E28] text-[#EDEDEE] border-2 border-[#242432] text-[9px] font-pixel pixel-btn"
           title="Importer des fichiers audio (Ctrl+O)"
         >
           <Upload className="w-3 h-3 text-[#00F0FF]" />
-          <span className="hidden sm:inline">FICHIERS</span>
-        </button>
+          <span className="hidden sm:inline">IMPORTER</span>
+        </button>}
 
         {/* Import Folder Button */}
-        <button
+        {onImportFiles && <button
           id="import-folder-btn"
           onClick={() => folderInputRef.current?.click()}
           className="flex items-center gap-1 px-2 py-1 bg-[#14141C] hover:bg-[#1E1E28] text-[#EDEDEE] border-2 border-[#242432] text-[9px] font-pixel pixel-btn"
           title="Importer un dossier entier de samples (Ctrl+Shift+O)"
         >
           <FolderUp className="w-3 h-3 text-[#00F0FF]" />
-          <span className="hidden sm:inline">DOSSIER</span>
-        </button>
+          <span className="hidden sm:inline">DOSSIER AUDIO</span>
+        </button>}
+
+        {onReactivateWorkFolder && (
+          <button
+            id="reactivate-work-folder-btn"
+            onClick={onReactivateWorkFolder}
+            className="flex items-center gap-1 px-2 py-1 bg-[#FFE600]/15 hover:bg-[#FFE600] text-[#FFE600] hover:text-black border-2 border-[#FFE600]/50 text-[9px] font-pixel font-bold pixel-btn"
+            title={workFolderStatus === 'connected' ? `Dossier actif : ${workFolderName || 'sans nom'}. Cliquer pour vérifier l'autorisation.` : 'Connecter ou réactiver le dossier de travail'}
+          >
+            <FolderOpen className="w-3 h-3" />
+            <span className="hidden sm:inline">{workFolderStatus === 'connecting' ? 'CONNEXION…' : workFolderStatus === 'connected' ? 'DOSSIER ACTIF' : 'CONNECTER DOSSIER'}</span>
+            {incomingCount > 0 && <span className="min-w-4 px-1 bg-black/20 text-[8px] text-current">{incomingCount}</span>}
+            {failedIncomingCount > 0 && <span className="min-w-4 px-1 bg-[#FF3366] text-[8px] text-white">!{failedIncomingCount}</span>}
+          </button>
+        )}
 
         {/* Auto-Organize Library Pro Folders */}
         {onOpenAutoCurator && (
@@ -301,8 +329,21 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {onOpenSynthRack && (
+          <button onClick={onOpenSynthRack} className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#A855F7]/20 hover:bg-[#A855F7]/35 text-[#E9D5FF] border-2 border-[#A855F7]/50 text-[9px] font-pixel pixel-btn" title="Ouvrir le rack de 10 moteurs synth et MIDI">
+            <Wand2 className="w-3 h-3" />
+            <span>SYNTH RACK</span>
+          </button>
+        )}
+        {onOpenAdvancedRack && (
+          <button onClick={onOpenAdvancedRack} className="hidden xl:flex items-center gap-1 px-2 py-1 bg-[#FFB000]/15 hover:bg-[#FFB000]/30 text-[#FFE08A] border-2 border-[#FFB000]/50 text-[9px] font-pixel pixel-btn" title="Rack d’extensions Dexed et Mutable, chargé à la demande">
+            <Flame className="w-3 h-3" />
+            <span>EXTENSIONS</span>
+          </button>
+        )}
+
         {/* Smart Ingestion Magic Drop Button */}
-        <button
+        {onOpenSmartIngest && <button
           id="open-smart-ingest-btn"
           onClick={onOpenSmartIngest}
           className="hidden md:flex items-center gap-1 px-2 py-1 bg-[#00F0FF] text-black font-bold text-[9px] font-pixel hover:bg-[#38BDF8] border-2 border-[#00C8D6] pixel-btn"
@@ -310,7 +351,7 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Sparkles className="w-3 h-3" />
           <span>INGEST</span>
-        </button>
+        </button>}
 
         {/* Convention & Batch Renaming Button */}
         {onOpenBatchNaming && (

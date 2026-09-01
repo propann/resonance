@@ -144,7 +144,7 @@ export function generateMultiBandData(buffer: AudioBuffer, targetPoints = 800): 
     let maxPeak = 0;
     let sumSquares = 0;
     let lowEnergy = 0;
-    let midEnergy = 0;
+    const midEnergy = 0;
     let highEnergy = 0;
 
     let lpPrev = 0;

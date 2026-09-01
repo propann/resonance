@@ -3,6 +3,30 @@ import { BatchConvertSettings, HardwarePreset, SampleItem, SliceRegion } from '.
 import { audioEngine } from './audioEngine';
 import { batchGenerateOp1Kits } from './op1PatchEncoder';
 
+/** Creates a correctly timed buffer at the requested rate using linear interpolation. */
+function resampleBuffer(buffer: AudioBuffer, targetSampleRate: number): AudioBuffer {
+  if (targetSampleRate === buffer.sampleRate) return buffer;
+  const targetLength = Math.max(1, Math.round(buffer.length * targetSampleRate / buffer.sampleRate));
+  const output = new AudioBuffer({
+    length: targetLength,
+    numberOfChannels: buffer.numberOfChannels,
+    sampleRate: targetSampleRate,
+  });
+  const ratio = buffer.sampleRate / targetSampleRate;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const input = buffer.getChannelData(channel);
+    const target = output.getChannelData(channel);
+    for (let index = 0; index < targetLength; index++) {
+      const position = index * ratio;
+      const left = Math.floor(position);
+      const right = Math.min(left + 1, input.length - 1);
+      const fraction = position - left;
+      target[index] = input[left] * (1 - fraction) + input[right] * fraction;
+    }
+  }
+  return output;
+}
+
 /**
  * Encodes an AudioBuffer into a WAV Blob (16-bit, 24-bit, or 32-bit float PCM) with optional loudness leveling and BWF/ACID metadata
  */
@@ -32,19 +56,21 @@ export function audioBufferToWavBlob(
   const removeDc = options?.removeDc ?? true;
   const monoSum = options?.monoSum ?? false;
 
-  const srcSampleRate = buffer.sampleRate;
-  const numChannels = monoSum ? 1 : buffer.numberOfChannels;
+  const targetSampleRate = options?.sampleRate || buffer.sampleRate;
+  const sourceBuffer = resampleBuffer(buffer, targetSampleRate);
+  const srcSampleRate = sourceBuffer.sampleRate;
+  const numChannels = monoSum ? 1 : sourceBuffer.numberOfChannels;
 
   let startSample = Math.max(0, Math.floor((options?.startSec ?? 0) * srcSampleRate));
   let endSample = Math.min(
-    buffer.length,
-    Math.floor((options?.endSec ?? buffer.duration) * srcSampleRate)
+    sourceBuffer.length,
+    Math.floor((options?.endSec ?? sourceBuffer.duration) * srcSampleRate)
   );
 
   // Optional micro-silence trimming at head and tail
   if (options?.trimSilence) {
     const thresh = Math.pow(10, (options.silenceThresholdDb ?? -48) / 20);
-    const c0 = buffer.getChannelData(0);
+    const c0 = sourceBuffer.getChannelData(0);
 
     // Find first sample above threshold
     while (startSample < endSample && Math.abs(c0[startSample]) < thresh) {
@@ -60,18 +86,18 @@ export function audioBufferToWavBlob(
 
   // Extract channels
   const channels: Float32Array[] = [];
-  if (monoSum && buffer.numberOfChannels > 1) {
+  if (monoSum && sourceBuffer.numberOfChannels > 1) {
     const mono = new Float32Array(length);
-    const c0 = buffer.getChannelData(0);
-    const c1 = buffer.getChannelData(1);
+    const c0 = sourceBuffer.getChannelData(0);
+    const c1 = sourceBuffer.getChannelData(1);
     for (let i = 0; i < length; i++) {
       // -3dB pan-law sum
       mono[i] = (c0[startSample + i] + c1[startSample + i]) * 0.707;
     }
     channels.push(mono);
   } else {
-    for (let c = 0; c < buffer.numberOfChannels; c++) {
-      const src = buffer.getChannelData(c);
+    for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
+      const src = sourceBuffer.getChannelData(c);
       const chData = new Float32Array(length);
       for (let i = 0; i < length; i++) {
         chData[i] = src[startSample + i];
@@ -129,7 +155,7 @@ export function audioBufferToWavBlob(
   }
 
   // Format header configuration
-  const outSampleRate = options?.sampleRate || srcSampleRate;
+  const outSampleRate = srcSampleRate;
   const bytesPerSample = bitDepth / 8;
   const blockAlign = numChannels * bytesPerSample;
   const byteRate = outSampleRate * blockAlign;

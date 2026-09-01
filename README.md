@@ -14,6 +14,8 @@
 
 [📖 Guide Utilisateur (DOCS.md)](./DOCS.md) • [🏷️ Convention de Nommage (CONVENTION.md)](./CONVENTION.md) • [⚡ Dépôt Cible (`propann/az-sample`)](https://github.com/propann/az-sample)
 
+[🔎 Audit du code (01/09/2026)](./docs/AUDIT-2026-09.md) • [🗺️ Feuille de route](./docs/ROADMAP.md)
+
 </div>
 
 ---
@@ -54,7 +56,7 @@
 - **Analyse Spectrale & Tonalité :** Algorithmes d'autocorrélation et de centroïde spectral pour identifier automatiquement la note fondamentale ($f_0$), la gamme (Majeur/Mineur), le tempo en BPM et les tranches de transitoires.
 - **Enrichissement de Tags Timbraux :** Génération de métadonnées sémantiques précises (`punchy`, `warm`, `bright`, `sub-heavy`, `crisp`, `saturated`, `tight`, `sustained`).
 - **Formatage Audio Conforme :** Conversion et encodage automatique en **WAV 24-bit 48kHz** (Master Studio) ou **16-bit 46.8k/44.1k** (Hardware).
-- **Rangement Épuré en 7 Dossiers :** Classement rationnel sans prolifération anarchique de sous-dossiers (`01_DRUMS`, `02_BASS_808`, `03_MELODIC`, `04_VOCALS`, `05_FX_TEXTURES`, `06_LOOPS`, `07_INSTRUMENTS`).
+- **Rangement par dossier de travail :** Le scan crée et utilise `00_RECEPTION`, `01_ONE_SHOTS`, `02_LOOPS`, `03_HARDWARE` et `_MANIFEST`, avec des sous-dossiers spécialisés.
 
 ### 2. 🔬 Laboratoire d'Analyse Acoustique DSP
 - **Mesure de Loudness EBU R128 :** Calcul intégré LUFS, True Peak (dBFS), RMS et Facteur de Crête (Crest Factor).
@@ -139,6 +141,14 @@ npm run build
 ```
 Les fichiers statiques optimisés sont générés dans le dossier `dist/`.
 
+### Shell desktop (Windows / macOS / Linux)
+Après installation complète des scripts Electron :
+```bash
+npm run build
+npm run desktop:start
+```
+En développement, lancer Vite puis `npm run desktop:dev`. Le shell garde le traitement audio côté application et prépare le point d'entrée des moteurs natifs.
+
 ### Validation TypeScript & Linting
 ```bash
 npm run lint
@@ -152,8 +162,8 @@ npm run lint
 | :--- | :--- |
 | <kbd>Espace</kbd> | Lecture / Pause du sample actif |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Naviguer dans la liste des sons |
-| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Importer des fichiers audio |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> | Importer un dossier complet |
+| <kbd>Ctrl</kbd> + <kbd>O</kbd> | Réactiver le dossier de travail |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> | Ouvrir le traitement du dossier de travail |
 | <kbd>Ctrl</kbd> + <kbd>K</kbd> | Ouvrir le Studio Auto-Curateur & Rangement DSP |
 | <kbd>Ctrl</kbd> + <kbd>S</kbd> | Ouvrir le Découpeur de Transitoires (Slicer) |
 | <kbd>Ctrl</kbd> + <kbd>G</kbd> | Ouvrir le Hub de Synchronisation GitHub |
