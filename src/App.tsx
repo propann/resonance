@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { DEFAULT_FOLDERS } from './data/defaultSampleLibrary';
+import { useResizablePanels } from './hooks/useResizablePanels';
 import {
   SampleItem,
   FolderItem,
@@ -70,28 +71,14 @@ export default function App() {
   const [activeView, setActiveView] = useState<'library' | 'timbre'>('library');
 
   // Dynamic Resizable Windows & Panels
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('resonance_sidebar_width_v2');
-      if (saved) return Number(saved);
-    } catch (e) {
-      // Ignorer
-    }
-    return 280;
-  });
-
-  const [waveformHeight, setWaveformHeight] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('resonance_waveform_height_v2');
-      if (saved) return Number(saved);
-    } catch (e) {
-      // Ignorer
-    }
-    return 175;
-  });
-
-  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
-  const [isResizingWaveform, setIsResizingWaveform] = useState<boolean>(false);
+  const {
+    sidebarWidth,
+    waveformHeight,
+    isResizingSidebar,
+    isResizingWaveform,
+    startSidebarResize,
+    startWaveformResize,
+  } = useResizablePanels();
 
   // Modals state
   const [slicerSample, setSlicerSample] = useState<SampleItem | null>(null);
@@ -352,58 +339,6 @@ export default function App() {
       window.clearInterval(timer);
     };
   }, [libraryRoot, isAutoCuratorOpen, isCuratorProcessing]);
-
-  // Handlers pour le redimensionnement vertical à la souris (Sidebar Splitter)
-  const handleStartSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    const startX = e.clientX;
-    const startWidth = sidebarWidth;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const newW = Math.max(190, Math.min(520, startWidth + deltaX));
-      setSidebarWidth(newW);
-      try {
-        localStorage.setItem('resonance_sidebar_width_v2', String(newW));
-      } catch (err) {}
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Handlers pour le redimensionnement horizontal à la souris (Waveform Splitter)
-  const handleStartWaveformResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingWaveform(true);
-    const startY = e.clientY;
-    const startHeight = waveformHeight;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = moveEvent.clientY - startY;
-      const newH = Math.max(100, Math.min(420, startHeight + deltaY));
-      setWaveformHeight(newH);
-      try {
-        localStorage.setItem('resonance_waveform_height_v2', String(newH));
-      } catch (err) {}
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingWaveform(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
 
   // Filtered and Sorted Samples list
   const filteredSamples = useMemo(() => {
@@ -1134,7 +1069,7 @@ export default function App() {
 
         {/* Vertical Splitter Handle (Resize Sidebar Width with Mouse Drag) */}
         <div
-          onMouseDown={handleStartSidebarResize}
+          onMouseDown={startSidebarResize}
           className={`w-2 hover:w-2.5 bg-[#141420] hover:bg-[#00F0FF] cursor-col-resize flex-shrink-0 transition-colors z-20 flex items-center justify-center group select-none ${
             isResizingSidebar ? 'bg-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.5)]' : ''
           }`}
@@ -1185,7 +1120,7 @@ export default function App() {
 
               {/* Horizontal Splitter Handle (Resize Waveform Height with Mouse Drag) */}
               <div
-                onMouseDown={handleStartWaveformResize}
+                onMouseDown={startWaveformResize}
                 className={`h-2 hover:h-2.5 bg-[#141420] hover:bg-[#00F0FF] cursor-row-resize flex-shrink-0 transition-colors z-10 flex items-center justify-center group select-none rounded ${
                   isResizingWaveform ? 'bg-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.5)]' : ''
                 }`}
