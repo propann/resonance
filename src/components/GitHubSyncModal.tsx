@@ -31,6 +31,38 @@ import {
   generatePushScript,
 } from '../services/gitHubSync';
 import { triggerFileDownload } from '../services/audioConverter';
+import { isDesktop, desktopFS } from '../services/desktopBridge';
+
+const PAT_KEY = 'resonance_github_pat';
+
+/** Load the GitHub PAT: encrypted OS store on desktop, sessionStorage otherwise. */
+async function loadStoredPat(): Promise<string> {
+  if (isDesktop()) {
+    try {
+      return (await desktopFS().getSecret(PAT_KEY)) ?? '';
+    } catch {
+      return '';
+    }
+  }
+  try {
+    return sessionStorage.getItem(PAT_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function storePat(token: string): void {
+  if (isDesktop()) {
+    void desktopFS().setSecret(PAT_KEY, token || null);
+    return;
+  }
+  try {
+    if (token) sessionStorage.setItem(PAT_KEY, token);
+    else sessionStorage.removeItem(PAT_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 interface GitHubSyncModalProps {
   isOpen: boolean;
@@ -45,13 +77,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   onClose,
   samples,
 }) => {
-  const [config, setConfig] = useState<GitHubSyncConfig>(() => {
-    const savedToken = localStorage.getItem('az_sample_gh_token') || '';
-    return {
-      ...DEFAULT_GITHUB_CONFIG,
-      token: savedToken,
-    };
-  });
+  const [config, setConfig] = useState<GitHubSyncConfig>(() => ({ ...DEFAULT_GITHUB_CONFIG }));
 
   const [activeTab, setActiveTab] = useState<TabType>('push');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -61,10 +87,19 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   const [copiedCli, setCopiedCli] = useState<boolean>(false);
   const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
 
+  // Load any previously stored token once.
   useEffect(() => {
-    if (config.token) {
-      localStorage.setItem('az_sample_gh_token', config.token);
-    }
+    let cancelled = false;
+    void loadStoredPat().then((token) => {
+      if (!cancelled && token) setConfig((prev) => ({ ...prev, token }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    storePat(config.token || '');
   }, [config.token]);
 
   if (!isOpen) return null;
@@ -307,7 +342,8 @@ git push origin ${config.branch}`;
                       className="w-full px-3 py-2 rounded-lg bg-[#0E0E14] border border-[#2A2A3C] text-xs text-white font-mono focus:border-[#00F0FF] outline-none placeholder:text-[#4A4A5E]"
                     />
                     <p className="text-[10px] text-[#8A8A9E] mt-1">
-                      Le token est stocké localement dans votre navigateur pour vos sessions.
+                      Version bureau : le token est chiffré via le trousseau du système. Version
+                      navigateur : conservé uniquement le temps de la session.
                     </p>
                   </div>
                 </div>
