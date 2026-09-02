@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { syncDivisionToSeconds } from './dspEffectsEngine';
+import { syncDivisionToSeconds } from './tempoSync';
 
 describe('syncDivisionToSeconds', () => {
   it('maps straight divisions at 120 BPM', () => {
