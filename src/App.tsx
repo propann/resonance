@@ -854,6 +854,7 @@ export default function App() {
         failedIncomingCount={failedIncomingCount}
         onOpenAutoCurator={() => openModal('autoCurator')}
         onOpenDocumentation={() => openModal('doc')}
+        onOpenShortcuts={() => openModal('shortcuts')}
         onOpenBenchmark={() => openModal('benchmark')}
         onExportEp133Pack={handleExportEp133Pack}
         onOpenOp1Studio={() => openModal('op1Studio')}

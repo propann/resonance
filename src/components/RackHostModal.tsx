@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Play, Pause, Save, RotateCcw, Repeat } from 'lucide-react';
+import { Play, Pause, Save, RotateCcw, Repeat, Sliders } from 'lucide-react';
 import { SampleItem } from '../types/sample';
+import { Modal } from './Modal';
 import { audioGraph } from '../services/audioGraph';
 import { audioBufferToWavBlob } from '../services/audioConverter';
 import { calculateAudioMetrics } from '../services/audioAnalyzer';
@@ -44,8 +45,10 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
 
   const rackRef = useRef<Rack | null>(null);
   const srcRef = useRef<AudioBufferSourceNode | null>(null);
-  const lastStructRef = useRef('');
+  const lastStructRef = useRef<string | null>(null);
   const lastParamsRef = useRef<Record<string, ParamValues>>({});
+  // Serialises rack rebuilds so overlapping setState() calls can't race.
+  const syncChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [loop, setLoop] = useState(true);
@@ -86,32 +89,27 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     setIsPlaying(true);
   }, [sample, loop, stopAudition]);
 
-  // Build a live Rack on the shared context while the modal is open.
+  // Create / dispose the live Rack while the modal is open. It is left empty
+  // here — the sync effect below does the initial build.
   useEffect(() => {
     if (!isOpen) return;
     const r = new Rack(audioGraph.getContext());
     r.output.connect(audioGraph.getMasterInput());
     rackRef.current = r;
-    lastStructRef.current = '';
+    lastStructRef.current = null;
     lastParamsRef.current = {};
-
-    const state = useRackStore.getState().rack;
-    void r.setState(state).then(() => {
-      lastStructRef.current = structureKey(state);
-      lastParamsRef.current = Object.fromEntries(
-        state.modules.map((m) => [m.id, { ...m.params }])
-      );
-    });
+    syncChainRef.current = Promise.resolve();
 
     return () => {
       stopAudition();
       r.dispose();
       rackRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, stopAudition]);
 
-  // Reflect store changes: rebuild on structural change, live-patch params otherwise.
+  // Keep the live Rack in sync with the store: rebuild the chain on a
+  // structural change (add / remove / reorder / enable), otherwise patch the
+  // changed parameters in place — no rebuild, no audio gap.
   useEffect(() => {
     const r = rackRef.current;
     if (!r || !isOpen) return;
@@ -119,20 +117,29 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     const nextStruct = structureKey(rack);
     if (nextStruct !== lastStructRef.current) {
       lastStructRef.current = nextStruct;
-      void r.setState(rack).then(() => {
-        lastParamsRef.current = Object.fromEntries(
-          rack.modules.map((m) => [m.id, { ...m.params }])
-        );
-      });
+      const snapshot = rack;
+      syncChainRef.current = syncChainRef.current
+        .then(() => r.setState(snapshot))
+        .then(() => {
+          // Re-apply whatever the store holds *now* — params may have been
+          // dragged while the async rebuild was in flight.
+          const current = useRackStore.getState().rack;
+          const next: Record<string, ParamValues> = {};
+          for (const m of current.modules) {
+            r.updateModuleParams(m.id, m.params);
+            next[m.id] = { ...m.params };
+          }
+          lastParamsRef.current = next;
+        })
+        .catch((error) => console.error('[rack] sync failed', error));
       return;
     }
 
     for (const m of rack.modules) {
       const prev = lastParamsRef.current[m.id];
-      if (!prev) continue;
       const changed: ParamValues = {};
       for (const key of Object.keys(m.params)) {
-        if (m.params[key] !== prev[key]) changed[key] = m.params[key];
+        if (!prev || m.params[key] !== prev[key]) changed[key] = m.params[key];
       }
       if (Object.keys(changed).length > 0) r.updateModuleParams(m.id, changed);
       lastParamsRef.current[m.id] = { ...m.params };
@@ -180,65 +187,56 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   const palette = listModuleDefs();
   const families = [...new Set(palette.map((d) => d.family))];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2 sm:p-4 backdrop-blur-md">
-      <div className="relative flex h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border-2 border-[#A855F7]/50 bg-[#07070E]">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#202034] bg-[#0E0E1A] px-4 py-2.5">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-white">
-              Rack Modulaire <span className="text-[#A855F7]">bêta</span>
-            </h2>
-            <p className="max-w-md truncate font-mono text-[11px] text-[#8E8E98]">
-              {sample ? sample.name : 'Aucun sample sélectionné'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={togglePlay}
-              disabled={!sample?.audioBuffer}
-              className={`flex items-center gap-1.5 rounded px-4 py-1.5 font-mono text-xs font-bold disabled:opacity-40 ${
-                isPlaying ? 'bg-[#EF4444] text-white' : 'bg-[#00F0FF] text-black'
-              }`}
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
-              {isPlaying ? 'STOP' : 'ÉCOUTER'}
-            </button>
-            <button
-              onClick={() => setLoop((v) => !v)}
-              className={`rounded border px-2 py-1.5 text-xs ${
-                loop ? 'border-[#00F0FF] text-[#00F0FF]' : 'border-[#303046] text-[#8E8E98]'
-              }`}
-              title="Boucle"
-            >
-              <Repeat className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => void handleSaveAsNew()}
-              disabled={!sample?.audioBuffer || isRendering}
-              className="flex items-center gap-1.5 rounded bg-[#10B981] px-3 py-1.5 font-mono text-xs font-bold text-black disabled:opacity-40"
-            >
-              <Save className="h-3.5 w-3.5" />
-              {isRendering ? 'RENDU…' : 'ENREGISTRER SAMPLE'}
-            </button>
-            <button
-              onClick={() => {
-                stopAudition();
-                onClose();
-              }}
-              className="rounded border border-[#2C2C40] bg-[#1A1A2A] p-1.5 text-[#8E8E98] hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
-
-        <div className="flex flex-1 overflow-hidden">
-          <aside className="w-56 shrink-0 overflow-y-auto border-r border-[#202034] bg-[#0A0A16] p-3">
+    <Modal
+      open={isOpen}
+      onClose={() => {
+        stopAudition();
+        onClose();
+      }}
+      size="xl"
+      accent="#A855F7"
+      icon={<Sliders className="h-5 w-5" />}
+      title="Rack Modulaire"
+      subtitle={sample ? sample.name : 'Aucun sample sélectionné'}
+      bodyClassName="flex overflow-hidden"
+      headerRight={
+        <>
+          <button
+            onClick={togglePlay}
+            disabled={!sample?.audioBuffer}
+            className={`flex items-center gap-1.5 rounded px-4 py-1.5 font-mono text-xs font-bold disabled:opacity-40 ${
+              isPlaying ? 'bg-[#EF4444] text-white' : 'bg-[#00F0FF] text-black'
+            }`}
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
+            {isPlaying ? 'STOP' : 'ÉCOUTER'}
+          </button>
+          <button
+            onClick={() => setLoop((v) => !v)}
+            className={`rounded border px-2 py-1.5 text-xs ${
+              loop ? 'border-[#00F0FF] text-[#00F0FF]' : 'border-[#303046] text-[#8E8E98]'
+            }`}
+            title="Boucle"
+          >
+            <Repeat className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => void handleSaveAsNew()}
+            disabled={!sample?.audioBuffer || isRendering}
+            className="flex items-center gap-1.5 rounded bg-[#10B981] px-3 py-1.5 font-mono text-xs font-bold text-black disabled:opacity-40"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {isRendering ? 'RENDU…' : 'ENREGISTRER SAMPLE'}
+          </button>
+        </>
+      }
+    >
+      <>
+        <aside className="w-56 shrink-0 overflow-y-auto border-r border-[#202034] bg-[#0A0A16] p-3">
             <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#A855F7]">
               Templates
             </div>
@@ -339,9 +337,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
                 </button>
               </div>
             </details>
-          </main>
-        </div>
-      </div>
-    </div>
+        </main>
+      </>
+    </Modal>
   );
 };

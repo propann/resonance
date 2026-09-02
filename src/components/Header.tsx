@@ -48,6 +48,7 @@ interface HeaderProps {
   onOpenAutoSlicer?: () => void;
   onOpenAutoCurator?: () => void;
   onOpenDocumentation?: () => void;
+  onOpenShortcuts?: () => void;
   onAutoOrganizeLibrary?: () => void;
   isPlaying?: boolean;
   onTogglePlayPause?: () => void;
@@ -83,6 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAutoSlicer,
   onOpenAutoCurator,
   onOpenDocumentation,
+  onOpenShortcuts,
   onAutoOrganizeLibrary,
   isPlaying = false,
   onTogglePlayPause,
@@ -95,7 +97,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const [showShortcuts, setShowShortcuts] = useState<boolean>(false);
   const [peakMeterLevel, setPeakMeterLevel] = useState<number>(0);
 
   // Subscribe to analyser for master VU meter
@@ -406,55 +407,17 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Shortcuts Help */}
-        <button
-          id="shortcuts-help-btn"
-          onClick={() => setShowShortcuts(!showShortcuts)}
-          className="p-1 bg-[#14141C] text-[#8E8E93] hover:text-white border-2 border-[#242432] pixel-btn"
-          title="Raccourcis Clavier (?)"
-        >
-          <HelpCircle className="w-3 h-3" />
-        </button>
+        {onOpenShortcuts && (
+          <button
+            id="shortcuts-help-btn"
+            onClick={onOpenShortcuts}
+            className="p-1 bg-[#14141C] text-[#8E8E93] hover:text-white border-2 border-[#242432] pixel-btn"
+            title="Raccourcis Clavier (?)"
+          >
+            <HelpCircle className="w-3 h-3" />
+          </button>
+        )}
       </div>
-
-      {/* Keyboard Shortcuts Popover */}
-      {showShortcuts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0E0E14] border-2 border-[#2A2A38] w-full max-w-md p-4 space-y-3 pixel-box">
-            <div className="flex items-center justify-between border-b-2 border-[#22222E] pb-2">
-              <h3 className="text-[11px] font-pixel text-[#00F0FF] font-bold uppercase">RACCOURCIS CLAVIER</h3>
-              <button
-                onClick={() => setShowShortcuts(false)}
-                className="text-[#8E8E93] hover:text-white text-[10px] font-pixel"
-              >
-                [X]
-              </button>
-            </div>
-
-            <div className="space-y-2 text-[10px] font-pixel">
-              <div className="flex justify-between items-center py-1 border-b border-[#1E1E28]">
-                <span className="text-[#8E8E93]">ESPACE</span>
-                <span className="text-[#00F0FF]">PLAY / PAUSE</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-[#1E1E28]">
-                <span className="text-[#8E8E93]">FLÈCHES HAUT / BAS</span>
-                <span className="text-[#00F0FF]">NAVIGUER & AUDITION</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-[#1E1E28]">
-                <span className="text-[#8E8E93]">TOUCHE L</span>
-                <span className="text-[#00F0FF]">LOOP ON / OFF</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-[#1E1E28]">
-                <span className="text-[#8E8E93]">TOUCHE R</span>
-                <span className="text-[#00F0FF]">REVERSE AUDIO</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-[#1E1E28]">
-                <span className="text-[#8E8E93]">TOUCHE S</span>
-                <span className="text-[#00F0FF]">DÉCOUPE AUTO SLICER</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   );
 };
