@@ -42,6 +42,35 @@ export const RACK_TEMPLATES: RackTemplate[] = [
     ],
   },
   {
+    id: 'drum-punch',
+    label: 'Drum Punch',
+    modules: [
+      { type: 'fx.transient', params: { attack: 5, sustain: -2, speed: 40 } },
+      { type: 'fx.saturator', params: { shape: 'tube', drive: 2, mix: 0.3 } },
+      {
+        type: 'fx.compressor',
+        params: { threshold: -16, ratio: 3, attack: 0.008, release: 0.1, makeup: 2 },
+      },
+    ],
+  },
+  {
+    id: 'eight-weight',
+    label: '808 Weight',
+    modules: [
+      { type: 'fx.subbass', params: { frequency: 50, boost: 8, sub: 0.5, drive: 0.35 } },
+      { type: 'fx.saturator', params: { shape: 'tape', drive: 2.5, mix: 0.35 } },
+      { type: 'fx.dcremove', params: { frequency: 20 } },
+    ],
+  },
+  {
+    id: 'funk-wah',
+    label: 'Funk Wah',
+    modules: [
+      { type: 'fx.autowah', params: { sensitivity: 0.7, base: 450, range: 2800, resonance: 0.55, mix: 0.9 } },
+      { type: 'fx.exciter', params: { frequency: 8000, drive: 3, amount: 0.4 } },
+    ],
+  },
+  {
     id: 'warm-wide',
     label: 'Warm & Wide',
     modules: [

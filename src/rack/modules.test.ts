@@ -14,6 +14,7 @@ describe('built-in rack modules', () => {
     expect(types).toEqual(
       [
         'fx.autopan',
+        'fx.autowah',
         'fx.bitcrusher',
         'fx.chorus',
         'fx.comb',
@@ -28,6 +29,8 @@ describe('built-in rack modules', () => {
         'fx.reverb',
         'fx.ringmod',
         'fx.saturator',
+        'fx.subbass',
+        'fx.transient',
       ].sort()
     );
   });

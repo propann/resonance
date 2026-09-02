@@ -1,5 +1,6 @@
 import { registerModule } from '../registry';
 import { autoPanModule } from './autoPan';
+import { autoWahModule } from './autoWah';
 import { bitcrusherModule } from './bitcrusher';
 import { chorusModule } from './chorus';
 import { combResonatorModule } from './combResonator';
@@ -14,6 +15,8 @@ import { reverbModule } from './reverb';
 import { ringModModule } from './ringMod';
 import { saturatorModule } from './saturator';
 import { stereoImagerModule } from './stereoImager';
+import { subBassModule } from './subBass';
+import { transientModule } from './transient';
 
 let registered = false;
 
@@ -25,10 +28,13 @@ export function registerBuiltinModules(): void {
     filterModule,
     combResonatorModule,
     dcRemoveModule,
+    autoWahModule,
     saturatorModule,
     bitcrusherModule,
     exciterModule,
+    subBassModule,
     compressorModule,
+    transientModule,
     gainModule,
     delayModule,
     reverbModule,
@@ -44,6 +50,7 @@ export function registerBuiltinModules(): void {
 
 export {
   autoPanModule,
+  autoWahModule,
   bitcrusherModule,
   chorusModule,
   combResonatorModule,
@@ -58,4 +65,6 @@ export {
   ringModModule,
   saturatorModule,
   stereoImagerModule,
+  subBassModule,
+  transientModule,
 };
