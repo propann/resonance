@@ -1,15 +1,10 @@
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { DEFAULT_FOLDERS } from './data/defaultSampleLibrary';
 import { useResizablePanels } from './hooks/useResizablePanels';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useWorkFolder } from './hooks/useWorkFolder';
 import { useUiStore } from './stores/uiStore';
-import {
-  SampleItem,
-  FolderItem,
-  FilterState,
-  SliceRegion,
-} from './types/sample';
+import { useLibraryStore } from './stores/libraryStore';
+import { SampleItem, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -59,10 +54,14 @@ import {
 } from './services/localLibrary';
 
 export default function App() {
-  const [samples, setSamples] = useState<SampleItem[]>([]);
-  const [folders, setFolders] = useState<FolderItem[]>(DEFAULT_FOLDERS);
-  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
-  const [selectedSampleIds, setSelectedSampleIds] = useState<string[]>([]);
+  const samples = useLibraryStore((s) => s.samples);
+  const setSamples = useLibraryStore((s) => s.setSamples);
+  const folders = useLibraryStore((s) => s.folders);
+  const setFolders = useLibraryStore((s) => s.setFolders);
+  const selectedSampleId = useLibraryStore((s) => s.selectedSampleId);
+  const setSelectedSampleId = useLibraryStore((s) => s.setSelectedSampleId);
+  const selectedSampleIds = useLibraryStore((s) => s.selectedSampleIds);
+  const setSelectedSampleIds = useLibraryStore((s) => s.setSelectedSampleIds);
 
   // Dynamic Resizable Windows & Panels
   const {
@@ -184,23 +183,8 @@ export default function App() {
   }, [selectedSampleId, samples, libraryRoot]);
 
   // Filters State
-  const [filterState, setFilterState] = useState<FilterState>({
-    searchQuery: '',
-    selectedFolderId: null,
-    selectedType: 'all',
-    selectedCategory: 'all',
-    selectedGenre: 'all',
-    selectedKey: 'all',
-    minBpm: 60,
-    maxBpm: 180,
-    minDuration: 0,
-    maxDuration: 60,
-    favoritesOnly: false,
-    hasSlicesOnly: false,
-    selectedTags: [],
-    sortField: 'dateAdded',
-    sortDirection: 'desc',
-  });
+  const filterState = useLibraryStore((s) => s.filterState);
+  const setFilterState = useLibraryStore((s) => s.setFilterState);
 
   // The library intentionally starts empty: users import their own source material.
 
