@@ -1,7 +1,7 @@
-import { ensureWorklet } from '../Rack';
+import { ensureWorklet, workletUrl } from '../Rack';
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
 
-const WORKLET_URL = '/worklets/transient.worklet.js';
+const WORKLET_URL = workletUrl('transient.worklet.js');
 
 export const transientModule: RackModuleDef = {
   type: 'fx.transient',

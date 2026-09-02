@@ -1,7 +1,7 @@
-import { ensureWorklet } from '../Rack';
+import { ensureWorklet, workletUrl } from '../Rack';
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
 
-const WORKLET_URL = '/worklets/subbass.worklet.js';
+const WORKLET_URL = workletUrl('subbass.worklet.js');
 
 export const subBassModule: RackModuleDef = {
   type: 'fx.subbass',

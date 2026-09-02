@@ -1,7 +1,7 @@
-import { ensureWorklet } from '../Rack';
+import { ensureWorklet, workletUrl } from '../Rack';
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
 
-const WORKLET_URL = '/worklets/autowah.worklet.js';
+const WORKLET_URL = workletUrl('autowah.worklet.js');
 
 export const autoWahModule: RackModuleDef = {
   type: 'fx.autowah',

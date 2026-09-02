@@ -1,7 +1,7 @@
-import { ensureWorklet } from '../Rack';
+import { ensureWorklet, workletUrl } from '../Rack';
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
 
-const WORKLET_URL = '/worklets/freqshift.worklet.js';
+const WORKLET_URL = workletUrl('freqshift.worklet.js');
 
 export const freqShiftModule: RackModuleDef = {
   type: 'fx.freqshift',

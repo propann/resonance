@@ -1,7 +1,7 @@
-import { ensureWorklet } from '../Rack';
+import { ensureWorklet, workletUrl } from '../Rack';
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
 
-const WORKLET_URL = '/worklets/pitch.worklet.js';
+const WORKLET_URL = workletUrl('pitch.worklet.js');
 
 export const pitchModule: RackModuleDef = {
   type: 'fx.pitch',

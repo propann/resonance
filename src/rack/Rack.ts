@@ -2,6 +2,16 @@ import { coerceParams } from './params';
 import { requireModuleDef } from './registry';
 import type { ParamValues, RackNode, RackState } from './types';
 
+/**
+ * Resolve a worklet file under the app's base URL so it works both in the dev
+ * server (base "/") and in the packaged Electron app loaded from file:// (base
+ * "./").
+ */
+export function workletUrl(file: string): string {
+  const base = import.meta.env.BASE_URL || '/';
+  return `${base.replace(/\/$/, '')}/worklets/${file}`;
+}
+
 /** Load an AudioWorklet module once per (context, url). */
 const workletLoads = new WeakMap<BaseAudioContext, Map<string, Promise<void>>>();
 
