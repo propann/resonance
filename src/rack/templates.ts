@@ -20,6 +20,15 @@ export const RACK_TEMPLATES: RackTemplate[] = [
       { type: 'fx.bitcrusher', params: { bits: 10, reduction: 3, mix: 0.7 } },
       { type: 'fx.filter', params: { type: 'lowpass', frequency: 4500, q: 0.7 } },
       { type: 'fx.saturator', params: { shape: 'tape', drive: 3, mix: 0.5 } },
+      { type: 'fx.vinyl', params: { wow: 0.35, flutter: 0.25, crackle: 0.3, age: 0.5, mix: 0.6 } },
+    ],
+  },
+  {
+    id: 'glitch-acid',
+    label: 'Glitch Acid',
+    modules: [
+      { type: 'fx.stutter', params: { rate: 12, repeat: 3, duty: 0.7, mix: 0.85 } },
+      { type: 'fx.acid', params: { cutoff: 900, resonance: 20, drive: 3, lfoRate: 0.8, lfoDepth: 600, mix: 1 } },
     ],
   },
   {

@@ -1,4 +1,5 @@
 import { registerModule } from '../registry';
+import { acidModule } from './acid';
 import { autoPanModule } from './autoPan';
 import { autoWahModule } from './autoWah';
 import { bitcrusherModule } from './bitcrusher';
@@ -9,14 +10,17 @@ import { dcRemoveModule } from './dcRemove';
 import { delayModule } from './delay';
 import { exciterModule } from './exciter';
 import { filterModule } from './filter';
+import { formantModule } from './formant';
 import { gainModule } from './gain';
 import { phaserModule } from './phaser';
 import { reverbModule } from './reverb';
 import { ringModModule } from './ringMod';
 import { saturatorModule } from './saturator';
 import { stereoImagerModule } from './stereoImager';
+import { stutterModule } from './stutter';
 import { subBassModule } from './subBass';
 import { transientModule } from './transient';
+import { vinylModule } from './vinyl';
 
 let registered = false;
 
@@ -26,7 +30,9 @@ export function registerBuiltinModules(): void {
   registered = true;
   for (const def of [
     filterModule,
+    acidModule,
     combResonatorModule,
+    formantModule,
     dcRemoveModule,
     autoWahModule,
     saturatorModule,
@@ -38,17 +44,20 @@ export function registerBuiltinModules(): void {
     gainModule,
     delayModule,
     reverbModule,
+    stutterModule,
     chorusModule,
     phaserModule,
     ringModModule,
     autoPanModule,
     stereoImagerModule,
+    vinylModule,
   ]) {
     registerModule(def);
   }
 }
 
 export {
+  acidModule,
   autoPanModule,
   autoWahModule,
   bitcrusherModule,
@@ -59,12 +68,15 @@ export {
   delayModule,
   exciterModule,
   filterModule,
+  formantModule,
   gainModule,
   phaserModule,
   reverbModule,
   ringModModule,
   saturatorModule,
   stereoImagerModule,
+  stutterModule,
   subBassModule,
   transientModule,
+  vinylModule,
 };

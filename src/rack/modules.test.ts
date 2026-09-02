@@ -13,6 +13,7 @@ describe('built-in rack modules', () => {
     const types = defs.map((d) => d.type).sort();
     expect(types).toEqual(
       [
+        'fx.acid',
         'fx.autopan',
         'fx.autowah',
         'fx.bitcrusher',
@@ -23,14 +24,17 @@ describe('built-in rack modules', () => {
         'fx.delay',
         'fx.exciter',
         'fx.filter',
+        'fx.formant',
         'fx.gain',
         'fx.imager',
         'fx.phaser',
         'fx.reverb',
         'fx.ringmod',
         'fx.saturator',
+        'fx.stutter',
         'fx.subbass',
         'fx.transient',
+        'fx.vinyl',
       ].sort()
     );
   });
