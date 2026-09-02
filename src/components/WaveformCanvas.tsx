@@ -40,8 +40,9 @@ import {
 } from '../services/spectrogramGenerator';
 import { AudioVisualizationGuideModal } from './AudioVisualizationGuideModal';
 import { openSampleModal } from '../stores/sampleTargetStore';
+import { getWaveformPalette, type WaveformColorTheme } from './waveform/themes';
 
-export type WaveformColorTheme = 'cyber-neon' | 'sunset-amber' | 'emerald-matrix' | 'magma-fire' | 'ice-arctic';
+export type { WaveformColorTheme };
 
 interface WaveformCanvasProps {
   height?: number;
@@ -197,56 +198,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   }, [sample.audioBuffer, showMultiBand, showPitchContour, showRmsEnvelope]);
 
   // Theme color palette definitions
-  const themeColors = useMemo(() => {
-    switch (colorTheme) {
-      case 'sunset-amber':
-        return {
-          primary: '#F59E0B',
-          secondary: '#EF4444',
-          accent: '#FFE600',
-          gradientTop: 'rgba(245, 158, 11, 0.75)',
-          gradientBottom: 'rgba(239, 68, 68, 0.05)',
-          glow: 'rgba(245, 158, 11, 0.4)',
-        };
-      case 'emerald-matrix':
-        return {
-          primary: '#10B981',
-          secondary: '#06B6D4',
-          accent: '#34D399',
-          gradientTop: 'rgba(16, 185, 129, 0.75)',
-          gradientBottom: 'rgba(6, 182, 212, 0.05)',
-          glow: 'rgba(16, 185, 129, 0.4)',
-        };
-      case 'magma-fire':
-        return {
-          primary: '#EC4899',
-          secondary: '#8B5CF6',
-          accent: '#F43F5E',
-          gradientTop: 'rgba(236, 72, 153, 0.75)',
-          gradientBottom: 'rgba(139, 92, 246, 0.05)',
-          glow: 'rgba(236, 72, 153, 0.4)',
-        };
-      case 'ice-arctic':
-        return {
-          primary: '#38BDF8',
-          secondary: '#818CF8',
-          accent: '#E0F2FE',
-          gradientTop: 'rgba(56, 189, 248, 0.8)',
-          gradientBottom: 'rgba(129, 140, 248, 0.05)',
-          glow: 'rgba(56, 189, 248, 0.4)',
-        };
-      case 'cyber-neon':
-      default:
-        return {
-          primary: '#00F0FF',
-          secondary: '#A855F7',
-          accent: '#FFE600',
-          gradientTop: 'rgba(0, 240, 255, 0.75)',
-          gradientBottom: 'rgba(168, 85, 247, 0.05)',
-          glow: 'rgba(0, 240, 255, 0.4)',
-        };
-    }
-  }, [colorTheme]);
+  const themeColors = useMemo(() => getWaveformPalette(colorTheme), [colorTheme]);
 
   // ========================================================
   // MAIN HIGH-DEFINITION VECTOR WAVEFORM & SPECTRAL RENDERER
