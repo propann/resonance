@@ -11,8 +11,10 @@ import { delayModule } from './delay';
 import { exciterModule } from './exciter';
 import { filterModule } from './filter';
 import { formantModule } from './formant';
+import { freqShiftModule } from './freqShift';
 import { gainModule } from './gain';
 import { phaserModule } from './phaser';
+import { pitchModule } from './pitch';
 import { reverbModule } from './reverb';
 import { ringModModule } from './ringMod';
 import { saturatorModule } from './saturator';
@@ -48,6 +50,8 @@ export function registerBuiltinModules(): void {
     chorusModule,
     phaserModule,
     ringModModule,
+    freqShiftModule,
+    pitchModule,
     autoPanModule,
     stereoImagerModule,
     vinylModule,
@@ -69,8 +73,10 @@ export {
   exciterModule,
   filterModule,
   formantModule,
+  freqShiftModule,
   gainModule,
   phaserModule,
+  pitchModule,
   reverbModule,
   ringModModule,
   saturatorModule,
