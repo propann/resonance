@@ -3,6 +3,7 @@ import { DEFAULT_FOLDERS } from './data/defaultSampleLibrary';
 import { useResizablePanels } from './hooks/useResizablePanels';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useWorkFolder } from './hooks/useWorkFolder';
+import { useUiStore } from './stores/uiStore';
 import {
   SampleItem,
   FolderItem,
@@ -62,7 +63,6 @@ export default function App() {
   const [folders, setFolders] = useState<FolderItem[]>(DEFAULT_FOLDERS);
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [selectedSampleIds, setSelectedSampleIds] = useState<string[]>([]);
-  const [activeView, setActiveView] = useState<'library' | 'timbre'>('library');
 
   // Dynamic Resizable Windows & Panels
   const {
@@ -74,23 +74,16 @@ export default function App() {
     startWaveformResize,
   } = useResizablePanels();
 
-  // Modals state
+  // UI shell state (modal windows, workspace view)
+  const modals = useUiStore((s) => s.modals);
+  const activeView = useUiStore((s) => s.activeView);
+  const openModal = useUiStore((s) => s.openModal);
+  const closeModal = useUiStore((s) => s.closeModal);
+  const setActiveView = useUiStore((s) => s.setActiveView);
+  const toggleView = useUiStore((s) => s.toggleView);
+
+  // Modals with a payload beyond the open flag
   const [slicerSample, setSlicerSample] = useState<SampleItem | null>(null);
-  const [isBatchConverterOpen, setIsBatchConverterOpen] = useState<boolean>(false);
-  const [isRecorderOpen, setIsRecorderOpen] = useState<boolean>(false);
-  const [isSmartIngestOpen, setIsSmartIngestOpen] = useState<boolean>(false);
-  const [isAutoCuratorOpen, setIsAutoCuratorOpen] = useState<boolean>(false);
-  const [isBenchmarkOpen, setIsBenchmarkOpen] = useState<boolean>(false);
-  const [isOp1StudioOpen, setIsOp1StudioOpen] = useState<boolean>(false);
-  const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState<boolean>(false);
-  const [isBatchNamingOpen, setIsBatchNamingOpen] = useState<boolean>(false);
-  const [isDspModalOpen, setIsDspModalOpen] = useState<boolean>(false);
-  const [isFxRackOpen, setIsFxRackOpen] = useState<boolean>(false);
-  const [isSynthRackOpen, setIsSynthRackOpen] = useState<boolean>(false);
-  const [isAdvancedRackOpen, setIsAdvancedRackOpen] = useState<boolean>(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
-  const [isDocOpen, setIsDocOpen] = useState<boolean>(false);
-  const [isLoudnessModalOpen, setIsLoudnessModalOpen] = useState<boolean>(false);
   const [pendingCurationFiles, setPendingCurationFiles] = useState<Array<File | WorkFolderAudioFile>>([]);
   const [pendingFilesAlreadyArchived, setPendingFilesAlreadyArchived] = useState(false);
   const [isCuratorProcessing, setIsCuratorProcessing] = useState(false);
@@ -153,13 +146,13 @@ export default function App() {
     cleanEmptyFolders,
     processReception,
   } = useWorkFolder({
-    isCuratorOpen: isAutoCuratorOpen,
+    isCuratorOpen: modals.autoCurator,
     isCuratorProcessing,
     onManifestSamples: hydrateManifestSamples,
     onReceptionFilesReady: (files, openCurator) => {
       setPendingFilesAlreadyArchived(true);
       setPendingCurationFiles(files);
-      if (openCurator) setIsAutoCuratorOpen(true);
+      if (openCurator) openModal('autoCurator');
     },
   });
 
@@ -372,20 +365,20 @@ export default function App() {
     onPlayNext: handlePlayNext,
     onPlayPrev: handlePlayPrev,
     onToggleLoop: () => audioEngine.toggleLoop(),
-    onOpenBatchNaming: () => setIsBatchNamingOpen(true),
+    onOpenBatchNaming: () => openModal('batchNaming'),
     onReactivateWorkFolder: () => void reactivateWorkFolder(),
     onOpenFxRackForSelected: () => {
       if (selectedSample) {
         setSampleForFxRack(selectedSample);
-        setIsFxRackOpen(true);
+        openModal('fxRack');
       }
     },
-    onOpenDocumentation: () => setIsDocOpen(true),
-    onToggleView: () => setActiveView((prev) => (prev === 'library' ? 'timbre' : 'library')),
+    onOpenDocumentation: () => openModal('doc'),
+    onToggleView: toggleView,
     onOpenDspForSelected: () => {
       if (selectedSample) {
         setSampleForDsp(selectedSample);
-        setIsDspModalOpen(true);
+        openModal('dspModal');
       }
     },
   });
@@ -396,7 +389,7 @@ export default function App() {
     const files = Array.from(fileList);
     if (files.length === 0) return;
     setPendingCurationFiles(files);
-    setIsAutoCuratorOpen(true);
+    openModal('autoCurator');
   };
 
   // Import OP-1 Drum Kit AIFF Patch
@@ -631,7 +624,7 @@ export default function App() {
     const s = targetSample || selectedSample;
     if (s) {
       setSampleForFxRack(s);
-      setIsFxRackOpen(true);
+      openModal('fxRack');
     }
   };
 
@@ -639,7 +632,7 @@ export default function App() {
     const s = targetSample || selectedSample;
     if (s) {
       setSampleForLoudness(s);
-      setIsLoudnessModalOpen(true);
+      openModal('loudnessModal');
     }
   };
 
@@ -820,26 +813,26 @@ export default function App() {
         onRefreshLibrary={libraryRoot ? refreshLibrary : undefined}
         onCleanEmptyFolders={libraryRoot ? cleanEmptyFolders : undefined}
         isBackgroundProcessing={isCuratorProcessing}
-        onOpenBackgroundProcessing={() => setIsAutoCuratorOpen(true)}
+        onOpenBackgroundProcessing={() => openModal('autoCurator')}
         libraryName={libraryName}
-        onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
-        onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
-        onOpenBatchConverter={() => setIsBatchConverterOpen(true)}
+        onOpenAutoCurator={() => openModal('autoCurator')}
+        onOpenBatchNaming={() => openModal('batchNaming')}
+        onOpenBatchConverter={() => openModal('batchConverter')}
         onOpenDspAnalyzer={() => {
           setSampleForDsp(selectedSample);
-          setIsDspModalOpen(true);
+          openModal('dspModal');
         }}
         onOpenFxRack={() => handleOpenFxRack()}
-        onOpenSynthRack={() => setIsSynthRackOpen(true)}
-        onOpenAdvancedRack={() => setIsAdvancedRackOpen(true)}
+        onOpenSynthRack={() => openModal('synthRack')}
+        onOpenAdvancedRack={() => openModal('advancedRack')}
         onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
-        onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
+        onOpenOp1Studio={() => openModal('op1Studio')}
         onOpenEp133Export={handleExportEp133Pack}
-        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
-        onOpenRecorder={() => setIsRecorderOpen(true)}
-        onOpenBenchmark={() => setIsBenchmarkOpen(true)}
-        onOpenShortcuts={() => setIsShortcutsOpen(true)}
-        onOpenDocumentation={() => setIsDocOpen(true)}
+        onOpenGitHubSync={() => openModal('gitHubSync')}
+        onOpenRecorder={() => openModal('recorder')}
+        onOpenBenchmark={() => openModal('benchmark')}
+        onOpenShortcuts={() => openModal('shortcuts')}
+        onOpenDocumentation={() => openModal('doc')}
         onSelectAll={() => handleSelectAllSamples(true)}
         onDeselectAll={() => handleSelectAllSamples(false)}
         onDeleteSelected={handleDeleteSelectedSamples}
@@ -860,18 +853,18 @@ export default function App() {
         workFolderStatus={workFolderStatus}
         incomingCount={incomingCount}
         failedIncomingCount={failedIncomingCount}
-        onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
-        onOpenDocumentation={() => setIsDocOpen(true)}
-        onOpenBenchmark={() => setIsBenchmarkOpen(true)}
+        onOpenAutoCurator={() => openModal('autoCurator')}
+        onOpenDocumentation={() => openModal('doc')}
+        onOpenBenchmark={() => openModal('benchmark')}
         onExportEp133Pack={handleExportEp133Pack}
-        onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
-        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
-        onOpenRecorder={() => setIsRecorderOpen(true)}
-        onOpenBatchConverter={() => setIsBatchConverterOpen(true)}
-        onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
+        onOpenOp1Studio={() => openModal('op1Studio')}
+        onOpenGitHubSync={() => openModal('gitHubSync')}
+        onOpenRecorder={() => openModal('recorder')}
+        onOpenBatchConverter={() => openModal('batchConverter')}
+        onOpenBatchNaming={() => openModal('batchNaming')}
         onOpenDspAnalyzer={() => {
           setSampleForDsp(selectedSample);
-          setIsDspModalOpen(true);
+          openModal('dspModal');
         }}
         onOpenFxRack={() => handleOpenFxRack()}
         onOpenAutoSlicer={() => {
@@ -899,11 +892,11 @@ export default function App() {
           onFilterChange={(newF) => setFilterState((prev) => ({ ...prev, ...newF }))}
           onCreateFolder={handleCreateFolder}
           onDeleteFolder={handleDeleteFolder}
-          onOpenRecorder={() => setIsRecorderOpen(true)}
-          onOpenOp1Studio={() => setIsOp1StudioOpen(true)}
-          onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
-          onOpenAutoCurator={() => setIsAutoCuratorOpen(true)}
-          onOpenDocumentation={() => setIsDocOpen(true)}
+          onOpenRecorder={() => openModal('recorder')}
+          onOpenOp1Studio={() => openModal('op1Studio')}
+          onOpenGitHubSync={() => openModal('gitHubSync')}
+          onOpenAutoCurator={() => openModal('autoCurator')}
+          onOpenDocumentation={() => openModal('doc')}
           onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
           activeView={activeView}
           onViewChange={setActiveView}
@@ -934,7 +927,7 @@ export default function App() {
                   onOpenSlicer={() => setSlicerSample(selectedSample)}
                   onOpenDspAnalyzer={() => {
                     setSampleForDsp(selectedSample);
-                    setIsDspModalOpen(true);
+                    openModal('dspModal');
                   }}
                   onOpenFxRack={() => handleOpenFxRack(selectedSample)}
                   onUpdateSlices={handleUpdateSampleSlices}
@@ -981,11 +974,11 @@ export default function App() {
                 onOpenSlicerForSample={(s) => setSlicerSample(s)}
                 onOpenDspAnalyzer={(s) => {
                   setSampleForDsp(s);
-                  setIsDspModalOpen(true);
+                  openModal('dspModal');
                 }}
                 onOpenFxRack={(s) => handleOpenFxRack(s)}
                 onOpenLoudnessStandard={(s) => handleOpenLoudnessStandard(s)}
-                onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
+                onOpenBatchNaming={() => openModal('batchNaming')}
                 onToggleFavorite={handleToggleFavorite}
                 onSetRating={handleSetRating}
                 onDeleteSample={handleDeleteSample}
@@ -1009,8 +1002,8 @@ export default function App() {
 
       {/* Smart Ingestion Magic Drop Modal */}
       <SmartIngestionModal
-        isOpen={isSmartIngestOpen}
-        onClose={() => setIsSmartIngestOpen(false)}
+        isOpen={modals.smartIngest}
+        onClose={() => closeModal('smartIngest')}
         onImportComplete={(newImportedSamples) => {
           setSamples((prev) => [...newImportedSamples, ...prev]);
           if (newImportedSamples.length > 0) {
@@ -1028,8 +1021,8 @@ export default function App() {
 
       {/* Auto-Curator Studio DSP Pipeline Modal */}
       <AutoCuratorModal
-        isOpen={isAutoCuratorOpen}
-        onClose={() => setIsAutoCuratorOpen(false)}
+        isOpen={modals.autoCurator}
+        onClose={() => closeModal('autoCurator')}
         librarySamples={samples}
         initialFiles={pendingCurationFiles}
         initialFilesAlreadyArchived={pendingFilesAlreadyArchived}
@@ -1045,13 +1038,13 @@ export default function App() {
         onQueueResult={({ errors }) => setFailedIncomingCount(errors)}
         autoTransfer
         onApplyCuration={handleApplyCuration}
-        onOpenBatchNaming={() => setIsBatchNamingOpen(true)}
+        onOpenBatchNaming={() => openModal('batchNaming')}
       />
 
       {/* Market Benchmark Modal */}
       <MarketBenchmarkModal
-        isOpen={isBenchmarkOpen}
-        onClose={() => setIsBenchmarkOpen(false)}
+        isOpen={modals.benchmark}
+        onClose={() => closeModal('benchmark')}
       />
 
       {/* Slicer Modal */}
@@ -1072,27 +1065,27 @@ export default function App() {
             ? samples.filter((s) => selectedSampleIds.includes(s.id))
             : filteredSamples
         }
-        isOpen={isBatchConverterOpen}
-        onClose={() => setIsBatchConverterOpen(false)}
+        isOpen={modals.batchConverter}
+        onClose={() => closeModal('batchConverter')}
       />
 
       {/* OP-1 OG Drum Kit Builder Modal */}
       <Op1KitBuilderModal
-        isOpen={isOp1StudioOpen}
-        onClose={() => setIsOp1StudioOpen(false)}
+        isOpen={modals.op1Studio}
+        onClose={() => closeModal('op1Studio')}
         availableSamples={samples}
         currentSelectedSample={selectedSample}
         onImportNewSamples={(newS) => {
           setSamples((prev) => [...newS, ...prev]);
           if (newS.length > 0) setSelectedSampleId(newS[0].id);
         }}
-        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+        onOpenGitHubSync={() => openModal('gitHubSync')}
       />
 
       {/* Audio Recorder Modal */}
       <AudioRecorderModal
-        isOpen={isRecorderOpen}
-        onClose={() => setIsRecorderOpen(false)}
+        isOpen={modals.recorder}
+        onClose={() => closeModal('recorder')}
         onSaveRecordedSample={(newS) => {
           setSamples((prev) => [newS, ...prev]);
           setSelectedSampleId(newS.id);
@@ -1101,26 +1094,26 @@ export default function App() {
 
       {/* GitHub Hub (propann/az-sample) Modal */}
       <GitHubSyncModal
-        isOpen={isGitHubSyncOpen}
-        onClose={() => setIsGitHubSyncOpen(false)}
+        isOpen={modals.gitHubSync}
+        onClose={() => closeModal('gitHubSync')}
         samples={samples}
       />
 
       {/* Professional Batch Naming & Organization Modal */}
       <BatchNamingModal
-        isOpen={isBatchNamingOpen}
-        onClose={() => setIsBatchNamingOpen(false)}
+        isOpen={modals.batchNaming}
+        onClose={() => closeModal('batchNaming')}
         samples={samples}
         selectedSampleIds={selectedSampleIds}
         onApplyRename={handleApplyBatchRename}
-        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+        onOpenGitHubSync={() => openModal('gitHubSync')}
       />
 
       {/* Studio DSP Audio Analysis Modal */}
       <AudioAnalysisModal
-        isOpen={isDspModalOpen}
+        isOpen={modals.dspModal}
         onClose={() => {
-          setIsDspModalOpen(false);
+          closeModal('dspModal');
           setSampleForDsp(null);
         }}
         sample={sampleForDsp || selectedSample}
@@ -1128,11 +1121,11 @@ export default function App() {
       />
 
       {/* Creative Studio DSP Effects Rack & Pitch Tuner Modal */}
-      {isFxRackOpen && (
+      {modals.fxRack && (
         <AudioEffectsRackModal
-          isOpen={isFxRackOpen}
+          isOpen={modals.fxRack}
           onClose={() => {
-            setIsFxRackOpen(false);
+            closeModal('fxRack');
             setSampleForFxRack(null);
           }}
           sample={sampleForFxRack || selectedSample}
@@ -1142,16 +1135,16 @@ export default function App() {
         />
       )}
 
-      <Suspense fallback={isSynthRackOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
-        <LayerSynthRackModal isOpen={isSynthRackOpen} onClose={() => setIsSynthRackOpen(false)} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
+      <Suspense fallback={modals.synthRack ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
+        <LayerSynthRackModal isOpen={modals.synthRack} onClose={() => closeModal('synthRack')} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
       </Suspense>
-      <Suspense fallback={null}><AdvancedEngineRackModal isOpen={isAdvancedRackOpen} onClose={() => setIsAdvancedRackOpen(false)} libraryRoot={libraryRoot} /></Suspense>
+      <Suspense fallback={null}><AdvancedEngineRackModal isOpen={modals.advancedRack} onClose={() => closeModal('advancedRack')} libraryRoot={libraryRoot} /></Suspense>
 
       {/* International Loudness Standard Modal (ITU-R BS.1770-4 / EBU R128) */}
       <LoudnessStandardModal
-        isOpen={isLoudnessModalOpen}
+        isOpen={modals.loudnessModal}
         onClose={() => {
-          setIsLoudnessModalOpen(false);
+          closeModal('loudnessModal');
           setSampleForLoudness(null);
         }}
         sample={sampleForLoudness || selectedSample}
@@ -1166,21 +1159,21 @@ export default function App() {
 
       {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
+        isOpen={modals.shortcuts}
+        onClose={() => closeModal('shortcuts')}
       />
 
       {/* Documentation & Naming Conventions Modal */}
       <DocumentationModal
-        isOpen={isDocOpen}
-        onClose={() => setIsDocOpen(false)}
+        isOpen={modals.doc}
+        onClose={() => closeModal('doc')}
         onOpenAutoCurator={() => {
-          setIsDocOpen(false);
-          setIsAutoCuratorOpen(true);
+          closeModal('doc');
+          openModal('autoCurator');
         }}
         onOpenGitHubSync={() => {
-          setIsDocOpen(false);
-          setIsGitHubSyncOpen(true);
+          closeModal('doc');
+          openModal('gitHubSync');
         }}
       />
     </div>
