@@ -107,9 +107,12 @@
       ],
       "category": "AudioVideo",
       "maintainer": "propann",
+      "synopsis": "Sample manager, DSP rack & hardware kits",
       "desktop": {
-        "Name": "Resonance",
-        "Comment": "Sample manager, DSP rack & hardware kits"
+        "entry": {
+          "Name": "Resonance",
+          "Comment": "Sample manager, DSP rack & hardware kits"
+        }
       }
     },
     "mac": {
