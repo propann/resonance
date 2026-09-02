@@ -45,9 +45,18 @@ export const RACK_TEMPLATES: RackTemplate[] = [
     id: 'warm-wide',
     label: 'Warm & Wide',
     modules: [
+      { type: 'fx.dcremove', params: { frequency: 24 } },
       { type: 'fx.saturator', params: { shape: 'tube', drive: 1.8, mix: 0.35 } },
       { type: 'fx.chorus', params: { rate: 0.5, depth: 0.004, mix: 0.3 } },
-      { type: 'fx.filter', params: { type: 'highpass', frequency: 40, q: 0.7 } },
+      { type: 'fx.imager', params: { width: 1.4 } },
+    ],
+  },
+  {
+    id: 'air-sparkle',
+    label: 'Air & Sparkle',
+    modules: [
+      { type: 'fx.exciter', params: { frequency: 6500, drive: 3.5, amount: 0.45 } },
+      { type: 'fx.imager', params: { width: 1.25 } },
     ],
   },
 ];

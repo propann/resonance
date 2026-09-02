@@ -13,14 +13,20 @@ describe('built-in rack modules', () => {
     const types = defs.map((d) => d.type).sort();
     expect(types).toEqual(
       [
+        'fx.autopan',
         'fx.bitcrusher',
         'fx.chorus',
         'fx.comb',
         'fx.compressor',
+        'fx.dcremove',
         'fx.delay',
+        'fx.exciter',
         'fx.filter',
         'fx.gain',
+        'fx.imager',
+        'fx.phaser',
         'fx.reverb',
+        'fx.ringmod',
         'fx.saturator',
       ].sort()
     );
