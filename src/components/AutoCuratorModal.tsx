@@ -58,6 +58,7 @@ import { parseOp1AiffPatch } from '../services/op1PatchEncoder';
 import {
   archiveIncomingFiles,
   chooseLibraryRoot,
+  folderDisplayName,
   getDirectoryForPath,
   restoreLibraryRoot,
   supportsLocalLibrary,
@@ -222,7 +223,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   useEffect(() => {
     if (connectedLibraryRoot) {
       setLibraryRoot(connectedLibraryRoot);
-      setLibraryName(connectedLibraryName || connectedLibraryRoot.name);
+      setLibraryName(connectedLibraryName || folderDisplayName(connectedLibraryRoot));
     }
   }, [connectedLibraryRoot, connectedLibraryName]);
 
@@ -230,7 +231,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     restoreLibraryRoot().then((root) => {
       if (root) {
         setLibraryRoot(root);
-        setLibraryName(root.name);
+        setLibraryName(folderDisplayName(root));
       }
     });
   }, []);
@@ -239,7 +240,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     try {
       const root = await chooseLibraryRoot();
       setLibraryRoot(root);
-      setLibraryName(root.name);
+      setLibraryName(folderDisplayName(root));
       onLibraryRootChange?.(root);
       const pendingOriginals = items
         .filter((item) => item.source === 'upload' && item.file && !item.archivedToReception)
@@ -257,7 +258,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
             : item
         ));
       }
-      setNotification(`Bibliothèque connectée : ${root.name}. Les dossiers de réception et de classement sont prêts.`);
+      setNotification(`Bibliothèque connectée : ${folderDisplayName(root)}. Les dossiers de réception et de classement sont prêts.`);
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setNotification(err instanceof Error ? err.message : 'Impossible de connecter ce dossier.');

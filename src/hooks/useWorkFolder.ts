@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  adoptLibraryRoot,
   chooseLibraryRoot,
+  folderDisplayName,
   listWorkFolderAudioFiles,
   readLibraryManifest,
   removeEmptyManagedFolders,
   restoreLibraryRoot,
   scanManagedLibrary,
   supportsLocalLibrary,
+  watchWorkFolder,
   type DirectoryHandle,
   type WorkFolderAudioFile,
 } from '../services/localLibrary';
 
 export type WorkFolderStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-const RECEPTION_SCAN_INTERVAL_MS = 5000;
+// chokidar drives the scan; this is only a slow safety net for missed events.
+const RECEPTION_FALLBACK_INTERVAL_MS = 30000;
 
 export interface UseWorkFolderOptions {
   /** The curator modal is open — pause the background reception scan. */
@@ -86,7 +90,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   const chooseLibrary = useCallback(async () => {
     if (!supportsLocalLibrary()) {
       alert(
-        "Le choix d'un dossier de travail nécessite Chrome ou Microsoft Edge sur ordinateur. Ouvrez http://localhost:3000 dans l'un de ces navigateurs, puis réessayez."
+        "Le dossier de travail nécessite l'application de bureau Resonance (Windows ou Linux). La version navigateur n'a pas accès au disque."
       );
       return;
     }
@@ -94,7 +98,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       setWorkFolderStatus('connecting');
       const root = await chooseLibraryRoot();
       setLibraryRoot(root);
-      setLibraryName(root.name);
+      setLibraryName(folderDisplayName(root));
       const scan = await scanManagedLibrary(root);
       setDiskSampleCount(scan.totalSamples);
       setDiskFolderCounts(scan.folderCounts);
@@ -118,16 +122,11 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       await chooseLibrary();
       return;
     }
-    try {
-      const permission = await libraryRoot.requestPermission?.({ mode: 'readwrite' });
-      if (permission === 'granted') {
-        await refreshLibrary();
-        return;
-      }
-    } catch (error) {
-      console.warn('Autorisation du dossier à renouveler', error);
-    }
-    await chooseLibrary();
+    // Desktop: the path is always accessible — just re-scan. Fall back to a
+    // fresh pick if the folder has gone missing.
+    const readopted = await adoptLibraryRoot(libraryRoot);
+    if (readopted) await refreshLibrary();
+    else await chooseLibrary();
   }, [libraryRoot, chooseLibrary, refreshLibrary]);
 
   const cleanEmptyFolders = useCallback(async () => {
@@ -167,8 +166,9 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   }, [libraryRoot]);
 
   const adoptExternalRoot = useCallback((root: DirectoryHandle) => {
+    void adoptLibraryRoot(root);
     setLibraryRoot(root);
-    setLibraryName(root.name);
+    setLibraryName(folderDisplayName(root));
   }, []);
 
   // Restore a previously granted work folder on mount.
@@ -176,7 +176,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     void restoreLibraryRoot().then((root) => {
       if (!root) return;
       setLibraryRoot(root);
-      setLibraryName(root.name);
+      setLibraryName(folderDisplayName(root));
       setWorkFolderStatus('connected');
       void scanManagedLibrary(root).then((scan) => {
         setDiskSampleCount(scan.totalSamples);
@@ -223,10 +223,12 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     };
 
     void scanReception();
-    const timer = window.setInterval(() => void scanReception(), RECEPTION_SCAN_INTERVAL_MS);
+    const unwatch = watchWorkFolder(() => void scanReception());
+    const fallback = window.setInterval(() => void scanReception(), RECEPTION_FALLBACK_INTERVAL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      unwatch();
+      window.clearInterval(fallback);
     };
   }, [libraryRoot, options.isCuratorOpen, options.isCuratorProcessing]);
 

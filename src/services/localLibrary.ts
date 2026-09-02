@@ -1,12 +1,22 @@
 /**
- * Browser-side library access. Every filesystem write follows an explicit user
- * directory selection made through the File System Access API.
+ * Working-folder access. Backed by the Electron fs bridge (`desktopFS`); every
+ * path is relative to the folder the user chose and is jailed to it in the main
+ * process. In a plain browser build the bridge is absent and
+ * `supportsLocalLibrary()` returns false.
+ *
+ * Function signatures keep a leading `root` argument for source compatibility,
+ * but the authoritative root lives in the main process — the argument is only
+ * used for display.
  */
-export type DirectoryHandle = any;
+import { desktopFS, isDesktop } from './desktopBridge';
+
+/** @deprecated the root is now a plain path string. */
+export type DirectoryHandle = string;
+export type LibraryRoot = string;
 
 export interface WorkFolderAudioFile {
   file: File;
-  /** Path relative to the chosen working folder; used only after a successful transfer. */
+  /** Path relative to the working folder; used only after a successful transfer. */
   sourcePath: string;
 }
 
@@ -26,123 +36,6 @@ export const LIBRARY_FOLDERS = [
   '_MANIFEST',
 ] as const;
 
-const DB_NAME = 'resonance-local-library';
-const STORE_NAME = 'settings';
-const HANDLE_KEY = 'library-handle';
-
-function openDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function storeValue(key: string, value: unknown): Promise<void> {
-  const db = await openDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    transaction.objectStore(STORE_NAME).put(value, key);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  db.close();
-}
-
-async function readValue<T>(key: string): Promise<T | undefined> {
-  const db = await openDatabase();
-  const value = await new Promise<T | undefined>((resolve, reject) => {
-    const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(key);
-    request.onsuccess = () => resolve(request.result as T | undefined);
-    request.onerror = () => reject(request.error);
-  });
-  db.close();
-  return value;
-}
-
-export function supportsLocalLibrary(): boolean {
-  return typeof window !== 'undefined' && 'showDirectoryPicker' in window;
-}
-
-export async function ensureLibraryStructure(root: DirectoryHandle): Promise<void> {
-  for (const path of LIBRARY_FOLDERS) {
-    let current = root;
-    for (const name of path.split('/')) current = await current.getDirectoryHandle(name, { create: true });
-  }
-}
-
-export async function chooseLibraryRoot(): Promise<DirectoryHandle> {
-  if (!supportsLocalLibrary()) throw new Error('Navigateur non compatible : utilisez Chrome ou Edge sur ordinateur.');
-  const root = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
-  await ensureLibraryStructure(root);
-  try {
-    await storeValue(HANDLE_KEY, root);
-  } catch {
-    // Some browsers allow the session handle but forbid persistent handles.
-  }
-  return root;
-}
-
-export async function restoreLibraryRoot(): Promise<DirectoryHandle | null> {
-  try {
-    const root = await readValue<DirectoryHandle>(HANDLE_KEY);
-    if (!root) return null;
-    const permission = await root.queryPermission?.({ mode: 'readwrite' });
-    if (permission !== 'granted') return null;
-    await ensureLibraryStructure(root);
-    return root;
-  } catch {
-    return null;
-  }
-}
-
-function cleanFileName(name: string): string {
-  return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'sample.wav';
-}
-
-async function uniqueFileHandle(directory: DirectoryHandle, desiredName: string): Promise<any> {
-  const dot = desiredName.lastIndexOf('.');
-  const stem = dot > 0 ? desiredName.slice(0, dot) : desiredName;
-  const extension = dot > 0 ? desiredName.slice(dot) : '';
-  let candidate = cleanFileName(desiredName);
-  let index = 2;
-  while (true) {
-    try {
-      await directory.getFileHandle(candidate);
-      candidate = `${stem}_${index++}${extension}`;
-    } catch {
-      return directory.getFileHandle(candidate, { create: true });
-    }
-  }
-}
-
-export async function writeUniqueFile(directory: DirectoryHandle, fileName: string, contents: Blob): Promise<string> {
-  const handle = await uniqueFileHandle(directory, fileName);
-  const writer = await handle.createWritable();
-  await writer.write(contents);
-  await writer.close();
-  return handle.name;
-}
-
-export async function archiveIncomingFiles(root: DirectoryHandle, files: File[]): Promise<string[]> {
-  const reception = await root.getDirectoryHandle('00_RECEPTION', { create: true });
-  const written: string[] = [];
-  for (const file of files) written.push(await writeUniqueFile(reception, file.name, file));
-  return written;
-}
-
-export async function listReceptionAudioFiles(root: DirectoryHandle): Promise<File[]> {
-  const reception = await root.getDirectoryHandle('00_RECEPTION', { create: true });
-  const files: File[] = [];
-  const audioPattern = /\.(wav|mp3|ogg|flac|aif|aiff|m4a|webm)$/i;
-  for await (const entry of reception.values()) {
-    if (entry.kind !== 'file' || !audioPattern.test(entry.name)) continue;
-    files.push(await entry.getFile());
-  }
-  return files;
-}
-
 const MANAGED_TOP_LEVEL_FOLDERS = new Set([
   '00_RECEPTION',
   '01_ONE_SHOTS',
@@ -151,86 +44,168 @@ const MANAGED_TOP_LEVEL_FOLDERS = new Set([
   '_MANIFEST',
 ]);
 
-/** Finds new audio anywhere in the working folder, while ignoring managed outputs. */
-export async function listWorkFolderAudioFiles(root: DirectoryHandle): Promise<WorkFolderAudioFile[]> {
-  const files: WorkFolderAudioFile[] = [];
-  const visit = async (directory: DirectoryHandle, relativePath = ''): Promise<void> => {
-    for await (const entry of directory.values()) {
-      const path = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-      if (entry.kind === 'file' && AUDIO_FILE.test(entry.name)) {
-        files.push({ file: await entry.getFile(), sourcePath: path });
-      } else if (entry.kind === 'directory') {
-        // Reception is also a valid inbox for libraries created by earlier versions.
-        if (!relativePath && MANAGED_TOP_LEVEL_FOLDERS.has(entry.name) && entry.name !== '00_RECEPTION') continue;
-        await visit(entry, path);
-      }
-    }
-  };
-  await visit(root);
-  return files;
+const AUDIO_FILE = /\.(wav|mp3|ogg|flac|aif|aiff|m4a|webm)$/i;
+
+// --- path helpers ------------------------------------------------------------
+
+const j = (...parts: Array<string | undefined>): string =>
+  parts
+    .filter((p): p is string => !!p)
+    .join('/')
+    .replace(/\/{2,}/g, '/')
+    .replace(/^\//, '');
+
+const baseName = (p: string): string => p.split('/').filter(Boolean).pop() ?? p;
+
+/** Last path segment of a root, for display (handles both slash styles). */
+export const folderDisplayName = (root: string): string =>
+  root.split(/[/\\]/).filter(Boolean).pop() ?? root;
+const dirName = (p: string): string => p.split('/').filter(Boolean).slice(0, -1).join('/');
+
+async function bytesToFile(rel: string): Promise<File> {
+  const fs = desktopFS();
+  const buf = await fs.readFile(rel);
+  const stat = await fs.stat(rel);
+  return new File([buf], baseName(rel), { lastModified: stat.mtimeMs || Date.now() });
 }
 
-async function getExistingDirectory(root: DirectoryHandle, parts: string[]): Promise<DirectoryHandle | null> {
-  let current = root;
+function cleanFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'sample.wav';
+}
+
+// --- root selection & restore ---------------------------------------------------
+
+export function supportsLocalLibrary(): boolean {
+  return isDesktop();
+}
+
+export async function ensureLibraryStructure(_root?: LibraryRoot): Promise<void> {
+  const fs = desktopFS();
+  for (const folder of LIBRARY_FOLDERS) await fs.mkdirp(folder);
+}
+
+export async function chooseLibraryRoot(): Promise<LibraryRoot> {
+  if (!isDesktop()) throw new Error('Application de bureau requise pour choisir un dossier de travail.');
+  const root = await desktopFS().pickRoot();
+  if (!root) throw new DOMException('Sélection annulée', 'AbortError');
+  await ensureLibraryStructure();
+  return root;
+}
+
+export async function restoreLibraryRoot(): Promise<LibraryRoot | null> {
+  if (!isDesktop()) return null;
   try {
-    for (const part of parts) current = await current.getDirectoryHandle(part);
-    return current;
+    const saved = await desktopFS().getSetting('libraryRoot');
+    if (typeof saved !== 'string' || !saved) return null;
+    const adopted = await desktopFS().setRoot(saved);
+    if (!adopted) return null;
+    await ensureLibraryStructure();
+    return adopted;
   } catch {
     return null;
   }
 }
 
-/** Removes transferred source files and then their now-empty, non-managed parent folders. */
-export async function removeWorkFolderFiles(root: DirectoryHandle, sourcePaths: string[]): Promise<number> {
-  let removed = 0;
-  for (const sourcePath of new Set(sourcePaths)) {
-    const parts = sourcePath.split('/').filter(Boolean);
-    const fileName = parts.pop();
-    if (!fileName) continue;
-    const parent = await getExistingDirectory(root, parts);
-    if (!parent) continue;
-    try {
-      await parent.removeEntry(fileName);
-      removed++;
-    } catch {
-      continue;
-    }
-
-    for (let length = parts.length; length > 0; length--) {
-      const folderParts = parts.slice(0, length);
-      if (MANAGED_TOP_LEVEL_FOLDERS.has(folderParts[0])) break;
-      const folder = await getExistingDirectory(root, folderParts);
-      const parentFolder = await getExistingDirectory(root, folderParts.slice(0, -1));
-      if (!folder || !parentFolder) break;
-      let isEmpty = true;
-      for await (const _entry of folder.values()) {
-        isEmpty = false;
-        break;
-      }
-      if (!isEmpty) break;
-      try {
-        await parentFolder.removeEntry(folderParts[folderParts.length - 1]);
-      } catch {
-        break;
-      }
-    }
-  }
-  return removed;
+/** Re-point the main process at a root the caller already has (e.g. from the curator). */
+export async function adoptLibraryRoot(root: LibraryRoot): Promise<LibraryRoot | null> {
+  if (!isDesktop()) return null;
+  return desktopFS().setRoot(root);
 }
 
-/** Deletes only transferred files from the managed reception folder. */
-export async function removeReceptionFiles(root: DirectoryHandle, fileNames: string[]): Promise<number> {
-  const reception = await root.getDirectoryHandle('00_RECEPTION', { create: true });
-  let removed = 0;
-  for (const fileName of new Set(fileNames)) {
-    try {
-      await reception.removeEntry(fileName);
-      removed++;
-    } catch {
-      // Missing/renamed files are deliberately left alone.
-    }
+/**
+ * Watch the working folder for changes. Returns a cleanup function.
+ * No-op in the browser build.
+ */
+export function watchWorkFolder(onChange: () => void): () => void {
+  if (!isDesktop()) return () => undefined;
+  const fs = desktopFS();
+  const unsub = fs.onChange(onChange);
+  void fs.watchStart();
+  return () => {
+    unsub();
+    void fs.watchStop();
+  };
+}
+
+// --- writing --------------------------------------------------------------------
+
+async function uniqueFileName(dirRel: string, desiredName: string): Promise<string> {
+  const fs = desktopFS();
+  const clean = cleanFileName(desiredName);
+  const dot = clean.lastIndexOf('.');
+  const stem = dot > 0 ? clean.slice(0, dot) : clean;
+  const ext = dot > 0 ? clean.slice(dot) : '';
+  let candidate = clean;
+  let index = 2;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const stat = await fs.stat(j(dirRel, candidate));
+    if (!stat.exists) return candidate;
+    candidate = `${stem}_${index++}${ext}`;
   }
-  return removed;
+}
+
+/** Ensures a managed subfolder exists and returns its relative path. */
+export async function getDirectoryForPath(_root: LibraryRoot, relPath: string): Promise<string> {
+  const rel = j(relPath);
+  await desktopFS().mkdirp(rel);
+  return rel;
+}
+
+export async function writeUniqueFile(dirRel: string, fileName: string, contents: Blob): Promise<string> {
+  const name = await uniqueFileName(dirRel, fileName);
+  await desktopFS().writeFile(j(dirRel, name), await contents.arrayBuffer());
+  return name;
+}
+
+export async function archiveIncomingFiles(_root: LibraryRoot, files: File[]): Promise<string[]> {
+  await desktopFS().mkdirp('00_RECEPTION');
+  const written: string[] = [];
+  for (const file of files) written.push(await writeUniqueFile('00_RECEPTION', file.name, file));
+  return written;
+}
+
+// --- reading ------------------------------------------------------------------
+
+export async function listReceptionAudioFiles(_root: LibraryRoot): Promise<File[]> {
+  const fs = desktopFS();
+  await fs.mkdirp('00_RECEPTION');
+  const entries = await fs.readDir('00_RECEPTION');
+  const files: File[] = [];
+  for (const entry of entries) {
+    if (entry.isFile && AUDIO_FILE.test(entry.name)) files.push(await bytesToFile(j('00_RECEPTION', entry.name)));
+  }
+  return files;
+}
+
+/**
+ * Every audio file anywhere in the working folder, skipping the managed output
+ * areas (but keeping 00_RECEPTION). Reads file bytes eagerly — call it on a
+ * change event, not on a timer.
+ */
+export async function listWorkFolderAudioFiles(_root: LibraryRoot): Promise<WorkFolderAudioFile[]> {
+  const fs = desktopFS();
+  const out: WorkFolderAudioFile[] = [];
+
+  const visit = async (rel: string): Promise<void> => {
+    const entries = await fs.readDir(rel || '.');
+    for (const entry of entries) {
+      const childRel = j(rel, entry.name);
+      if (entry.isFile && AUDIO_FILE.test(entry.name)) {
+        out.push({ file: await bytesToFile(childRel), sourcePath: childRel });
+      } else if (entry.isDir) {
+        if (!rel && MANAGED_TOP_LEVEL_FOLDERS.has(entry.name) && entry.name !== '00_RECEPTION') continue;
+        await visit(childRel);
+      }
+    }
+  };
+
+  await visit('');
+  return out;
+}
+
+export async function readLibraryAudioFile(_root: LibraryRoot, relativePath: string): Promise<File> {
+  return bytesToFile(j(relativePath));
 }
 
 export interface LibraryScanResult {
@@ -238,48 +213,94 @@ export interface LibraryScanResult {
   folderCounts: Record<string, number>;
 }
 
-const AUDIO_FILE = /\.(wav|mp3|ogg|flac|aif|aiff|m4a|webm)$/i;
-
-export async function scanManagedLibrary(root: DirectoryHandle): Promise<LibraryScanResult> {
+export async function scanManagedLibrary(_root: LibraryRoot): Promise<LibraryScanResult> {
+  const fs = desktopFS();
   const folderCounts: Record<string, number> = {};
   let totalSamples = 0;
-  const scanDirectory = async (directory: DirectoryHandle, relativePath: string): Promise<number> => {
+
+  const scan = async (rel: string): Promise<number> => {
     let count = 0;
-    for await (const entry of directory.values()) {
-      if (entry.kind === 'file' && AUDIO_FILE.test(entry.name)) count++;
-      if (entry.kind === 'directory') count += await scanDirectory(entry, `${relativePath}/${entry.name}`);
+    let entries;
+    try {
+      entries = await fs.readDir(rel);
+    } catch {
+      return 0;
     }
-    folderCounts[relativePath] = count;
+    for (const entry of entries) {
+      if (entry.isFile && AUDIO_FILE.test(entry.name)) count++;
+      else if (entry.isDir) count += await scan(j(rel, entry.name));
+    }
+    folderCounts[rel] = count;
     return count;
   };
 
-  for (const topLevel of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) {
-    try {
-      totalSamples += await scanDirectory(await root.getDirectoryHandle(topLevel), topLevel);
-    } catch {
-      // A missing category simply contains no samples.
-    }
+  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) {
+    totalSamples += await scan(top);
   }
   return { totalSamples, folderCounts };
 }
 
-/** Removes only non-canonical empty folders within the managed output areas. */
-export async function removeEmptyManagedFolders(root: DirectoryHandle): Promise<number> {
+// --- deletion / cleanup -----------------------------------------------------
+
+export async function removeWorkFolderFiles(_root: LibraryRoot, sourcePaths: string[]): Promise<number> {
+  const fs = desktopFS();
+  let removed = 0;
+  for (const sourcePath of new Set(sourcePaths)) {
+    const rel = j(sourcePath);
+    try {
+      await fs.remove(rel);
+      removed++;
+    } catch {
+      continue;
+    }
+    // prune now-empty, non-managed parent folders
+    let parent = dirName(rel);
+    while (parent && !MANAGED_TOP_LEVEL_FOLDERS.has(parent.split('/')[0])) {
+      const entries = await fs.readDir(parent).catch(() => []);
+      if (entries.length > 0) break;
+      await fs.remove(parent).catch(() => undefined);
+      parent = dirName(parent);
+    }
+  }
+  return removed;
+}
+
+export async function removeReceptionFiles(_root: LibraryRoot, fileNames: string[]): Promise<number> {
+  const fs = desktopFS();
+  let removed = 0;
+  for (const name of new Set(fileNames)) {
+    try {
+      await fs.remove(j('00_RECEPTION', name));
+      removed++;
+    } catch {
+      /* missing/renamed files are left alone */
+    }
+  }
+  return removed;
+}
+
+export async function removeEmptyManagedFolders(_root: LibraryRoot): Promise<number> {
+  const fs = desktopFS();
   const protectedFolders = new Set<string>(LIBRARY_FOLDERS);
   let removed = 0;
-  const clean = async (directory: DirectoryHandle, relativePath: string): Promise<boolean> => {
+
+  const clean = async (rel: string): Promise<boolean> => {
+    let entries;
+    try {
+      entries = await fs.readDir(rel);
+    } catch {
+      return false;
+    }
     let hasEntries = false;
-    const entries: any[] = [];
-    for await (const entry of directory.values()) entries.push(entry);
     for (const entry of entries) {
-      if (entry.kind === 'file') {
+      if (entry.isFile) {
         hasEntries = true;
         continue;
       }
-      const childPath = `${relativePath}/${entry.name}`;
-      const childEmpty = await clean(entry, childPath);
-      if (childEmpty && !protectedFolders.has(childPath)) {
-        await directory.removeEntry(entry.name);
+      const childRel = j(rel, entry.name);
+      const childEmpty = await clean(childRel);
+      if (childEmpty && !protectedFolders.has(childRel)) {
+        await fs.remove(childRel).catch(() => undefined);
         removed++;
       } else {
         hasEntries = true;
@@ -288,102 +309,69 @@ export async function removeEmptyManagedFolders(root: DirectoryHandle): Promise<
     return !hasEntries;
   };
 
-  for (const topLevel of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) {
-    try {
-      await clean(await root.getDirectoryHandle(topLevel), topLevel);
-    } catch {
-      // Ignore a category that does not exist yet.
-    }
-  }
+  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) await clean(top);
   return removed;
 }
 
-export async function getDirectoryForPath(root: DirectoryHandle, path: string): Promise<DirectoryHandle> {
-  let current = root;
-  for (const part of path.split('/').filter(Boolean)) current = await current.getDirectoryHandle(part, { create: true });
-  return current;
-}
+// --- manifest & settings (_MANIFEST/*.json) --------------------------------
 
-/** Reads one managed sound by relative path without scanning the complete library. */
-export async function readLibraryAudioFile(root: DirectoryHandle, relativePath: string): Promise<File> {
-  const parts = relativePath.split('/').filter(Boolean);
-  const fileName = parts.pop();
-  if (!fileName) throw new Error('Chemin de fichier invalide.');
-  const directory = await getExistingDirectory(root, parts);
-  if (!directory) throw new Error('Dossier introuvable.');
-  const handle = await directory.getFileHandle(fileName);
-  return await handle.getFile();
-}
+const MANIFEST_FILE = '_MANIFEST/resonance-library.json';
+const STUDIO_SETTINGS_FILE = '_MANIFEST/resonance-studio-settings.json';
 
-export async function writeLibraryManifest(root: DirectoryHandle, samples: Array<Record<string, unknown>>): Promise<void> {
-  const manifestDirectory = await root.getDirectoryHandle('_MANIFEST', { create: true });
-  const file = await manifestDirectory.getFileHandle('resonance-library.json', { create: true });
-  let existingSamples: Array<Record<string, unknown>> = [];
+async function readJsonFile(rel: string): Promise<unknown> {
   try {
-    const existing = JSON.parse(await (await file.getFile()).text());
-    if (Array.isArray(existing.samples)) existingSamples = existing.samples;
+    const buf = await desktopFS().readFile(rel);
+    return JSON.parse(new TextDecoder().decode(buf));
   } catch {
-    // First export or an older malformed manifest: start a clean registry.
+    return null;
   }
+}
+
+async function writeJsonFile(rel: string, value: unknown): Promise<void> {
+  await desktopFS().mkdirp(dirName(rel));
+  await desktopFS().writeFile(rel, new TextEncoder().encode(JSON.stringify(value, null, 2)));
+}
+
+export async function writeLibraryManifest(
+  _root: LibraryRoot,
+  samples: Array<Record<string, unknown>>
+): Promise<void> {
+  const existing = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
   const merged = new Map<string, Record<string, unknown>>();
-  for (const sample of existingSamples) {
+  for (const sample of existing?.samples ?? []) {
     merged.set(`${sample.path || ''}/${sample.fileName || sample.name || ''}`, sample);
   }
   for (const sample of samples) {
     merged.set(`${sample.path || ''}/${sample.fileName || sample.name || ''}`, sample);
   }
-  const writer = await file.createWritable();
-  await writer.write(JSON.stringify({
+  await writeJsonFile(MANIFEST_FILE, {
     generatedAt: new Date().toISOString(),
     schemaVersion: 1,
     samples: [...merged.values()],
-  }, null, 2));
-  await writer.close();
+  });
 }
 
-/** Source fingerprints already committed to the manifest; prevents replay after a partial transfer. */
-export async function getProcessedSourceFingerprints(root: DirectoryHandle): Promise<Set<string>> {
-  try {
-    const manifestDirectory = await root.getDirectoryHandle('_MANIFEST');
-    const file = await manifestDirectory.getFileHandle('resonance-library.json');
-    const parsed = JSON.parse(await (await file.getFile()).text());
-    if (!Array.isArray(parsed.samples)) return new Set();
-    return new Set(parsed.samples
-      .map((sample: Record<string, unknown>) => sample.sourceFingerprint)
-      .filter((fingerprint: unknown): fingerprint is string => typeof fingerprint === 'string'));
-  } catch {
-    return new Set();
-  }
+export async function readLibraryManifest(_root: LibraryRoot): Promise<Array<Record<string, unknown>>> {
+  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: unknown } | null;
+  return Array.isArray(parsed?.samples) ? (parsed!.samples as Array<Record<string, unknown>>) : [];
 }
 
-export async function readLibraryManifest(root: DirectoryHandle): Promise<Array<Record<string, unknown>>> {
-  try {
-    const manifestDirectory = await root.getDirectoryHandle('_MANIFEST');
-    const file = await manifestDirectory.getFileHandle('resonance-library.json');
-    const parsed = JSON.parse(await (await file.getFile()).text());
-    return Array.isArray(parsed.samples) ? parsed.samples : [];
-  } catch {
-    return [];
-  }
+export async function getProcessedSourceFingerprints(_root: LibraryRoot): Promise<Set<string>> {
+  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
+  if (!Array.isArray(parsed?.samples)) return new Set();
+  return new Set(
+    parsed!.samples
+      .map((sample) => sample.sourceFingerprint)
+      .filter((fp): fp is string => typeof fp === 'string')
+  );
 }
 
-export async function readStudioSettings(root: DirectoryHandle): Promise<Record<string, unknown>> {
-  try {
-    const directory = await root.getDirectoryHandle('_MANIFEST');
-    const handle = await directory.getFileHandle('resonance-studio-settings.json');
-    const parsed = JSON.parse(await (await handle.getFile()).text());
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+export async function readStudioSettings(_root: LibraryRoot): Promise<Record<string, unknown>> {
+  const parsed = await readJsonFile(STUDIO_SETTINGS_FILE);
+  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
 }
 
-/** Saves non-audio studio settings beside the manifest, so they travel with the library. */
-export async function writeStudioSettings(root: DirectoryHandle, patch: Record<string, unknown>): Promise<void> {
-  const directory = await root.getDirectoryHandle('_MANIFEST', { create: true });
-  const handle = await directory.getFileHandle('resonance-studio-settings.json', { create: true });
-  const current = await readStudioSettings(root);
-  const writer = await handle.createWritable();
-  await writer.write(JSON.stringify({ ...current, ...patch, updatedAt: new Date().toISOString() }, null, 2));
-  await writer.close();
+export async function writeStudioSettings(_root: LibraryRoot, patch: Record<string, unknown>): Promise<void> {
+  const current = await readStudioSettings(_root);
+  await writeJsonFile(STUDIO_SETTINGS_FILE, { ...current, ...patch, updatedAt: new Date().toISOString() });
 }
