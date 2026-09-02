@@ -1,0 +1,145 @@
+import { coerceParams } from './params';
+import { requireModuleDef } from './registry';
+import type { ParamValues, RackNode, RackState } from './types';
+
+/** Load an AudioWorklet module once per (context, url). */
+const workletLoads = new WeakMap<BaseAudioContext, Map<string, Promise<void>>>();
+
+export function ensureWorklet(ctx: BaseAudioContext, url: string): Promise<void> {
+  let perCtx = workletLoads.get(ctx);
+  if (!perCtx) {
+    perCtx = new Map();
+    workletLoads.set(ctx, perCtx);
+  }
+  let load = perCtx.get(url);
+  if (!load) {
+    load = ctx.audioWorklet.addModule(url);
+    perCtx.set(url, load);
+  }
+  return load;
+}
+
+interface LiveModule {
+  id: string;
+  type: string;
+  node: RackNode;
+  params: ParamValues;
+}
+
+/**
+ * Runtime for one rack in one AudioContext. Builds `input -> [enabled modules]
+ * -> output`. The same class runs against a realtime AudioContext (monitoring)
+ * and an OfflineAudioContext (bounce) — see `renderRackOffline`.
+ *
+ * Source modules (input === null) are supported as the chain head; the current
+ * proof modules are all inserts.
+ */
+export class Rack {
+  readonly input: GainNode;
+  readonly output: GainNode;
+  private readonly ctx: BaseAudioContext;
+  private live: LiveModule[] = [];
+
+  constructor(ctx: BaseAudioContext) {
+    this.ctx = ctx;
+    this.input = ctx.createGain();
+    this.output = ctx.createGain();
+    this.input.connect(this.output);
+  }
+
+  /** Tear down the current chain and build the one described by `state`. */
+  async setState(state: RackState): Promise<void> {
+    this.teardown();
+
+    const enabled = state.modules.filter((m) => m.enabled);
+    const built: LiveModule[] = [];
+    for (const instance of enabled) {
+      const def = requireModuleDef(instance.type);
+      const params = coerceParams(def, instance.params);
+      const node = await def.createNode(this.ctx, params);
+      built.push({ id: instance.id, type: instance.type, node, params });
+    }
+
+    // Rewire: input -> m1 -> m2 -> ... -> output
+    try {
+      this.input.disconnect();
+    } catch {
+      // nothing connected yet
+    }
+    let cursor: AudioNode = this.input;
+    for (const m of built) {
+      if (m.node.input) cursor.connect(m.node.input);
+      cursor = m.node.output;
+    }
+    cursor.connect(this.output);
+
+    this.live = built;
+  }
+
+  /** Apply a partial parameter change to one live module, no rebuild. */
+  updateModuleParams(id: string, partial: ParamValues): void {
+    const m = this.live.find((x) => x.id === id);
+    if (!m) return;
+    const def = requireModuleDef(m.type);
+    m.params = coerceParams(def, { ...m.params, ...partial });
+    m.node.update(m.params);
+  }
+
+  hasModule(id: string): boolean {
+    return this.live.some((m) => m.id === id);
+  }
+
+  dispose(): void {
+    this.teardown();
+    try {
+      this.input.disconnect();
+    } catch {
+      /* noop */
+    }
+    try {
+      this.output.disconnect();
+    } catch {
+      /* noop */
+    }
+  }
+
+  private teardown(): void {
+    for (const m of this.live) {
+      try {
+        m.node.dispose();
+      } catch (error) {
+        console.warn(`[rack] dispose failed for ${m.type}`, error);
+      }
+    }
+    this.live = [];
+  }
+}
+
+/**
+ * Render a source buffer through a rack in an OfflineAudioContext.
+ * `tailSec` extends the render past the source for delay/reverb tails.
+ */
+export async function renderRackOffline(
+  state: RackState,
+  source: AudioBuffer,
+  tailSec = 0
+): Promise<AudioBuffer> {
+  const extra = Math.max(0, Math.ceil(tailSec * source.sampleRate));
+  const ctx = new OfflineAudioContext(
+    source.numberOfChannels,
+    source.length + extra,
+    source.sampleRate
+  );
+  const rack = new Rack(ctx);
+  await rack.setState(state);
+
+  const src = ctx.createBufferSource();
+  src.buffer = source;
+  src.connect(rack.input);
+  rack.output.connect(ctx.destination);
+  src.start();
+
+  const rendered = await ctx.startRendering();
+  rack.dispose();
+  return rendered;
+}
