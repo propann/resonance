@@ -814,23 +814,11 @@ export default function App() {
         onRefreshLibrary={libraryRoot ? refreshLibrary : undefined}
         onCleanEmptyFolders={libraryRoot ? cleanEmptyFolders : undefined}
         isBackgroundProcessing={isCuratorProcessing}
-        onOpenBackgroundProcessing={() => openModal('autoCurator')}
         libraryName={libraryName}
-        onOpenAutoCurator={() => openModal('autoCurator')}
-        onOpenBatchNaming={() => openModal('batchNaming')}
-        onOpenBatchConverter={() => openModal('batchConverter')}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenFxRack={() => handleOpenFxRack()}
-        onOpenSynthRack={() => openModal('synthRack')}
-        onOpenAdvancedRack={() => openModal('advancedRack')}
         onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
-        onOpenOp1Studio={() => openModal('op1Studio')}
         onOpenEp133Export={handleExportEp133Pack}
-        onOpenGitHubSync={() => openModal('gitHubSync')}
-        onOpenRecorder={() => openModal('recorder')}
-        onOpenBenchmark={() => openModal('benchmark')}
-        onOpenShortcuts={() => openModal('shortcuts')}
-        onOpenDocumentation={() => openModal('doc')}
         onSelectAll={() => handleSelectAllSamples(true)}
         onDeselectAll={() => handleSelectAllSamples(false)}
         onDeleteSelected={handleDeleteSelectedSamples}
@@ -851,16 +839,6 @@ export default function App() {
         workFolderStatus={workFolderStatus}
         incomingCount={incomingCount}
         failedIncomingCount={failedIncomingCount}
-        onOpenAutoCurator={() => openModal('autoCurator')}
-        onOpenDocumentation={() => openModal('doc')}
-        onOpenShortcuts={() => openModal('shortcuts')}
-        onOpenBenchmark={() => openModal('benchmark')}
-        onExportEp133Pack={handleExportEp133Pack}
-        onOpenOp1Studio={() => openModal('op1Studio')}
-        onOpenGitHubSync={() => openModal('gitHubSync')}
-        onOpenRecorder={() => openModal('recorder')}
-        onOpenBatchConverter={() => openModal('batchConverter')}
-        onOpenBatchNaming={() => openModal('batchNaming')}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenFxRack={() => handleOpenFxRack()}
         onOpenAutoSlicer={() => handleOpenSlicer()}

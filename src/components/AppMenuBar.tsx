@@ -30,6 +30,7 @@ import {
   BookOpen,
   ShieldCheck,
 } from 'lucide-react';
+import { useUiStore } from '../stores/uiStore';
 
 export interface AppMenuBarProps {
   onImportFiles?: () => void;
@@ -39,23 +40,12 @@ export interface AppMenuBarProps {
   onRefreshLibrary?: () => void;
   onCleanEmptyFolders?: () => void;
   isBackgroundProcessing?: boolean;
-  onOpenBackgroundProcessing?: () => void;
   libraryName?: string | null;
   onImportOp1Patch?: () => void;
-  onOpenAutoCurator?: () => void;
-  onOpenSmartIngest?: () => void;
-  onOpenBatchNaming: () => void;
-  onOpenBatchConverter: () => void;
   onOpenDspAnalyzer: () => void;
   onOpenFxRack?: () => void;
   onOpenLoudnessStandard?: () => void;
-  onOpenOp1Studio?: () => void;
   onOpenEp133Export: () => void;
-  onOpenGitHubSync?: () => void;
-  onOpenRecorder: () => void;
-  onOpenBenchmark: () => void;
-  onOpenShortcuts: () => void;
-  onOpenDocumentation?: () => void;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
   onDeleteSelected?: () => void;
@@ -78,23 +68,12 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onRefreshLibrary,
   onCleanEmptyFolders,
   isBackgroundProcessing = false,
-  onOpenBackgroundProcessing,
   libraryName,
   onImportOp1Patch,
-  onOpenAutoCurator,
-  onOpenSmartIngest,
-  onOpenBatchNaming,
-  onOpenBatchConverter,
   onOpenDspAnalyzer,
   onOpenFxRack,
   onOpenLoudnessStandard,
-  onOpenOp1Studio,
   onOpenEp133Export,
-  onOpenGitHubSync,
-  onOpenRecorder,
-  onOpenBenchmark,
-  onOpenShortcuts,
-  onOpenDocumentation,
   onSelectAll,
   onDeselectAll,
   onDeleteSelected,
@@ -108,6 +87,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onResetZoom,
   samplesCount,
 }) => {
+  const openModal = useUiStore((state) => state.openModal);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuBarRef = useRef<HTMLDivElement>(null);
 
@@ -149,9 +129,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
           <span className="w-1.5 h-1.5 bg-[#00F0FF] animate-pulse" />
           <span className="font-bold tracking-wider">RESONANCE DSP</span>
         </div>
-        {isBackgroundProcessing && onOpenBackgroundProcessing && (
+        {isBackgroundProcessing && (
           <button
-            onClick={onOpenBackgroundProcessing}
+            onClick={() => openModal('autoCurator')}
             className="flex items-center gap-1 px-2 py-1 bg-[#EF4444] text-white font-bold animate-pulse hover:bg-[#F87171] transition"
             title="Tri en cours : ouvrir le détail"
           >
@@ -258,10 +238,10 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+Shift+O</span>
               </button>}
-              {onOpenAutoCurator && (
+              {(
                 <button
                   onClick={() => {
-                    onOpenAutoCurator();
+                    openModal('autoCurator');
                     closeMenus();
                   }}
                   className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#00F0FF] hover:bg-[#00F0FF] hover:text-black transition font-bold"
@@ -317,10 +297,10 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 </div>
                 <span className="text-[8px] text-[#FFE600]">EP-133</span>
               </button>
-              {onOpenOp1Studio && (
+              {(
                 <button
                   onClick={() => {
-                    onOpenOp1Studio();
+                    openModal('op1Studio');
                     closeMenus();
                   }}
                   className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -332,12 +312,12 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <span className="text-[8px] text-[#FF7A00]">OP-1</span>
                 </button>
               )}
-              {onOpenGitHubSync && (
+              {(
                 <>
                   <div className="h-px bg-[#1E1E2C] my-1" />
                   <button
                     onClick={() => {
-                      onOpenGitHubSync();
+                      openModal('gitHubSync');
                       closeMenus();
                     }}
                     className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -401,9 +381,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 </button>
               )}
               <div className="h-px bg-[#1E1E2C] my-1" />
-              {onOpenSmartIngest && <button
+              {<button
                 onClick={() => {
-                  onOpenBatchNaming();
+                  openModal('batchNaming');
                   closeMenus();
                 }}
                 className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -576,9 +556,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <span className="text-[8px] text-[#10B981] font-bold">LUFS</span>
                 </button>
               )}
-              {onOpenSmartIngest && <button
+              {<button
                 onClick={() => {
-                  onOpenSmartIngest();
+                  openModal('smartIngest');
                   closeMenus();
                 }}
                 className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -619,7 +599,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               </button>
               <button
                 onClick={() => {
-                  onOpenBatchConverter();
+                  openModal('batchConverter');
                   closeMenus();
                 }}
                 className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -632,7 +612,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               <div className="h-px bg-[#1E1E2C] my-1" />
               <button
                 onClick={() => {
-                  onOpenRecorder();
+                  openModal('recorder');
                   closeMenus();
                 }}
                 className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -662,10 +642,10 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
           </button>
           {activeMenu === 'hardware' && (
             <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
-              {onOpenOp1Studio && (
+              {(
                 <button
                   onClick={() => {
-                    onOpenOp1Studio();
+                    openModal('op1Studio');
                     closeMenus();
                   }}
                   className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -721,10 +701,10 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
           </button>
           {activeMenu === 'help' && (
             <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
-              {onOpenDocumentation && (
+              {(
                 <button
                   onClick={() => {
-                    onOpenDocumentation();
+                    openModal('doc');
                     closeMenus();
                   }}
                   className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#00F0FF] hover:bg-[#00F0FF] hover:text-black transition font-bold"
@@ -738,7 +718,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               )}
               <button
                 onClick={() => {
-                  onOpenShortcuts();
+                  openModal('shortcuts');
                   closeMenus();
                 }}
                 className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
@@ -751,7 +731,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               </button>
               <button
                 onClick={() => {
-                  onOpenBenchmark();
+                  openModal('benchmark');
                   closeMenus();
                 }}
                 className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"

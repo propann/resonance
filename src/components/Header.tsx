@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { useUiStore } from '../stores/uiStore';
 import {
   Search,
   Upload,
@@ -33,22 +34,9 @@ interface HeaderProps {
   workFolderStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
   incomingCount?: number;
   failedIncomingCount?: number;
-  onOpenSmartIngest?: () => void;
-  onOpenBenchmark: () => void;
-  onExportEp133Pack: () => void;
-  onOpenOp1Studio?: () => void;
-  onOpenGitHubSync?: () => void;
-  onOpenRecorder: () => void;
-  onOpenBatchConverter: () => void;
-  onOpenBatchNaming?: () => void;
   onOpenDspAnalyzer?: () => void;
-  onOpenSynthRack?: () => void;
-  onOpenAdvancedRack?: () => void;
   onOpenFxRack?: () => void;
   onOpenAutoSlicer?: () => void;
-  onOpenAutoCurator?: () => void;
-  onOpenDocumentation?: () => void;
-  onOpenShortcuts?: () => void;
   onAutoOrganizeLibrary?: () => void;
   isPlaying?: boolean;
   onTogglePlayPause?: () => void;
@@ -69,22 +57,9 @@ export const Header: React.FC<HeaderProps> = ({
   workFolderStatus = 'disconnected',
   incomingCount = 0,
   failedIncomingCount = 0,
-  onOpenSmartIngest,
-  onOpenBenchmark,
-  onExportEp133Pack,
-  onOpenOp1Studio,
-  onOpenGitHubSync,
-  onOpenRecorder,
-  onOpenBatchConverter,
-  onOpenBatchNaming,
   onOpenDspAnalyzer,
-  onOpenSynthRack,
-  onOpenAdvancedRack,
   onOpenFxRack,
   onOpenAutoSlicer,
-  onOpenAutoCurator,
-  onOpenDocumentation,
-  onOpenShortcuts,
   onAutoOrganizeLibrary,
   isPlaying = false,
   onTogglePlayPause,
@@ -95,6 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutoLoudness,
   samplesCount,
 }) => {
+  const openModal = useUiStore((state) => state.openModal);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [peakMeterLevel, setPeakMeterLevel] = useState<number>(0);
@@ -280,10 +256,10 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Auto-Organize Library Pro Folders */}
-        {onOpenAutoCurator && (
+        {(
           <button
             id="open-auto-curator-header-btn"
-            onClick={onOpenAutoCurator}
+            onClick={() => openModal('autoCurator')}
             className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-[#00F0FF] to-[#A855F7] text-black font-extrabold text-[9px] font-pixel hover:opacity-90 border-2 border-[#00C8D6] pixel-btn shadow-md"
             title="Curateur Automatique & Rangement Intelligent (DSP Pipeline)"
           >
@@ -330,23 +306,23 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {onOpenSynthRack && (
-          <button onClick={onOpenSynthRack} className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#A855F7]/20 hover:bg-[#A855F7]/35 text-[#E9D5FF] border-2 border-[#A855F7]/50 text-[9px] font-pixel pixel-btn" title="Ouvrir le rack de 10 moteurs synth et MIDI">
+        {(
+          <button onClick={() => openModal('synthRack')} className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#A855F7]/20 hover:bg-[#A855F7]/35 text-[#E9D5FF] border-2 border-[#A855F7]/50 text-[9px] font-pixel pixel-btn" title="Ouvrir le rack de 10 moteurs synth et MIDI">
             <Wand2 className="w-3 h-3" />
             <span>SYNTH RACK</span>
           </button>
         )}
-        {onOpenAdvancedRack && (
-          <button onClick={onOpenAdvancedRack} className="hidden xl:flex items-center gap-1 px-2 py-1 bg-[#FFB000]/15 hover:bg-[#FFB000]/30 text-[#FFE08A] border-2 border-[#FFB000]/50 text-[9px] font-pixel pixel-btn" title="Rack d’extensions Dexed et Mutable, chargé à la demande">
+        {(
+          <button onClick={() => openModal('advancedRack')} className="hidden xl:flex items-center gap-1 px-2 py-1 bg-[#FFB000]/15 hover:bg-[#FFB000]/30 text-[#FFE08A] border-2 border-[#FFB000]/50 text-[9px] font-pixel pixel-btn" title="Rack d’extensions Dexed et Mutable, chargé à la demande">
             <Flame className="w-3 h-3" />
             <span>EXTENSIONS</span>
           </button>
         )}
 
         {/* Smart Ingestion Magic Drop Button */}
-        {onOpenSmartIngest && <button
+        {<button
           id="open-smart-ingest-btn"
-          onClick={onOpenSmartIngest}
+          onClick={() => openModal('smartIngest')}
           className="hidden md:flex items-center gap-1 px-2 py-1 bg-[#00F0FF] text-black font-bold text-[9px] font-pixel hover:bg-[#38BDF8] border-2 border-[#00C8D6] pixel-btn"
           title="Smart Ingestion DSP"
         >
@@ -355,10 +331,10 @@ export const Header: React.FC<HeaderProps> = ({
         </button>}
 
         {/* Convention & Batch Renaming Button */}
-        {onOpenBatchNaming && (
+        {(
           <button
             id="open-batch-naming-header-btn"
-            onClick={onOpenBatchNaming}
+            onClick={() => openModal('batchNaming')}
             className="hidden xl:flex items-center gap-1 px-2 py-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border-2 border-[#A855F7]/40 text-[9px] font-pixel pixel-btn"
             title="Convention de Nommage Pro"
           >
@@ -385,7 +361,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Batch Converter Button */}
         <button
           id="open-batch-converter-header-btn"
-          onClick={onOpenBatchConverter}
+          onClick={() => openModal('batchConverter')}
           className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border-2 border-[#00F0FF]/40 text-[9px] font-pixel pixel-btn"
           title="Convertisseur par lot"
         >
@@ -394,10 +370,10 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Documentation Modal Button */}
-        {onOpenDocumentation && (
+        {(
           <button
             id="open-doc-header-btn"
-            onClick={onOpenDocumentation}
+            onClick={() => openModal('doc')}
             className="flex items-center gap-1 px-2 py-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border-2 border-[#A855F7]/40 text-[9px] font-pixel pixel-btn"
             title="Documentation Officielle & Conventions de Nommage (F1)"
           >
@@ -407,10 +383,10 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Shortcuts Help */}
-        {onOpenShortcuts && (
+        {(
           <button
             id="shortcuts-help-btn"
-            onClick={onOpenShortcuts}
+            onClick={() => openModal('shortcuts')}
             className="p-1 bg-[#14141C] text-[#8E8E93] hover:text-white border-2 border-[#242432] pixel-btn"
             title="Raccourcis Clavier (?)"
           >
