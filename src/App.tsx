@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useWorkFolder } from './hooks/useWorkFolder';
 import { useUiStore } from './stores/uiStore';
 import { useLibraryStore } from './stores/libraryStore';
+import { useSampleTargetStore, openSampleModal } from './stores/sampleTargetStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
 import { Header } from './components/Header';
@@ -83,15 +84,16 @@ export default function App() {
   const setActiveView = useUiStore((s) => s.setActiveView);
   const toggleView = useUiStore((s) => s.toggleView);
 
-  // Modals with a payload beyond the open flag
-  const [slicerSample, setSlicerSample] = useState<SampleItem | null>(null);
+  // Which sample the sample-scoped modals act on (rack / dsp / loudness / slicer).
+  const slicerSample = useSampleTargetStore((s) => s.slicer);
+  const sampleForRack = useSampleTargetStore((s) => s.rack);
+  const sampleForDsp = useSampleTargetStore((s) => s.dsp);
+  const sampleForLoudness = useSampleTargetStore((s) => s.loudness);
+  const setSampleTarget = useSampleTargetStore((s) => s.setTarget);
+
   const [pendingCurationFiles, setPendingCurationFiles] = useState<Array<File | WorkFolderAudioFile>>([]);
   const [pendingFilesAlreadyArchived, setPendingFilesAlreadyArchived] = useState(false);
   const [isCuratorProcessing, setIsCuratorProcessing] = useState(false);
-  const [sampleForLoudness, setSampleForLoudness] = useState<SampleItem | null>(null);
-
-  const [sampleForDsp, setSampleForDsp] = useState<SampleItem | null>(null);
-  const [sampleForRack, setSampleForRack] = useState<SampleItem | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [autoLoudnessLeveling, setAutoLoudnessLeveling] = useState<boolean>(
     audioEngine.isAutoLoudnessEnabled()
@@ -348,7 +350,7 @@ export default function App() {
   // Escape closes whichever modal is open.
   const closeTopModal = useCallback(() => {
     if (slicerSample) {
-      setSlicerSample(null);
+      setSampleTarget('slicer', null);
       return;
     }
     const openKey = (Object.keys(modals) as Array<keyof typeof modals>).find((k) => modals[k]);
@@ -606,44 +608,13 @@ export default function App() {
     );
   };
 
-  const handleOpenFxRack = (targetSample?: SampleItem) => {
-    const s = targetSample || selectedSample;
-    if (!s) {
-      toast.info("Sélectionne d'abord un sample.");
-      return;
-    }
-    setSampleForRack(s);
-    openModal('rackHost');
-  };
-
-  const handleOpenLoudnessStandard = (targetSample?: SampleItem) => {
-    const s = targetSample || selectedSample;
-    if (!s) {
-      toast.info("Sélectionne d'abord un sample.");
-      return;
-    }
-    setSampleForLoudness(s);
-    openModal('loudnessModal');
-  };
-
-  const handleOpenDspAnalyzer = (targetSample?: SampleItem) => {
-    const s = targetSample || selectedSample;
-    if (!s) {
-      toast.info("Sélectionne d'abord un sample.");
-      return;
-    }
-    setSampleForDsp(s);
-    openModal('dspModal');
-  };
-
-  const handleOpenSlicer = (targetSample?: SampleItem) => {
-    const s = targetSample || selectedSample;
-    if (!s) {
-      toast.info("Sélectionne d'abord un sample.");
-      return;
-    }
-    setSlicerSample(s);
-  };
+  // Thin wrappers over the store opener, kept for the internal callers
+  // (keyboard shortcuts, LayerSynth "open effects", etc.).
+  const handleOpenFxRack = (targetSample?: SampleItem) => openSampleModal('rack', targetSample);
+  const handleOpenLoudnessStandard = (targetSample?: SampleItem) =>
+    openSampleModal('loudness', targetSample);
+  const handleOpenDspAnalyzer = (targetSample?: SampleItem) => openSampleModal('dsp', targetSample);
+  const handleOpenSlicer = (targetSample?: SampleItem) => openSampleModal('slicer', targetSample);
 
   const handleApplyLoudnessNormalization = (updatedSample: SampleItem, report: LoudnessAuditReport) => {
     setSamples((prev) =>
@@ -891,9 +862,6 @@ export default function App() {
                 <WaveformCanvas
                   height={waveformHeight}
                   sample={selectedSample}
-                  onOpenSlicer={() => handleOpenSlicer()}
-                  onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
-                  onOpenFxRack={() => handleOpenFxRack(selectedSample)}
                   onUpdateSlices={handleUpdateSampleSlices}
                   onAddExtractedSamples={handleAddExtractedSamples}
                   onNextSample={() => {
@@ -935,11 +903,6 @@ export default function App() {
                 samples={filteredSamples}
                 selectedSampleId={selectedSampleId}
                 onSelectSample={(s) => setSelectedSampleId(s.id)}
-                onOpenSlicerForSample={(s) => handleOpenSlicer(s)}
-                onOpenDspAnalyzer={(s) => handleOpenDspAnalyzer(s)}
-                onOpenFxRack={(s) => handleOpenFxRack(s)}
-                onOpenLoudnessStandard={(s) => handleOpenLoudnessStandard(s)}
-                onOpenBatchNaming={() => openModal('batchNaming')}
                 onToggleFavorite={handleToggleFavorite}
                 onSetRating={handleSetRating}
                 onDeleteSample={handleDeleteSample}
@@ -1013,7 +976,7 @@ export default function App() {
         <AutoSlicerModal
           sample={slicerSample}
           isOpen={!!slicerSample}
-          onClose={() => setSlicerSample(null)}
+          onClose={() => setSampleTarget('slicer', null)}
           onUpdateSampleSlices={handleUpdateSampleSlices}
           onExtractSlicesToLibrary={(extracted) => setSamples((prev) => [...extracted, ...prev])}
         />
@@ -1075,7 +1038,7 @@ export default function App() {
         isOpen={modals.dspModal}
         onClose={() => {
           closeModal('dspModal');
-          setSampleForDsp(null);
+          setSampleTarget('dsp', null);
         }}
         sample={sampleForDsp || selectedSample}
         onUpdateSample={handleUpdateSampleFromDsp}
@@ -1090,7 +1053,7 @@ export default function App() {
           isOpen={modals.rackHost}
           onClose={() => {
             closeModal('rackHost');
-            setSampleForRack(null);
+            setSampleTarget('rack', null);
           }}
           sample={sampleForRack || selectedSample}
           onSaveAsNewSample={handleSaveProcessedAsNew}
@@ -1102,7 +1065,7 @@ export default function App() {
         isOpen={modals.loudnessModal}
         onClose={() => {
           closeModal('loudnessModal');
-          setSampleForLoudness(null);
+          setSampleTarget('loudness', null);
         }}
         sample={sampleForLoudness || selectedSample}
         allSelectedSamples={

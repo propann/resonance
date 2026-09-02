@@ -39,6 +39,7 @@ import {
   MultiBandSampleData,
 } from '../services/spectrogramGenerator';
 import { AudioVisualizationGuideModal } from './AudioVisualizationGuideModal';
+import { openSampleModal } from '../stores/sampleTargetStore';
 
 export type WaveformColorTheme = 'cyber-neon' | 'sunset-amber' | 'emerald-matrix' | 'magma-fire' | 'ice-arctic';
 
@@ -46,9 +47,6 @@ interface WaveformCanvasProps {
   height?: number;
   sample: SampleItem;
   onSliceClick?: (slice: SliceRegion) => void;
-  onOpenSlicer?: () => void;
-  onOpenDspAnalyzer?: () => void;
-  onOpenFxRack?: () => void;
   onNextSample?: () => void;
   onPrevSample?: () => void;
   onUpdateSlices?: (sampleId: string, slices: SliceRegion[]) => void;
@@ -59,9 +57,6 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   height,
   sample,
   onSliceClick,
-  onOpenSlicer,
-  onOpenDspAnalyzer,
-  onOpenFxRack,
   onNextSample,
   onPrevSample,
   onUpdateSlices,
@@ -1135,10 +1130,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
             </button>
           )}
 
-          {onOpenDspAnalyzer && (
+          {(
             <button
               id="open-dsp-waveform-btn"
-              onClick={onOpenDspAnalyzer}
+              onClick={() => openSampleModal('dsp', sample)}
               className="flex items-center gap-1 px-2 py-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/25 text-[#A855F7] border border-[#A855F7]/40 text-[9px] font-mono transition"
             >
               <Activity className="w-3 h-3" />
@@ -1146,10 +1141,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
             </button>
           )}
 
-          {onOpenFxRack && (
+          {(
             <button
               id="open-fx-rack-waveform-btn"
-              onClick={onOpenFxRack}
+              onClick={() => openSampleModal('rack', sample)}
               className="flex items-center gap-1 px-2.5 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#00F0FF] border border-[#00F0FF]/40 text-[9px] font-mono font-bold transition shadow-sm"
               title="Ouvrir le Studio Rack d'Effets DSP & Sound Design (Sub-Bass, Stutter, Delay, Reverb, Saturation, etc.)"
             >

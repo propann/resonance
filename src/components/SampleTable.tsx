@@ -23,6 +23,7 @@ import { SampleItem, SampleType, FilterState } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { audioBufferToWavBlob, triggerFileDownload } from '../services/audioConverter';
 import { MiniWaveform } from './MiniWaveform';
+import { openSampleModal } from '../stores/sampleTargetStore';
 
 export interface ColumnWidths {
   select: number;
@@ -61,11 +62,6 @@ interface SampleTableProps {
   samples: SampleItem[];
   selectedSampleId: string | null;
   onSelectSample: (sample: SampleItem) => void;
-  onOpenSlicerForSample: (sample: SampleItem) => void;
-  onOpenDspAnalyzer?: (sample: SampleItem) => void;
-  onOpenFxRack?: (sample: SampleItem) => void;
-  onOpenLoudnessStandard?: (sample: SampleItem) => void;
-  onOpenBatchNaming?: () => void;
   onToggleFavorite: (sampleId: string) => void;
   onSetRating: (sampleId: string, rating: number) => void;
   onDeleteSample: (sampleId: string) => void;
@@ -98,11 +94,6 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   samples,
   selectedSampleId,
   onSelectSample,
-  onOpenSlicerForSample,
-  onOpenDspAnalyzer,
-  onOpenFxRack,
-  onOpenLoudnessStandard,
-  onOpenBatchNaming,
   onToggleFavorite,
   onSetRating,
   onDeleteSample,
@@ -251,11 +242,11 @@ export const SampleTable: React.FC<SampleTableProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {onOpenLoudnessStandard && (
+          {(
             <button
               onClick={() => {
                 const target = samples.find((s) => s.id === selectedSampleId) || samples[0];
-                if (target) onOpenLoudnessStandard(target);
+                if (target) openSampleModal('loudness', target);
               }}
               className="px-2 py-0.5 bg-[#00F0FF]/10 hover:bg-[#00F0FF]/25 text-[#00F0FF] border border-[#00F0FF]/40 rounded text-[10px] flex items-center gap-1 transition-colors"
               title="Ouvrir l'étalon international de normalisation sonore"
@@ -589,11 +580,11 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   className="px-2 py-1.5 flex items-center justify-end gap-1 flex-shrink-0"
                 >
                   {/* Étalon Loudness Button */}
-                  {onOpenLoudnessStandard && (
+                  {(
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenLoudnessStandard(sample);
+                        openSampleModal('loudness', sample);
                       }}
                       className="p-1 bg-[#10B981]/15 hover:bg-[#10B981]/30 text-[#10B981] border border-[#10B981]/40 pixel-btn"
                       title="Calibrer selon l'Étalon Officiel (ITU-R BS.1770 / EBU R128)"
@@ -603,11 +594,11 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   )}
 
                   {/* DSP FX Rack & Pitch Transposer Button */}
-                  {onOpenFxRack && (
+                  {(
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenFxRack(sample);
+                        openSampleModal('rack', sample);
                       }}
                       className="p-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border border-[#00F0FF]/40 pixel-btn"
                       title="Rack FX, Transposition de Note & DSP"
@@ -617,11 +608,11 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   )}
 
                   {/* DSP Audio Analysis Button */}
-                  {onOpenDspAnalyzer && (
+                  {(
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenDspAnalyzer(sample);
+                        openSampleModal('dsp', sample);
                       }}
                       className="p-1 bg-[#A855F7]/15 hover:bg-[#A855F7]/30 text-[#A855F7] border border-[#A855F7]/40 pixel-btn"
                       title="DSP Lab"
@@ -634,7 +625,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenSlicerForSample(sample);
+                      openSampleModal('slicer', sample);
                     }}
                     className="p-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border border-[#00F0FF]/40 pixel-btn"
                     title="Découpe"
