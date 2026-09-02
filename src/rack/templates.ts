@@ -1,0 +1,53 @@
+import type { ParamValues } from './types';
+
+export interface RackTemplateModule {
+  type: string;
+  params?: ParamValues;
+}
+
+export interface RackTemplate {
+  id: string;
+  label: string;
+  modules: RackTemplateModule[];
+}
+
+/** Starter racks — plain data, expanded into a RackState by rackStore.applyTemplate. */
+export const RACK_TEMPLATES: RackTemplate[] = [
+  {
+    id: 'lofi-sampler',
+    label: 'Lo-Fi Sampler',
+    modules: [
+      { type: 'fx.bitcrusher', params: { bits: 10, reduction: 3, mix: 0.7 } },
+      { type: 'fx.filter', params: { type: 'lowpass', frequency: 4500, q: 0.7 } },
+      { type: 'fx.saturator', params: { shape: 'tape', drive: 3, mix: 0.5 } },
+    ],
+  },
+  {
+    id: 'space',
+    label: 'Space Designer',
+    modules: [
+      { type: 'fx.delay', params: { time: 0.28, feedback: 0.4, mix: 0.35 } },
+      { type: 'fx.reverb', params: { size: 3, damp: 0.35, mix: 0.4 } },
+    ],
+  },
+  {
+    id: 'drum-glue',
+    label: 'Drum Glue',
+    modules: [
+      { type: 'fx.saturator', params: { shape: 'tube', drive: 2.5, mix: 0.4 } },
+      {
+        type: 'fx.compressor',
+        params: { threshold: -18, ratio: 4, attack: 0.005, release: 0.12, makeup: 3 },
+      },
+    ],
+  },
+  {
+    id: 'warm-wide',
+    label: 'Warm & Wide',
+    modules: [
+      { type: 'fx.saturator', params: { shape: 'tube', drive: 1.8, mix: 0.35 } },
+      { type: 'fx.chorus', params: { rate: 0.5, depth: 0.004, mix: 0.3 } },
+      { type: 'fx.filter', params: { type: 'highpass', frequency: 40, q: 0.7 } },
+    ],
+  },
+];

@@ -8,6 +8,7 @@ import { Rack, renderRackOffline } from '../rack/Rack';
 import { listModuleDefs } from '../rack/registry';
 import { registerBuiltinModules } from '../rack/modules';
 import { RackModulePanel } from '../rack/RackModulePanel';
+import { RACK_TEMPLATES } from '../rack/templates';
 import { useRackStore } from '../stores/rackStore';
 import type { ParamValues, RackState } from '../rack/types';
 
@@ -36,6 +37,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   const toggleModule = useRackStore((s) => s.toggleModule);
   const moveModule = useRackStore((s) => s.moveModule);
   const setParams = useRackStore((s) => s.setParams);
+  const applyTemplate = useRackStore((s) => s.applyTemplate);
   const reset = useRackStore((s) => s.reset);
   const exportJson = useRackStore((s) => s.exportJson);
   const importJson = useRackStore((s) => s.importJson);
@@ -237,6 +239,25 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
 
         <div className="flex flex-1 overflow-hidden">
           <aside className="w-56 shrink-0 overflow-y-auto border-r border-[#202034] bg-[#0A0A16] p-3">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#A855F7]">
+              Templates
+            </div>
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const tpl = RACK_TEMPLATES.find((t) => t.id === e.target.value);
+                if (tpl) applyTemplate(tpl.modules);
+                e.currentTarget.value = '';
+              }}
+              className="mb-3 w-full rounded border border-[#303046] bg-[#161724] px-1 py-1 text-[11px]"
+            >
+              <option value="">Charger un template…</option>
+              {RACK_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
             <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#A855F7]">
               Modules
             </div>

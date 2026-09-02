@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { defaultParams } from '../rack/params';
 import { getModuleDef } from '../rack/registry';
 import { registerBuiltinModules } from '../rack/modules';
+import type { RackTemplateModule } from '../rack/templates';
 import { emptyRackState, type ParamValue, type RackState } from '../rack/types';
 
 registerBuiltinModules();
@@ -19,6 +20,7 @@ interface RackStore {
   toggleModule: (id: string) => void;
   moveModule: (id: string, direction: -1 | 1) => void;
   setParams: (id: string, partial: Record<string, ParamValue>) => void;
+  applyTemplate: (modules: RackTemplateModule[]) => void;
   loadState: (state: RackState) => void;
   reset: () => void;
   exportJson: () => string;
@@ -84,6 +86,28 @@ export const useRackStore = create<RackStore>((set, get) => ({
         ),
       },
     })),
+
+  applyTemplate: (modules) =>
+    set({
+      rack: {
+        version: 1,
+        modules: modules.flatMap((m) => {
+          const def = getModuleDef(m.type);
+          if (!def) {
+            console.warn(`[rackStore] template references unknown module "${m.type}"`);
+            return [];
+          }
+          return [
+            {
+              id: newId(),
+              type: m.type,
+              enabled: true,
+              params: { ...defaultParams(def), ...(m.params ?? {}) },
+            },
+          ];
+        }),
+      },
+    }),
 
   loadState: (state) => set({ rack: isRackState(state) ? state : emptyRackState() }),
 

@@ -69,4 +69,19 @@ describe('rackStore', () => {
     expect(useRackStore.getState().importJson('{"nope":true}')).toBe(false);
     expect(useRackStore.getState().importJson('not json')).toBe(false);
   });
+
+  it('applyTemplate expands module specs with fresh ids and merged params', () => {
+    useRackStore.getState().applyTemplate([
+      { type: 'fx.filter', params: { frequency: 900 } },
+      { type: 'fx.gain' },
+      { type: 'fx.unknown' },
+    ]);
+    const modules = useRackStore.getState().rack.modules;
+    expect(modules).toHaveLength(2);
+    expect(modules[0].type).toBe('fx.filter');
+    expect(modules[0].params.frequency).toBe(900);
+    expect(modules[0].params.q).toBe(0.7); // default filled in
+    expect(modules[1].type).toBe('fx.gain');
+    expect(new Set(modules.map((m) => m.id)).size).toBe(2);
+  });
 });
