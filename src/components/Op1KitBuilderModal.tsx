@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { toast } from '../stores/toastStore';
 import {
   X,
   Play,
@@ -485,7 +486,7 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   const handleAutoSliceSelectedSample = async () => {
     const targetSample = currentSelectedSample || availableSamples[0];
     if (!targetSample || !targetSample.audioBuffer) {
-      alert('Veuillez sélectionner un sample ou une boucle à découper en 24 tranches.');
+      toast.info('Veuillez sélectionner un sample ou une boucle à découper en 24 tranches.');
       return;
     }
 
@@ -525,7 +526,7 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
     );
 
     if (audioFiles.length === 0) {
-      alert('Aucun fichier audio valide trouvé dans le dossier.');
+      toast.info('Aucun fichier audio valide trouvé dans le dossier.');
       return;
     }
 
@@ -637,7 +638,7 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err) {
       console.error('Erreur export pack OP-1', err);
-      alert('Erreur lors de la génération du pack OP-1.');
+      toast.error('Erreur lors de la génération du pack OP-1.');
     } finally {
       setIsBatchExporting(false);
       setBatchProgress(0);

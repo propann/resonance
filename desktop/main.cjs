@@ -1,7 +1,13 @@
-const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
+
+// A clean product name (used for the window title, the process name and the
+// per-user data folder). The app carries its own in-page menu bar, so the
+// native OS menu is removed entirely.
+app.setName('Resonance');
+Menu.setApplicationMenu(null);
 
 let mainWindow = null;
 let currentRoot = null;
@@ -44,7 +50,10 @@ function createWindow() {
     height: 920,
     minWidth: 1080,
     minHeight: 680,
+    title: 'Resonance',
     backgroundColor: '#060609',
+    autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -53,6 +62,8 @@ function createWindow() {
   });
   if (process.env.RESONANCE_DEV_URL) mainWindow.loadURL(process.env.RESONANCE_DEV_URL);
   else mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // Show only once painted, to avoid a white flash on launch.
+  mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;
     stopWatch();

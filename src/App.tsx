@@ -1,4 +1,6 @@
 import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { toast } from './stores/toastStore';
+import { Toaster } from './components/Toaster';
 import { useResizablePanels } from './hooks/useResizablePanels';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useWorkFolder } from './hooks/useWorkFolder';
@@ -343,28 +345,29 @@ export default function App() {
     audioEngine.setAutoLoudness(newVal);
   };
 
+  // Escape closes whichever modal is open.
+  const closeTopModal = useCallback(() => {
+    if (slicerSample) {
+      setSlicerSample(null);
+      return;
+    }
+    const openKey = (Object.keys(modals) as Array<keyof typeof modals>).find((k) => modals[k]);
+    if (openKey) closeModal(openKey);
+  }, [slicerSample, modals, closeModal]);
+
   // Global transport & workspace keyboard shortcuts
   useKeyboardShortcuts({
+    onCloseTopModal: closeTopModal,
     onTogglePlayPause: handleTogglePlayPause,
     onPlayNext: handlePlayNext,
     onPlayPrev: handlePlayPrev,
     onToggleLoop: () => audioEngine.toggleLoop(),
     onOpenBatchNaming: () => openModal('batchNaming'),
     onReactivateWorkFolder: () => void reactivateWorkFolder(),
-    onOpenFxRackForSelected: () => {
-      if (selectedSample) {
-        setSampleForRack(selectedSample);
-        openModal('rackHost');
-      }
-    },
+    onOpenFxRackForSelected: () => handleOpenFxRack(),
     onOpenDocumentation: () => openModal('doc'),
     onToggleView: toggleView,
-    onOpenDspForSelected: () => {
-      if (selectedSample) {
-        setSampleForDsp(selectedSample);
-        openModal('dspModal');
-      }
-    },
+    onOpenDspForSelected: () => handleOpenDspAnalyzer(),
   });
 
   // All normal imports enter the curator so originals can be archived and
@@ -448,7 +451,7 @@ export default function App() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(false);
-    alert("Déposez les sons directement dans le dossier de travail : l'application les détecte et les trie automatiquement.");
+    toast.info("Déposez les sons directement dans le dossier de travail : l'application les détecte et les trie automatiquement.");
   };
 
   const handleToggleFavorite = (sampleId: string) => {
@@ -490,7 +493,7 @@ export default function App() {
 
   const handleExportEp133Pack = async () => {
     if (samples.length === 0) {
-      alert('Aucun sample dans la bibliothèque à exporter.');
+      toast.info('Aucun sample dans la bibliothèque à exporter.');
       return;
     }
     try {
@@ -502,7 +505,7 @@ export default function App() {
       triggerFileDownload(zipBlob, `Resonance_EP133_KO_II_Pack_${Date.now().toString(36)}.zip`);
     } catch (err) {
       console.error('Erreur export EP-133:', err);
-      alert("Une erreur est survenue lors de l'exportation du pack EP-133.");
+      toast.error("Une erreur est survenue lors de l'exportation du pack EP-133.");
     }
   };
 
@@ -513,7 +516,7 @@ export default function App() {
         : filteredSamples;
 
     if (targetSamples.length === 0) {
-      alert('Aucun sample à exporter.');
+      toast.info('Aucun sample à exporter.');
       return;
     }
 
@@ -526,7 +529,7 @@ export default function App() {
       triggerFileDownload(zipBlob, `Resonance_Selection_${Date.now().toString(36)}.zip`);
     } catch (err) {
       console.error('Erreur export ZIP:', err);
-      alert("Une erreur est survenue lors de l'exportation ZIP.");
+      toast.error("Une erreur est survenue lors de l'exportation ZIP.");
     }
   };
 
@@ -606,18 +609,41 @@ export default function App() {
 
   const handleOpenFxRack = (targetSample?: SampleItem) => {
     const s = targetSample || selectedSample;
-    if (s) {
-      setSampleForRack(s);
-      openModal('rackHost');
+    if (!s) {
+      toast.info("Sélectionne d'abord un sample.");
+      return;
     }
+    setSampleForRack(s);
+    openModal('rackHost');
   };
 
   const handleOpenLoudnessStandard = (targetSample?: SampleItem) => {
     const s = targetSample || selectedSample;
-    if (s) {
-      setSampleForLoudness(s);
-      openModal('loudnessModal');
+    if (!s) {
+      toast.info("Sélectionne d'abord un sample.");
+      return;
     }
+    setSampleForLoudness(s);
+    openModal('loudnessModal');
+  };
+
+  const handleOpenDspAnalyzer = (targetSample?: SampleItem) => {
+    const s = targetSample || selectedSample;
+    if (!s) {
+      toast.info("Sélectionne d'abord un sample.");
+      return;
+    }
+    setSampleForDsp(s);
+    openModal('dspModal');
+  };
+
+  const handleOpenSlicer = (targetSample?: SampleItem) => {
+    const s = targetSample || selectedSample;
+    if (!s) {
+      toast.info("Sélectionne d'abord un sample.");
+      return;
+    }
+    setSlicerSample(s);
   };
 
   const handleApplyLoudnessNormalization = (updatedSample: SampleItem, report: LoudnessAuditReport) => {
@@ -671,7 +697,7 @@ export default function App() {
       await refreshLibrary();
     } catch (error) {
       console.error('Impossible de sauvegarder le rendu DSP dans la bibliothèque', error);
-      alert("Le rendu DSP est visible dans l'application mais n'a pas pu être écrit dans le dossier de travail.");
+      toast.error("Le rendu DSP est visible dans l'application mais n'a pas pu être écrit dans le dossier de travail.");
     }
   };
 
@@ -794,10 +820,7 @@ export default function App() {
         onOpenAutoCurator={() => openModal('autoCurator')}
         onOpenBatchNaming={() => openModal('batchNaming')}
         onOpenBatchConverter={() => openModal('batchConverter')}
-        onOpenDspAnalyzer={() => {
-          setSampleForDsp(selectedSample);
-          openModal('dspModal');
-        }}
+        onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenFxRack={() => handleOpenFxRack()}
         onOpenSynthRack={() => openModal('synthRack')}
         onOpenAdvancedRack={() => openModal('advancedRack')}
@@ -838,14 +861,9 @@ export default function App() {
         onOpenRecorder={() => openModal('recorder')}
         onOpenBatchConverter={() => openModal('batchConverter')}
         onOpenBatchNaming={() => openModal('batchNaming')}
-        onOpenDspAnalyzer={() => {
-          setSampleForDsp(selectedSample);
-          openModal('dspModal');
-        }}
+        onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenFxRack={() => handleOpenFxRack()}
-        onOpenAutoSlicer={() => {
-          if (selectedSample) setSlicerSample(selectedSample);
-        }}
+        onOpenAutoSlicer={() => handleOpenSlicer()}
         onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
         isPlaying={isPlaying}
         onTogglePlayPause={handleTogglePlayPause}
@@ -900,11 +918,8 @@ export default function App() {
                 <WaveformCanvas
                   height={waveformHeight}
                   sample={selectedSample}
-                  onOpenSlicer={() => setSlicerSample(selectedSample)}
-                  onOpenDspAnalyzer={() => {
-                    setSampleForDsp(selectedSample);
-                    openModal('dspModal');
-                  }}
+                  onOpenSlicer={() => handleOpenSlicer()}
+                  onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
                   onOpenFxRack={() => handleOpenFxRack(selectedSample)}
                   onUpdateSlices={handleUpdateSampleSlices}
                   onAddExtractedSamples={handleAddExtractedSamples}
@@ -947,11 +962,8 @@ export default function App() {
                 samples={filteredSamples}
                 selectedSampleId={selectedSampleId}
                 onSelectSample={(s) => setSelectedSampleId(s.id)}
-                onOpenSlicerForSample={(s) => setSlicerSample(s)}
-                onOpenDspAnalyzer={(s) => {
-                  setSampleForDsp(s);
-                  openModal('dspModal');
-                }}
+                onOpenSlicerForSample={(s) => handleOpenSlicer(s)}
+                onOpenDspAnalyzer={(s) => handleOpenDspAnalyzer(s)}
                 onOpenFxRack={(s) => handleOpenFxRack(s)}
                 onOpenLoudnessStandard={(s) => handleOpenLoudnessStandard(s)}
                 onOpenBatchNaming={() => openModal('batchNaming')}
@@ -1148,6 +1160,8 @@ export default function App() {
           openModal('gitHubSync');
         }}
       />
+
+      <Toaster />
     </div>
   );
 }

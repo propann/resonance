@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { toast } from '../stores/toastStore';
 import {
   X,
   Sparkles,
@@ -94,7 +95,7 @@ export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
       setTimeout(() => setStatusMessage(null), 3000);
     } catch (err) {
       console.error('Erreur export ZIP', err);
-      alert('Erreur lors de la génération du ZIP.');
+      toast.error('Erreur lors de la génération du ZIP.');
     } finally {
       setIsExportingZip(false);
     }

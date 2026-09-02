@@ -21,6 +21,8 @@ export interface KeyboardShortcutHandlers {
   onToggleView: () => void;
   /** F4 */
   onOpenDspForSelected: () => void;
+  /** Escape — close the top-most open modal */
+  onCloseTopModal: () => void;
 }
 
 const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
@@ -35,9 +37,16 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers): void {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const h = handlersRef.current;
+
+      // Escape closes modals even from within an input field.
+      if (e.code === 'Escape') {
+        h.onCloseTopModal();
+        return;
+      }
+
       if (TYPING_TAGS.has((e.target as HTMLElement).tagName)) return;
 
-      const h = handlersRef.current;
       const mod = e.ctrlKey || e.metaKey;
 
       if (e.code === 'Space') {

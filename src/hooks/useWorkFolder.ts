@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from '../stores/toastStore';
 import {
   adoptLibraryRoot,
   chooseLibraryRoot,
@@ -83,13 +84,13 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     } catch (error) {
       setWorkFolderStatus('error');
       console.error('Erreur rafraîchissement bibliothèque', error);
-      alert('Impossible de lire le dossier de travail. Reconnectez-le depuis Fichier.');
+      toast.error('Impossible de lire le dossier de travail. Reconnectez-le depuis Fichier.');
     }
   }, [libraryRoot]);
 
   const chooseLibrary = useCallback(async () => {
     if (!supportsLocalLibrary()) {
-      alert(
+      toast.info(
         "Le dossier de travail nécessite l'application de bureau Resonance (Windows ou Linux). La version navigateur n'a pas accès au disque."
       );
       return;
@@ -108,7 +109,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       setWorkFolderStatus(libraryRoot ? 'connected' : 'error');
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         console.error('Erreur dossier de travail', error);
-        alert(
+        toast.error(
           error instanceof Error
             ? `Impossible de connecter ce dossier : ${error.message}`
             : 'Impossible de connecter ce dossier de travail.'
@@ -134,14 +135,14 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     try {
       const removed = await removeEmptyManagedFolders(libraryRoot);
       await refreshLibrary();
-      alert(
+      toast.info(
         removed > 0
           ? `${removed} dossier(s) vide(s) supprimé(s).`
           : 'Aucun dossier vide à supprimer.'
       );
     } catch (error) {
       console.error('Erreur nettoyage dossiers', error);
-      alert('Impossible de nettoyer les dossiers. Reconnectez le dossier de travail.');
+      toast.error('Impossible de nettoyer les dossiers. Reconnectez le dossier de travail.');
     }
   }, [libraryRoot, refreshLibrary]);
 
@@ -151,7 +152,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       const files = await listWorkFolderAudioFiles(libraryRoot);
       queuedSourceKeysRef.current.clear();
       if (files.length === 0) {
-        alert(
+        toast.info(
           'Aucun nouveau fichier audio dans le dossier de travail. Déposez vos sons ou dossiers à sa racine, puis relancez cette commande.'
         );
         return;
@@ -159,7 +160,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       optionsRef.current.onReceptionFilesReady(files, true);
     } catch (error) {
       console.error('Erreur analyse réception', error);
-      alert(
+      toast.error(
         'Impossible de lire 00_RECEPTION. Reconnectez le dossier de travail depuis le menu Fichier.'
       );
     }

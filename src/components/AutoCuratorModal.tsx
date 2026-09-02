@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { toast } from '../stores/toastStore';
 import {
   FolderUp,
   FileAudio,
@@ -615,7 +616,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       setTimeout(() => setNotification(null), 2500);
     } catch (err) {
       console.error('Erreur export ZIP', err);
-      alert('Erreur lors de la génération du ZIP.');
+      toast.error('Erreur lors de la génération du ZIP.');
     } finally {
       setIsExportingZip(false);
     }

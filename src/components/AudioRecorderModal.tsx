@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { toast } from '../stores/toastStore';
 import { Mic, Square, Play, Pause, X, Check, RefreshCw, Sparkles, Volume2 } from 'lucide-react';
 import { SampleItem } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
@@ -90,7 +91,7 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       drawLiveScope();
     } catch (err) {
       console.error('Microphone access error:', err);
-      alert('Impossible d\'accéder au microphone. Veuillez vérifier les permissions.');
+      toast.error("Impossible d'accéder au microphone. Vérifiez les permissions.");
     }
   };
 
