@@ -48,7 +48,6 @@ export interface AppMenuBarProps {
   onOpenBatchConverter: () => void;
   onOpenDspAnalyzer: () => void;
   onOpenFxRack?: () => void;
-  onOpenRackHost?: () => void;
   onOpenLoudnessStandard?: () => void;
   onOpenOp1Studio?: () => void;
   onOpenEp133Export: () => void;
@@ -88,7 +87,6 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenBatchConverter,
   onOpenDspAnalyzer,
   onOpenFxRack,
-  onOpenRackHost,
   onOpenLoudnessStandard,
   onOpenOp1Studio,
   onOpenEp133Export,
@@ -601,24 +599,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Flame className="w-3.5 h-3.5 text-[#00F0FF]" />
-                    <span>Rack d'Effets DSP & Sound Design...</span>
+                    <span>Rack Modulaire (Effets & Sound Design)...</span>
                   </div>
                   <span className="text-[8px] text-[#00F0FF] font-bold">Ctrl+E</span>
-                </button>
-              )}
-              {onOpenRackHost && (
-                <button
-                  onClick={() => {
-                    onOpenRackHost();
-                    closeMenus();
-                  }}
-                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
-                >
-                  <div className="flex items-center gap-2">
-                    <Flame className="w-3.5 h-3.5 text-[#A855F7]" />
-                    <span>Rack Modulaire (bêta)...</span>
-                  </div>
-                  <span className="text-[8px] text-[#A855F7] font-bold">NEW</span>
                 </button>
               )}
               <button

@@ -26,7 +26,6 @@ import { Op1KitBuilderModal } from './components/Op1KitBuilderModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { BatchNamingModal } from './components/BatchNamingModal';
 import { AudioAnalysisModal } from './components/AudioAnalysisModal';
-import { AudioEffectsRackModal } from './components/AudioEffectsRackModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { DocumentationModal } from './components/DocumentationModal';
 import { LoudnessStandardModal } from './components/LoudnessStandardModal';
@@ -91,7 +90,7 @@ export default function App() {
   const [sampleForLoudness, setSampleForLoudness] = useState<SampleItem | null>(null);
 
   const [sampleForDsp, setSampleForDsp] = useState<SampleItem | null>(null);
-  const [sampleForFxRack, setSampleForFxRack] = useState<SampleItem | null>(null);
+  const [sampleForRack, setSampleForRack] = useState<SampleItem | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [autoLoudnessLeveling, setAutoLoudnessLeveling] = useState<boolean>(
     audioEngine.isAutoLoudnessEnabled()
@@ -370,8 +369,8 @@ export default function App() {
     onReactivateWorkFolder: () => void reactivateWorkFolder(),
     onOpenFxRackForSelected: () => {
       if (selectedSample) {
-        setSampleForFxRack(selectedSample);
-        openModal('fxRack');
+        setSampleForRack(selectedSample);
+        openModal('rackHost');
       }
     },
     onOpenDocumentation: () => openModal('doc'),
@@ -624,8 +623,8 @@ export default function App() {
   const handleOpenFxRack = (targetSample?: SampleItem) => {
     const s = targetSample || selectedSample;
     if (s) {
-      setSampleForFxRack(s);
-      openModal('fxRack');
+      setSampleForRack(s);
+      openModal('rackHost');
     }
   };
 
@@ -708,14 +707,6 @@ export default function App() {
       zeroCrossingRate: metrics.zeroCrossingRate, slices: [], blobUrl: URL.createObjectURL(blob), audioBuffer, dateAdded: Date.now(),
     };
     void handleSaveProcessedAsNew(sample);
-  };
-
-  const handleOverwriteSample = (updatedSample: SampleItem) => {
-    setSamples((prev) => prev.map((s) => (s.id === updatedSample.id ? updatedSample : s)));
-    setSelectedSampleId(updatedSample.id);
-    if (updatedSample.audioBuffer) {
-      audioEngine.play(updatedSample.audioBuffer, updatedSample.id, updatedSample.loudnessGainDb);
-    }
   };
 
   const handleCreateFolder = (name: string, color: string) => {
@@ -824,7 +815,6 @@ export default function App() {
           openModal('dspModal');
         }}
         onOpenFxRack={() => handleOpenFxRack()}
-        onOpenRackHost={() => openModal('rackHost')}
         onOpenSynthRack={() => openModal('synthRack')}
         onOpenAdvancedRack={() => openModal('advancedRack')}
         onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
@@ -1122,21 +1112,6 @@ export default function App() {
         onUpdateSample={handleUpdateSampleFromDsp}
       />
 
-      {/* Creative Studio DSP Effects Rack & Pitch Tuner Modal */}
-      {modals.fxRack && (
-        <AudioEffectsRackModal
-          isOpen={modals.fxRack}
-          onClose={() => {
-            closeModal('fxRack');
-            setSampleForFxRack(null);
-          }}
-          sample={sampleForFxRack || selectedSample}
-          onSaveAsNewSample={handleSaveProcessedAsNew}
-          onOverwriteSample={handleOverwriteSample}
-          libraryRoot={libraryRoot}
-        />
-      )}
-
       <Suspense fallback={modals.synthRack ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
         <LayerSynthRackModal isOpen={modals.synthRack} onClose={() => closeModal('synthRack')} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
       </Suspense>
@@ -1144,8 +1119,11 @@ export default function App() {
       <Suspense fallback={null}>
         <RackHostModal
           isOpen={modals.rackHost}
-          onClose={() => closeModal('rackHost')}
-          sample={sampleForFxRack || selectedSample}
+          onClose={() => {
+            closeModal('rackHost');
+            setSampleForRack(null);
+          }}
+          sample={sampleForRack || selectedSample}
           onSaveAsNewSample={handleSaveProcessedAsNew}
         />
       </Suspense>

@@ -11,7 +11,6 @@ export type ModalKey =
   | 'gitHubSync'
   | 'batchNaming'
   | 'dspModal'
-  | 'fxRack'
   | 'rackHost'
   | 'synthRack'
   | 'advancedRack'
@@ -31,7 +30,6 @@ const ALL_CLOSED: Record<ModalKey, boolean> = {
   gitHubSync: false,
   batchNaming: false,
   dspModal: false,
-  fxRack: false,
   rackHost: false,
   synthRack: false,
   advancedRack: false,
