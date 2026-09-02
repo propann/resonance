@@ -32,6 +32,7 @@ import { DocumentationModal } from './components/DocumentationModal';
 import { LoudnessStandardModal } from './components/LoudnessStandardModal';
 const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
 const AdvancedEngineRackModal = lazy(() => import('./components/AdvancedEngineRackModal').then((module) => ({ default: module.AdvancedEngineRackModal })));
+const RackHostModal = lazy(() => import('./components/RackHostModal').then((module) => ({ default: module.RackHostModal })));
 import { LoudnessAuditReport, LoudnessStandardKey } from './services/audioLoudnessStandard';
 import { audioEngine } from './services/audioEngine';
 import {
@@ -823,6 +824,7 @@ export default function App() {
           openModal('dspModal');
         }}
         onOpenFxRack={() => handleOpenFxRack()}
+        onOpenRackHost={() => openModal('rackHost')}
         onOpenSynthRack={() => openModal('synthRack')}
         onOpenAdvancedRack={() => openModal('advancedRack')}
         onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
@@ -1139,6 +1141,14 @@ export default function App() {
         <LayerSynthRackModal isOpen={modals.synthRack} onClose={() => closeModal('synthRack')} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
       </Suspense>
       <Suspense fallback={null}><AdvancedEngineRackModal isOpen={modals.advancedRack} onClose={() => closeModal('advancedRack')} libraryRoot={libraryRoot} /></Suspense>
+      <Suspense fallback={null}>
+        <RackHostModal
+          isOpen={modals.rackHost}
+          onClose={() => closeModal('rackHost')}
+          sample={sampleForFxRack || selectedSample}
+          onSaveAsNewSample={handleSaveProcessedAsNew}
+        />
+      </Suspense>
 
       {/* International Loudness Standard Modal (ITU-R BS.1770-4 / EBU R128) */}
       <LoudnessStandardModal

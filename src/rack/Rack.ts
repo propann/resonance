@@ -56,8 +56,14 @@ export class Rack {
     for (const instance of enabled) {
       const def = requireModuleDef(instance.type);
       const params = coerceParams(def, instance.params);
-      const node = await def.createNode(this.ctx, params);
-      built.push({ id: instance.id, type: instance.type, node, params });
+      try {
+        const node = await def.createNode(this.ctx, params);
+        built.push({ id: instance.id, type: instance.type, node, params });
+      } catch (error) {
+        // A module that fails to build (e.g. missing worklet) is skipped so the
+        // rest of the chain still works.
+        console.error(`[rack] module "${instance.type}" failed to build — skipped`, error);
+      }
     }
 
     // Rewire: input -> m1 -> m2 -> ... -> output

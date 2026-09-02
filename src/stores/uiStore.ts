@@ -12,6 +12,7 @@ export type ModalKey =
   | 'batchNaming'
   | 'dspModal'
   | 'fxRack'
+  | 'rackHost'
   | 'synthRack'
   | 'advancedRack'
   | 'shortcuts'
@@ -31,6 +32,7 @@ const ALL_CLOSED: Record<ModalKey, boolean> = {
   batchNaming: false,
   dspModal: false,
   fxRack: false,
+  rackHost: false,
   synthRack: false,
   advancedRack: false,
   shortcuts: false,
