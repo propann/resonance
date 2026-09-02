@@ -22,6 +22,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { FolderItem, SampleType, FilterState, SampleItem, MusicGenre } from '../types/sample';
+import { useUiStore } from '../stores/uiStore';
 
 interface SidebarProps {
   width?: number;
@@ -31,11 +32,6 @@ interface SidebarProps {
   onFilterChange: (newFilter: Partial<FilterState>) => void;
   onCreateFolder: (name: string, color: string) => void;
   onDeleteFolder: (folderId: string) => void;
-  onOpenRecorder: () => void;
-  onOpenOp1Studio?: () => void;
-  onOpenGitHubSync?: () => void;
-  onOpenAutoCurator?: () => void;
-  onOpenDocumentation?: () => void;
   onAutoOrganizeLibrary?: () => void;
   activeView: 'library' | 'timbre';
   onViewChange: (view: 'library' | 'timbre') => void;
@@ -97,17 +93,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onFilterChange,
   onCreateFolder,
   onDeleteFolder,
-  onOpenRecorder,
-  onOpenOp1Studio,
-  onOpenGitHubSync,
-  onOpenAutoCurator,
-  onOpenDocumentation,
   onAutoOrganizeLibrary,
   activeView,
   onViewChange,
   physicalSampleCount = 0,
   diskFolderCounts = {},
 }) => {
+  const openModal = useUiStore((state) => state.openModal);
   const [sidebarTab, setSidebarTab] = useState<'folders' | 'types' | 'hardware' | 'keys'>('folders');
   const diskCountFor = (folder: FolderItem) => {
     const path = DISK_PATH_BY_FOLDER_ID[folder.id] || folder.path.replace(/^\//, '');
@@ -318,9 +310,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Arborescence Pro
               </span>
               <div className="flex items-center gap-1">
-                {onOpenAutoCurator && (
+                {(
                   <button
-                    onClick={onOpenAutoCurator}
+                    onClick={() => openModal('autoCurator')}
                     className="px-1.5 py-0.5 bg-gradient-to-r from-[#00F0FF]/20 to-[#A855F7]/20 hover:from-[#00F0FF]/30 hover:to-[#A855F7]/30 text-[#00F0FF] border border-[#00F0FF]/40 text-[8px] font-pixel flex items-center gap-1 transition pixel-btn font-bold"
                     title="Curateur Automatique : puiser, étudier, mettre au format, renommer et ranger"
                   >
@@ -617,7 +609,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="pt-3 border-t border-[#1E1E26] space-y-1.5">
               <button
                 id="open-mic-recorder-sidebar-btn"
-                onClick={onOpenRecorder}
+                onClick={() => openModal('recorder')}
                 className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-[#EF4444] bg-[#EF4444]/10 hover:bg-[#EF4444]/20 border-2 border-[#EF4444]/30 pixel-btn"
               >
                 <div className="flex items-center gap-2">
@@ -627,10 +619,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="text-[9px] font-pixel text-[#EF4444] font-bold">● MIC</span>
               </button>
 
-              {onOpenOp1Studio && (
+              {(
                 <button
                   id="open-op1-studio-sidebar-btn"
-                  onClick={onOpenOp1Studio}
+                  onClick={() => openModal('op1Studio')}
                   className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-[#FF7A00] bg-[#FF7A00]/10 hover:bg-[#FF7A00]/20 border-2 border-[#FF7A00]/30 pixel-btn"
                 >
                   <div className="flex items-center gap-2">
@@ -641,10 +633,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               )}
 
-              {onOpenGitHubSync && (
+              {(
                 <button
                   id="open-github-sync-sidebar-btn"
-                  onClick={onOpenGitHubSync}
+                  onClick={() => openModal('gitHubSync')}
                   className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-white bg-[#181820] hover:bg-[#22222E] border-2 border-[#2F2F3D] pixel-btn"
                 >
                   <div className="flex items-center gap-2">
@@ -789,11 +781,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Sidebar Footer Documentation & Standards Card */}
-      {onOpenDocumentation && (
+      {(
         <div className="p-2 border-t border-[#1C1C24] bg-[#0A0A0F]">
           <button
             id="sidebar-open-doc-btn"
-            onClick={onOpenDocumentation}
+            onClick={() => openModal('doc')}
             className="w-full flex items-center justify-between p-2 bg-[#12121A] hover:bg-[#1A1A26] border border-[#2A2A38] hover:border-[#00F0FF]/40 rounded text-left transition group"
           >
             <div className="flex items-center gap-2">

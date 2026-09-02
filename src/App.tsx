@@ -886,11 +886,6 @@ export default function App() {
           onFilterChange={(newF) => setFilterState((prev) => ({ ...prev, ...newF }))}
           onCreateFolder={handleCreateFolder}
           onDeleteFolder={handleDeleteFolder}
-          onOpenRecorder={() => openModal('recorder')}
-          onOpenOp1Studio={() => openModal('op1Studio')}
-          onOpenGitHubSync={() => openModal('gitHubSync')}
-          onOpenAutoCurator={() => openModal('autoCurator')}
-          onOpenDocumentation={() => openModal('doc')}
           onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
           activeView={activeView}
           onViewChange={setActiveView}
