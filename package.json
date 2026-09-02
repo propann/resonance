@@ -17,50 +17,95 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:desktop": "electron desktop/fs-selftest.cjs"
+    "test:desktop": "electron desktop/fs-selftest.cjs",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/jszip": "^3.4.1",
-    "@vitejs/plugin-react": "^5.0.4",
-    "chokidar": "^5.0.0",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "jszip": "^3.10.1",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "tone": "^15.1.22",
-    "vite": "^6.2.3",
-    "zustand": "^5.0.15"
+    "chokidar": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.1.14",
     "@types/express": "^4.17.21",
+    "@types/jszip": "^3.4.1",
     "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
+    "dotenv": "^17.2.3",
     "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^9.1.2",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
+    "express": "^4.21.2",
     "globals": "^15.15.0",
     "jsdom": "^25.0.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
     "prettier": "^3.9.6",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
     "tailwindcss": "^4.1.14",
+    "tone": "^15.1.22",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.69.0",
     "vite": "^6.2.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "zustand": "^5.0.15"
   },
   "allowScripts": {
     "electron@37.10.3": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true
+  },
+  "main": "desktop/main.cjs",
+  "author": "propann",
+  "build": {
+    "appId": "engineering.resonance.studio",
+    "productName": "Resonance",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "electron-assets"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/main.cjs",
+      "desktop/preload.cjs"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Resonance"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo",
+      "maintainer": "propann"
+    }
   }
 }

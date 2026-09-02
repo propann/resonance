@@ -149,7 +149,13 @@ ipcMain.handle('fs:rename', async (_e, relFrom, relTo) => {
 ipcMain.handle('fs:watchStart', async () => {
   stopWatch();
   if (!currentRoot) return false;
-  const chokidar = require('chokidar');
+  let chokidar;
+  try {
+    chokidar = require('chokidar');
+  } catch {
+    // Not bundled — the renderer falls back to its periodic scan.
+    return false;
+  }
   let timer = null;
   watcher = chokidar.watch(currentRoot, {
     ignoreInitial: true,
