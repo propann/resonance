@@ -191,7 +191,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Settings
-  const [targetFormat, setTargetFormat] = useState<'24b48k' | '16b46k' | '16b44k'>('24b48k');
+  const [targetFormat, setTargetFormat] = useState<'24b48k' | '16b44k'>('24b48k');
   const [targetLufs, setTargetLufs] = useState<number>(-14);
   const [autoNormalizeLufs, setAutoNormalizeLufs] = useState<boolean>(true);
   const [trimSilence, setTrimSilence] = useState<boolean>(true);
@@ -444,7 +444,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
             genre,
             tags: [...classification.tags, ...timbralTags, ...(isOp1Patch ? ['op-1', 'op1-drum-patch', '24-pad'] : [])],
             ep133Slot,
-            sampleRate: targetFormat === '24b48k' ? 48000 : targetFormat === '16b46k' ? 46875 : 44100,
+            sampleRate: targetFormat === '24b48k' ? 48000 : 44100,
             bitDepth: targetFormat === '24b48k' ? 24 : 16,
           },
           buffer
@@ -463,7 +463,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         };
 
         const targetBitDepth = targetFormat === '24b48k' ? 24 : 16;
-        const targetSampleRate = targetFormat === '24b48k' ? 48000 : targetFormat === '16b46k' ? 46875 : 44100;
+        const targetSampleRate = targetFormat === '24b48k' ? 48000 : 44100;
 
         const dummySample: SampleItem = {
           id: item.id,
@@ -857,8 +857,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
                 className="w-full bg-[#181B28] border border-[#2B2F40] rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-[#00F0FF]"
               >
                 <option value="24b48k">24-bit 48kHz (Studio Master)</option>
-                <option value="16b46k">16-bit 46.8k (EP-133 & OP-1)</option>
-                <option value="16b44k">16-bit 44.1k (DAW Compact)</option>
+                                <option value="16b44k">16-bit 44.1k (EP-133 &amp; OP-1)</option>
               </select>
             </div>
 

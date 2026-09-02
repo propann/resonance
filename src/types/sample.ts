@@ -121,7 +121,7 @@ export interface FilterState {
 export interface BatchConvertSettings {
   targetFormat: 'wav' | 'mp3' | 'webm';
   hardwarePreset: HardwarePreset;
-  sampleRate: 44100 | 48000 | 46875 | 96000 | 'original';
+  sampleRate: 44100 | 48000 | 96000 | 'original';
   bitDepth: 16 | 24 | 32;
   channels: 'stereo' | 'mono' | 'original';
   normalize: boolean;

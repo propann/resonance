@@ -1,7 +1,15 @@
 import { SampleItem, SampleType } from '../types/sample';
 import { audioEngine } from './audioEngine';
 import { audioBufferToWavBlob } from './audioConverter';
-import { calculateAudioMetrics } from './audioAnalyzer';
+import {
+  encodeOp1DrumPatch,
+  encodeOp1SamplerPatch,
+  drumMarkerToSeconds,
+  OP1_PLAYMODE,
+  OP1_REVERSE,
+  OP1_VOLUME_UNITY,
+  type Op1DrumSliceInput,
+} from './hardware/op1og';
 import JSZip from 'jszip';
 
 export interface Op1DrumSlice {
@@ -69,52 +77,6 @@ export const OP1_DEFAULT_CATEGORIES: { padIndex: number; suggestedType: SampleTy
   { padIndex: 22, suggestedType: 'fx', label: 'FX Noise' },
   { padIndex: 23, suggestedType: 'loop', label: 'Break / Mini Loop' },
 ];
-
-/**
- * Converts a floating point sample rate (e.g. 44100) to 80-bit IEEE 754 Extended Precision Float
- * required by Apple AIFF COMM chunk.
- */
-function floatToExtended80(val: number): Uint8Array {
-  const bytes = new Uint8Array(10);
-  if (val === 0) return bytes;
-
-  let sign = 0;
-  if (val < 0) {
-    sign = 0x8000;
-    val = -val;
-  }
-
-  let exp = Math.floor(Math.log2(val));
-  let mantissa = val / Math.pow(2, exp);
-
-  // Normalize mantissa
-  if (mantissa < 1.0) {
-    mantissa *= 2.0;
-    exp -= 1;
-  }
-
-  const exponentField = exp + 16383; // Bias for 80-bit float
-  const signExp = sign | (exponentField & 0x7fff);
-
-  bytes[0] = (signExp >> 8) & 0xff;
-  bytes[1] = signExp & 0xff;
-
-  // 64-bit integer mantissa with explicit leading 1
-  const mantissaFrac = mantissa * Math.pow(2, 63);
-  const high32 = Math.floor(mantissaFrac / 4294967296);
-  const low32 = Math.floor(mantissaFrac % 4294967296);
-
-  bytes[2] = (high32 >> 24) & 0xff;
-  bytes[3] = (high32 >> 16) & 0xff;
-  bytes[4] = (high32 >> 8) & 0xff;
-  bytes[5] = high32 & 0xff;
-  bytes[6] = (low32 >> 24) & 0xff;
-  bytes[7] = (low32 >> 16) & 0xff;
-  bytes[8] = (low32 >> 8) & 0xff;
-  bytes[9] = low32 & 0xff;
-
-  return bytes;
-}
 
 /**
  * Creates a combined 12.0s audio buffer containing up to 24 sounds sequentially arranged.
@@ -264,282 +226,49 @@ export async function buildOp1DrumBuffer(
 }
 
 /**
- * Encodes an AudioBuffer + 24 Slices into the official Teenage Engineering OP-1 AIFF Drum Patch (.aif).
- * Embedded with APPL 'op-1' JSON metadata chunk and 16-bit 44.1kHz PCM samples.
+ * Encodes an AudioBuffer + 24 slices into an OG Teenage Engineering OP-1 AIFF
+ * drum patch (.aif) — mono 16-bit 44.1 kHz, APPL 'op-1' JSON before SSND, markers
+ * on the fixed 12 s timeline. Delegates to {@link encodeOp1DrumPatch}.
  */
 export function encodeOp1AiffPatch(
   buffer: AudioBuffer,
   slices: Op1DrumSlice[],
   kitName: string = 'Resonance Drum Kit'
 ): Blob {
-  const sampleRate = buffer.sampleRate || 44100;
-  const numChannels = buffer.numberOfChannels;
-  const numFrames = buffer.length;
-
-  // Prepare OP-1 Drum JSON Chunk Payload
-  const startArr: number[] = [];
-  const endArr: number[] = [];
-  const pitchArr: number[] = [];
-  const playmodeArr: number[] = [];
-  const reverseArr: number[] = [];
-  const volumeArr: number[] = [];
-
+  const inputs: Op1DrumSliceInput[] = [];
   for (let i = 0; i < 24; i++) {
-    const s = slices[i] || {
-      startSec: (i * buffer.duration) / 24,
-      endSec: ((i + 1) * buffer.duration) / 24,
-      pitch: 0,
-      playmode: 0,
-      reverse: false,
-      volume: 8192,
-    };
-
-    // OP-1 timestamp standard: sample frame index * 4096
-    const startSample = Math.max(0, Math.floor(s.startSec * sampleRate));
-    const endSample = Math.min(numFrames - 1, Math.floor(s.endSec * sampleRate));
-
-    startArr.push(Math.round(startSample * 4096));
-    endArr.push(Math.round(endSample * 4096));
-    pitchArr.push(Math.round(s.pitch || 0));
-    playmodeArr.push(s.playmode || 0);
-    reverseArr.push(s.reverse ? 1 : 0);
-    volumeArr.push(Math.round(s.volume ?? 8192));
+    const s = slices[i];
+    inputs.push({
+      startSec: s ? s.startSec : (i * buffer.duration) / 24,
+      endSec: s ? s.endSec : ((i + 1) * buffer.duration) / 24,
+      pitch: s?.pitch ?? 0,
+      reverse: !!s?.reverse,
+      playmode: s?.playmode === 1 ? 'loop' : 'oneshot',
+      volume: s?.volume ?? OP1_VOLUME_UNITY,
+    });
   }
-
-  const op1Meta = {
-    drum_version: 1,
-    name: kitName.slice(0, 31),
-    octave: 0,
-    pitch: pitchArr,
-    playmode: playmodeArr,
-    reverse: reverseArr,
-    volume: volumeArr,
-    start: startArr,
-    end: endArr,
-    type: 'drum',
-  };
-
-  const jsonStr = JSON.stringify(op1Meta);
-  const jsonBytes = new TextEncoder().encode(jsonStr);
-
-  // AIFF Chunks sizing
-  // 1. COMM Chunk: 4 (ID) + 4 (size: 18) + 18 bytes = 26 bytes
-  const commChunkSize = 18;
-  const commTotalSize = 8 + commChunkSize;
-
-  // 2. APPL Chunk: 4 (ID) + 4 (size: 4 + jsonBytes.length) + 4 ('op-1') + jsonBytes.length (+ 1 if odd)
-  const applPayloadSize = 4 + jsonBytes.length;
-  const applPad = applPayloadSize % 2 !== 0 ? 1 : 0;
-  const applTotalSize = 8 + applPayloadSize + applPad;
-
-  // 3. SSND Chunk: 4 (ID) + 4 (size: 8 + pcmBytes) + 8 (offset, blockSize) + pcmBytes
-  const bytesPerSample = 2; // 16-bit
-  const pcmBytesLength = numFrames * numChannels * bytesPerSample;
-  const ssndPayloadSize = 8 + pcmBytesLength;
-  const ssndPad = pcmBytesLength % 2 !== 0 ? 1 : 0;
-  const ssndTotalSize = 8 + ssndPayloadSize + ssndPad;
-
-  // Total AIFF FORM Size = 4 ('AIFF') + commTotalSize + applTotalSize + ssndTotalSize
-  const formPayloadSize = 4 + commTotalSize + applTotalSize + ssndTotalSize;
-  const totalFileSize = 8 + formPayloadSize;
-
-  const outBuffer = new ArrayBuffer(totalFileSize);
-  const view = new DataView(outBuffer);
-  const u8 = new Uint8Array(outBuffer);
-
-  let offset = 0;
-
-  // Helper to write ASCII 4-char string
-  function writeString(str: string) {
-    for (let i = 0; i < str.length; i++) {
-      u8[offset++] = str.charCodeAt(i);
-    }
-  }
-
-  // --- FORM Header ---
-  writeString('FORM');
-  view.setUint32(offset, formPayloadSize, false); // Big Endian
-  offset += 4;
-  writeString('AIFF');
-
-  // --- COMM Chunk ---
-  writeString('COMM');
-  view.setUint32(offset, commChunkSize, false);
-  offset += 4;
-  view.setInt16(offset, numChannels, false); // Channels (1 or 2)
-  offset += 2;
-  view.setUint32(offset, numFrames, false); // Sample Frames
-  offset += 4;
-  view.setInt16(offset, 16, false); // Bit depth (16-bit PCM)
-  offset += 2;
-
-  // Sample rate in 80-bit IEEE 754
-  const sampleRate80 = floatToExtended80(sampleRate);
-  u8.set(sampleRate80, offset);
-  offset += 10;
-
-  // --- APPL Chunk ('op-1' application metadata) ---
-  writeString('APPL');
-  view.setUint32(offset, applPayloadSize, false);
-  offset += 4;
-  writeString('op-1');
-  u8.set(jsonBytes, offset);
-  offset += jsonBytes.length;
-  if (applPad > 0) {
-    u8[offset++] = 0;
-  }
-
-  // --- SSND Chunk (Audio PCM Big-Endian 16-bit) ---
-  writeString('SSND');
-  view.setUint32(offset, ssndPayloadSize, false);
-  offset += 4;
-  view.setUint32(offset, 0, false); // offset = 0
-  offset += 4;
-  view.setUint32(offset, 0, false); // blockSize = 0
-  offset += 4;
-
-  const left = buffer.getChannelData(0);
-  const right = numChannels > 1 ? buffer.getChannelData(1) : left;
-
-  for (let i = 0; i < numFrames; i++) {
-    // Left Channel (16-bit Big Endian)
-    const sL = Math.max(-1, Math.min(1, left[i]));
-    const valL = sL < 0 ? sL * 0x8000 : sL * 0x7fff;
-    view.setInt16(offset, Math.floor(valL), false);
-    offset += 2;
-
-    if (numChannels > 1) {
-      const sR = Math.max(-1, Math.min(1, right[i]));
-      const valR = sR < 0 ? sR * 0x8000 : sR * 0x7fff;
-      view.setInt16(offset, Math.floor(valR), false);
-      offset += 2;
-    }
-  }
-
-  if (ssndPad > 0) {
-    u8[offset++] = 0;
-  }
-
-  return new Blob([outBuffer], { type: 'audio/aiff' });
+  return encodeOp1DrumPatch(buffer, inputs, kitName);
 }
 
 /**
- * Encodes an OP-1 Synth Sampler patch (.aif) with root pitch and loop boundaries.
+ * Encodes an OG OP-1 sampler patch (.aif). The OG sampler format has NO
+ * `root` / `loop_*` / `start` / `end` — pitch is `base_freq`. The legacy
+ * `loop*` options are accepted for call-site compatibility but ignored.
  */
 export function encodeOp1SynthPatch(
   buffer: AudioBuffer,
   options: {
     name: string;
     rootMidiNote: number; // 60 = C4
-    loopEnabled: boolean;
+    loopEnabled?: boolean;
     loopStartSec?: number;
     loopEndSec?: number;
   }
 ): Blob {
-  const sampleRate = buffer.sampleRate || 44100;
-  const numFrames = buffer.length;
-
-  const loopStart = Math.round((options.loopStartSec ?? 0) * sampleRate * 4096);
-  const loopEnd = Math.round((options.loopEndSec ?? buffer.duration) * sampleRate * 4096);
-
-  const synthMeta = {
-    synth_version: 1,
-    name: options.name.slice(0, 31),
-    type: 'sampler',
-    root: options.rootMidiNote || 60,
-    start: 0,
-    end: Math.round(numFrames * 4096),
-    loop: options.loopEnabled ? 1 : 0,
-    loop_start: loopStart,
-    loop_end: loopEnd,
-  };
-
-  const jsonStr = JSON.stringify(synthMeta);
-  const jsonBytes = new TextEncoder().encode(jsonStr);
-
-  const numChannels = buffer.numberOfChannels;
-  const commChunkSize = 18;
-  const commTotalSize = 8 + commChunkSize;
-
-  const applPayloadSize = 4 + jsonBytes.length;
-  const applPad = applPayloadSize % 2 !== 0 ? 1 : 0;
-  const applTotalSize = 8 + applPayloadSize + applPad;
-
-  const bytesPerSample = 2;
-  const pcmBytesLength = numFrames * numChannels * bytesPerSample;
-  const ssndPayloadSize = 8 + pcmBytesLength;
-  const ssndPad = pcmBytesLength % 2 !== 0 ? 1 : 0;
-  const ssndTotalSize = 8 + ssndPayloadSize + ssndPad;
-
-  const formPayloadSize = 4 + commTotalSize + applTotalSize + ssndTotalSize;
-  const totalFileSize = 8 + formPayloadSize;
-
-  const outBuffer = new ArrayBuffer(totalFileSize);
-  const view = new DataView(outBuffer);
-  const u8 = new Uint8Array(outBuffer);
-
-  let offset = 0;
-  function writeString(str: string) {
-    for (let i = 0; i < str.length; i++) {
-      u8[offset++] = str.charCodeAt(i);
-    }
-  }
-
-  writeString('FORM');
-  view.setUint32(offset, formPayloadSize, false);
-  offset += 4;
-  writeString('AIFF');
-
-  writeString('COMM');
-  view.setUint32(offset, commChunkSize, false);
-  offset += 4;
-  view.setInt16(offset, numChannels, false);
-  offset += 2;
-  view.setUint32(offset, numFrames, false);
-  offset += 4;
-  view.setInt16(offset, 16, false);
-  offset += 2;
-
-  const sampleRate80 = floatToExtended80(sampleRate);
-  u8.set(sampleRate80, offset);
-  offset += 10;
-
-  writeString('APPL');
-  view.setUint32(offset, applPayloadSize, false);
-  offset += 4;
-  writeString('op-1');
-  u8.set(jsonBytes, offset);
-  offset += jsonBytes.length;
-  if (applPad > 0) u8[offset++] = 0;
-
-  writeString('SSND');
-  view.setUint32(offset, ssndPayloadSize, false);
-  offset += 4;
-  view.setUint32(offset, 0, false);
-  offset += 4;
-  view.setUint32(offset, 0, false);
-  offset += 4;
-
-  const left = buffer.getChannelData(0);
-  const right = numChannels > 1 ? buffer.getChannelData(1) : left;
-
-  for (let i = 0; i < numFrames; i++) {
-    const sL = Math.max(-1, Math.min(1, left[i]));
-    const valL = sL < 0 ? sL * 0x8000 : sL * 0x7fff;
-    view.setInt16(offset, Math.floor(valL), false);
-    offset += 2;
-
-    if (numChannels > 1) {
-      const sR = Math.max(-1, Math.min(1, right[i]));
-      const valR = sR < 0 ? sR * 0x8000 : sR * 0x7fff;
-      view.setInt16(offset, Math.floor(valR), false);
-      offset += 2;
-    }
-  }
-
-  if (ssndPad > 0) u8[offset++] = 0;
-
-  return new Blob([outBuffer], { type: 'audio/aiff' });
+  return encodeOp1SamplerPatch(buffer, {
+    name: options.name,
+    rootMidiNote: options.rootMidiNote,
+  });
 }
 
 /**
@@ -617,16 +346,17 @@ export async function parseOp1AiffPatch(
   }
 
   const duration = audioBuffer.duration;
-  const sampleRate = audioBuffer.sampleRate;
   const slices: Op1DrumSlice[] = [];
 
   if (op1Json && Array.isArray(op1Json.start) && Array.isArray(op1Json.end)) {
     const totalSlots = Math.min(24, op1Json.start.length);
     for (let i = 0; i < totalSlots; i++) {
-      const startSample = (op1Json.start[i] || 0) / 4096;
-      const endSample = (op1Json.end[i] || 0) / 4096;
-      const startSec = Math.max(0, Math.min(duration, startSample / sampleRate));
-      const endSec = Math.max(startSec + 0.01, Math.min(duration, endSample / sampleRate));
+      // Markers live on the fixed 12 s timeline, not the real buffer.
+      const startSec = Math.max(0, Math.min(duration, drumMarkerToSeconds(op1Json.start[i] || 0)));
+      const endSec = Math.max(startSec + 0.01, Math.min(duration, drumMarkerToSeconds(op1Json.end[i] || 0)));
+
+      const rawReverse = op1Json.reverse ? op1Json.reverse[i] : OP1_REVERSE.forward;
+      const rawPlaymode = op1Json.playmode ? op1Json.playmode[i] : OP1_PLAYMODE.oneshot;
 
       const def = OP1_DEFAULT_CATEGORIES[i] || { suggestedType: 'other', label: `Pad ${i + 1}` };
       slices.push({
@@ -636,9 +366,10 @@ export async function parseOp1AiffPatch(
         startSec,
         endSec,
         pitch: op1Json.pitch ? op1Json.pitch[i] : 0,
-        reverse: op1Json.reverse ? op1Json.reverse[i] === 1 : false,
-        playmode: op1Json.playmode ? op1Json.playmode[i] : 0,
-        volume: op1Json.volume ? op1Json.volume[i] : 8192,
+        // tolerate both the magic value (19968) and a legacy 0/1 flag
+        reverse: rawReverse === OP1_REVERSE.reversed || rawReverse === 1,
+        playmode: rawPlaymode === OP1_PLAYMODE.loop || rawPlaymode === 1 ? 1 : 0,
+        volume: op1Json.volume ? op1Json.volume[i] : OP1_VOLUME_UNITY,
         color: OP1_KEY_COLORS[i],
       });
     }

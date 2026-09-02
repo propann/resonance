@@ -466,7 +466,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   </div>
                   <ul className="text-xs text-gray-300 space-y-1.5 font-mono">
                     <li>• <b className="text-white">Numérotation :</b> <code className="text-amber-400">sound_001.wav</code> à <code className="text-amber-400">sound_099.wav</code>.</li>
-                    <li>• <b className="text-white">Résolution :</b> 16-bit 46.875kHz ou 44.1kHz PCM.</li>
+                    <li>• <b className="text-white">Résolution :</b> 16-bit 44.1 kHz PCM (conversion aval).</li>
                     <li>• <b className="text-white">Canaux :</b> Mono sommé pour préserver la mémoire Flash du K.O. II.</li>
                     <li>• <b className="text-white">Loudness :</b> -14.0 LUFS harmonisé.</li>
                   </ul>

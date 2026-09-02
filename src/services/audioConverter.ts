@@ -2,6 +2,12 @@ import JSZip from 'jszip';
 import { BatchConvertSettings, HardwarePreset, SampleItem, SliceRegion } from '../types/sample';
 import { audioEngine } from './audioEngine';
 import { batchGenerateOp1Kits } from './op1PatchEncoder';
+import {
+  EP133_SAMPLE_RATE,
+  ep133CategoryFolder,
+  ep133FileName,
+  ep133WavOptions,
+} from './hardware/ep133';
 
 /** Creates a correctly timed buffer at the requested rate using linear interpolation. */
 function resampleBuffer(buffer: AudioBuffer, targetSampleRate: number): AudioBuffer {
@@ -297,8 +303,9 @@ export async function exportSlicesZip(
 }
 
 /**
- * Dedicated Teenage Engineering EP-133 K.O. II Project Pack Exporter
- * Formats: 16-bit / 46.875 kHz or 44.1 kHz, Mono/Stereo, 001-999 Pad-Grouped Folders
+ * Dedicated Teenage Engineering EP-133 K.O. II Project Pack Exporter.
+ * Standardised downstream format: 16-bit / 44.1 kHz / mono, 001-999 pad-grouped
+ * folders. Spec lives in `services/hardware/ep133.ts`.
  */
 export async function exportEp133ProjectPack(
   samples: SampleItem[],
@@ -306,34 +313,15 @@ export async function exportEp133ProjectPack(
     useMono?: boolean;
     startingSlot?: number;
     loudnessMatch?: boolean;
-    sampleRate?: 46875 | 44100 | 48000;
+    sampleRate?: 44100 | 48000;
   },
   onProgress?: (current: number, total: number, name: string) => void
 ): Promise<Blob> {
   const zip = new JSZip();
   const epFolder = zip.folder('EP-133_KO_II_PROJECT_PACK') || zip;
   const useMono = options?.useMono ?? true;
-  const targetSampleRate = options?.sampleRate ?? 46875;
+  const targetSampleRate = options?.sampleRate ?? EP133_SAMPLE_RATE;
   const loudnessMatch = options?.loudnessMatch ?? true;
-
-  // EP-133 Category Folders & Sound Slot Map
-  const categoryFolders: Record<string, string> = {
-    kick: '01_KICKS (Slots 001-099)',
-    snare: '02_SNARES (Slots 100-199)',
-    clap: '02_SNARES (Slots 100-199)',
-    hihat: '03_HATS (Slots 200-299)',
-    cymbal: '03_HATS (Slots 200-299)',
-    percussion: '04_PERCS (Slots 300-399)',
-    bass: '05_BASS_808 (Slots 400-499)',
-    '808': '05_BASS_808 (Slots 400-499)',
-    lead: '06_LEADS_KEYS (Slots 500-599)',
-    pad: '07_PADS_CHORDS (Slots 600-699)',
-    vocal: '08_VOCALS (Slots 700-799)',
-    fx: '09_FX_HITS (Slots 800-899)',
-    loop: '00_LOOPS_STEMS (Slots 900-999)',
-    'multi-sound': '00_LOOPS_STEMS (Slots 900-999)',
-    other: '04_PERCS (Slots 300-399)',
-  };
 
   const typeCounters: Record<string, number> = {};
 
@@ -342,35 +330,26 @@ export async function exportEp133ProjectPack(
     if (onProgress) onProgress(i + 1, samples.length, sample.name);
     if (!sample.audioBuffer) continue;
 
-    const folderName = categoryFolders[sample.type] || '04_PERCS (Slots 300-399)';
-    const subFolder = epFolder.folder(folderName) || epFolder;
+    const subFolder = epFolder.folder(ep133CategoryFolder(sample.type)) || epFolder;
 
     // Track slot in category
     const catKey = sample.type;
     typeCounters[catKey] = (typeCounters[catKey] || 0) + 1;
     const slotNumber = sample.ep133Slot || (sample.category === 'loop' ? 900 + (typeCounters[catKey] % 99) : 1 + (i % 998));
-    const paddedSlot = String(slotNumber).padStart(3, '0');
 
     const wavBlob = audioBufferToWavBlob(sample.audioBuffer, {
-      bitDepth: 16,
+      ...ep133WavOptions(sample),
       sampleRate: targetSampleRate,
       monoSum: useMono,
       normalize: !loudnessMatch,
-      loudnessMatch: loudnessMatch,
-      targetLufs: sample.isLoop ? -14 : -18,
-      targetPeakDb: -0.1,
-      removeDc: true,
-      trimSilence: true,
-      silenceThresholdDb: -50,
-      bpm: sample.bpm,
-      rootKey: sample.key,
+      loudnessMatch,
     });
 
-    const cleanName = sample.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const keyStr = sample.key ? `_${sample.key.replace(/\s+/g, '')}` : '';
-    const bpmStr = sample.bpm ? `_${sample.bpm}BPM` : '';
-    const genreStr = sample.genre ? `_${sample.genre.split('/')[0].trim().replace(/\s+/g, '')}` : '';
-    const fileName = `${paddedSlot}_${cleanName}${keyStr}${bpmStr}${genreStr}.wav`;
+    const fileName = ep133FileName(slotNumber, sample.name, {
+      key: sample.key,
+      bpm: sample.bpm,
+      genre: sample.genre,
+    });
 
     subFolder.file(fileName, wavBlob);
   }
@@ -408,7 +387,7 @@ export async function processBatchConvert(
       samples,
       {
         useMono: settings.channels === 'mono',
-        sampleRate: (settings.sampleRate === 44100 || settings.sampleRate === 48000) ? settings.sampleRate : 46875,
+        sampleRate: settings.sampleRate === 48000 ? 48000 : EP133_SAMPLE_RATE,
         loudnessMatch: settings.loudnessMatch,
       },
       onProgress

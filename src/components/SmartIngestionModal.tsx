@@ -536,7 +536,7 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
         <div className="px-6 py-4 border-t border-[#222228] bg-[#121218] flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-[#8E8E9A] flex items-center gap-2">
             <Disc className="w-4 h-4 text-[#00F0FF]" />
-            <span>Formatage automatique 16-bit 46.875kHz sans perte pour le convertisseur K.O. II</span>
+            <span>Formatage automatique 16-bit 44.1 kHz mono pour le convertisseur K.O. II</span>
           </div>
 
           <div className="flex items-center gap-3">

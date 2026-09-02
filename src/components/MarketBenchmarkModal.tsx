@@ -168,7 +168,7 @@ export const MarketBenchmarkModal: React.FC<MarketBenchmarkModalProps> = ({ isOp
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                   <div className="p-3 rounded-lg bg-[#0D0D11] border border-[#222228]">
                     <div className="text-[11px] text-[#8E8E9A]">Fréquence d'Échantillonnage</div>
-                    <div className="text-sm font-bold text-[#E0E0E6] mt-0.5">46.875 kHz / 44.1 kHz</div>
+                    <div className="text-sm font-bold text-[#E0E0E6] mt-0.5">44.1 kHz / 16-bit</div>
                     <div className="text-[10px] text-[#00F0FF] mt-1">Fréquence native DAC K.O. II</div>
                   </div>
                   <div className="p-3 rounded-lg bg-[#0D0D11] border border-[#222228]">

@@ -499,7 +499,6 @@ export default function App() {
     try {
       const zipBlob = await exportEp133ProjectPack(samples, {
         useMono: true,
-        sampleRate: 46875,
         loudnessMatch: true,
       });
       triggerFileDownload(zipBlob, `Resonance_EP133_KO_II_Pack_${Date.now().toString(36)}.zip`);
