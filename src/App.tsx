@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRe
 import { DEFAULT_FOLDERS } from './data/defaultSampleLibrary';
 import { useResizablePanels } from './hooks/useResizablePanels';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useWorkFolder } from './hooks/useWorkFolder';
 import {
   SampleItem,
   FolderItem,
@@ -49,18 +50,10 @@ import {
   classifySampleForLibrary,
 } from './services/proFolderOrganizer';
 import {
-  chooseLibraryRoot,
-  listWorkFolderAudioFiles,
-  removeEmptyManagedFolders,
-  restoreLibraryRoot,
-  scanManagedLibrary,
-  supportsLocalLibrary,
   getDirectoryForPath,
   writeUniqueFile,
   writeLibraryManifest,
-  readLibraryManifest,
   readLibraryAudioFile,
-  type DirectoryHandle,
   type WorkFolderAudioFile,
 } from './services/localLibrary';
 
@@ -100,16 +93,7 @@ export default function App() {
   const [isLoudnessModalOpen, setIsLoudnessModalOpen] = useState<boolean>(false);
   const [pendingCurationFiles, setPendingCurationFiles] = useState<Array<File | WorkFolderAudioFile>>([]);
   const [pendingFilesAlreadyArchived, setPendingFilesAlreadyArchived] = useState(false);
-  const [libraryRoot, setLibraryRoot] = useState<DirectoryHandle | null>(null);
-  const [libraryName, setLibraryName] = useState<string | null>(null);
-  const [diskSampleCount, setDiskSampleCount] = useState(0);
-  const [diskFolderCounts, setDiskFolderCounts] = useState<Record<string, number>>({});
   const [isCuratorProcessing, setIsCuratorProcessing] = useState(false);
-  const [workFolderStatus, setWorkFolderStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
-  const [incomingCount, setIncomingCount] = useState(0);
-  const [failedIncomingCount, setFailedIncomingCount] = useState(0);
-  const scanInFlightRef = useRef(false);
-  const queuedSourceKeysRef = useRef(new Set<string>());
   const [sampleForLoudness, setSampleForLoudness] = useState<SampleItem | null>(null);
 
   const [sampleForDsp, setSampleForDsp] = useState<SampleItem | null>(null);
@@ -152,6 +136,32 @@ export default function App() {
       return [...byId.values()];
     });
   };
+
+  const {
+    libraryRoot,
+    libraryName,
+    workFolderStatus,
+    diskSampleCount,
+    diskFolderCounts,
+    incomingCount,
+    failedIncomingCount,
+    setFailedIncomingCount,
+    adoptExternalRoot,
+    chooseLibrary,
+    reactivateWorkFolder,
+    refreshLibrary,
+    cleanEmptyFolders,
+    processReception,
+  } = useWorkFolder({
+    isCuratorOpen: isAutoCuratorOpen,
+    isCuratorProcessing,
+    onManifestSamples: hydrateManifestSamples,
+    onReceptionFilesReady: (files, openCurator) => {
+      setPendingFilesAlreadyArchived(true);
+      setPendingCurationFiles(files);
+      if (openCurator) setIsAutoCuratorOpen(true);
+    },
+  });
 
   // Hidden File Inputs for Menu Bar actions
   const menuFileInputRef = useRef<HTMLInputElement>(null);
@@ -200,146 +210,6 @@ export default function App() {
   });
 
   // The library intentionally starts empty: users import their own source material.
-
-  useEffect(() => {
-    restoreLibraryRoot().then((root) => {
-      if (root) {
-        setLibraryRoot(root);
-        setLibraryName(root.name);
-        setWorkFolderStatus('connected');
-        scanManagedLibrary(root).then((scan) => {
-          setDiskSampleCount(scan.totalSamples);
-          setDiskFolderCounts(scan.folderCounts);
-        });
-        readLibraryManifest(root).then(hydrateManifestSamples);
-      }
-    });
-  }, []);
-
-  const handleChooseLibrary = async () => {
-    if (!supportsLocalLibrary()) {
-      alert("Le choix d'un dossier de travail nécessite Chrome ou Microsoft Edge sur ordinateur. Ouvrez http://localhost:3000 dans l'un de ces navigateurs, puis réessayez.");
-      return;
-    }
-    try {
-      setWorkFolderStatus('connecting');
-      const root = await chooseLibraryRoot();
-      setLibraryRoot(root);
-      setLibraryName(root.name);
-      const scan = await scanManagedLibrary(root);
-      setDiskSampleCount(scan.totalSamples);
-      setDiskFolderCounts(scan.folderCounts);
-      hydrateManifestSamples(await readLibraryManifest(root));
-      setWorkFolderStatus('connected');
-    } catch (error) {
-      setWorkFolderStatus(libraryRoot ? 'connected' : 'error');
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        console.error('Erreur dossier de travail', error);
-        alert(error instanceof Error ? `Impossible de connecter ce dossier : ${error.message}` : "Impossible de connecter ce dossier de travail.");
-      }
-    }
-  };
-
-  const handleReactivateWorkFolder = async () => {
-    if (!libraryRoot) {
-      await handleChooseLibrary();
-      return;
-    }
-    try {
-      const permission = await libraryRoot.requestPermission?.({ mode: 'readwrite' });
-      if (permission === 'granted') {
-        await handleRefreshLibrary();
-        return;
-      }
-    } catch (error) {
-      console.warn('Autorisation du dossier à renouveler', error);
-    }
-    await handleChooseLibrary();
-  };
-
-  const handleRefreshLibrary = async () => {
-    if (!libraryRoot) return;
-    try {
-      const scan = await scanManagedLibrary(libraryRoot);
-      setDiskSampleCount(scan.totalSamples);
-      setDiskFolderCounts(scan.folderCounts);
-      hydrateManifestSamples(await readLibraryManifest(libraryRoot));
-      setWorkFolderStatus('connected');
-    } catch (error) {
-      setWorkFolderStatus('error');
-      console.error('Erreur rafraîchissement bibliothèque', error);
-      alert("Impossible de lire le dossier de travail. Reconnectez-le depuis Fichier.");
-    }
-  };
-
-  const handleCleanEmptyFolders = async () => {
-    if (!libraryRoot) return;
-    try {
-      const removed = await removeEmptyManagedFolders(libraryRoot);
-      await handleRefreshLibrary();
-      alert(removed > 0 ? `${removed} dossier(s) vide(s) supprimé(s).` : 'Aucun dossier vide à supprimer.');
-    } catch (error) {
-      console.error('Erreur nettoyage dossiers', error);
-      alert("Impossible de nettoyer les dossiers. Reconnectez le dossier de travail.");
-    }
-  };
-
-  const handleProcessReception = async () => {
-    if (!libraryRoot) return;
-    try {
-      const files = await listWorkFolderAudioFiles(libraryRoot);
-      queuedSourceKeysRef.current.clear();
-      if (files.length === 0) {
-        alert("Aucun nouveau fichier audio dans le dossier de travail. Déposez vos sons ou dossiers à sa racine, puis relancez cette commande.");
-        return;
-      }
-      setPendingFilesAlreadyArchived(true);
-      setPendingCurationFiles(files);
-      setIsAutoCuratorOpen(true);
-    } catch (error) {
-      console.error('Erreur analyse réception', error);
-      alert("Impossible de lire 00_RECEPTION. Reconnectez le dossier de travail depuis le menu Fichier.");
-    }
-  };
-
-  useEffect(() => {
-    if (!libraryRoot || isAutoCuratorOpen || isCuratorProcessing) return;
-    let cancelled = false;
-    const scanReception = async () => {
-      if (scanInFlightRef.current) return;
-      scanInFlightRef.current = true;
-      try {
-        const files = await listWorkFolderAudioFiles(libraryRoot);
-        if (cancelled) return;
-        setIncomingCount(files.length);
-        const currentKeys = new Set(files.map(({ sourcePath, file }) => `${sourcePath}:${file.size}:${file.lastModified}`));
-        for (const knownKey of queuedSourceKeysRef.current) {
-          if (!currentKeys.has(knownKey)) queuedSourceKeysRef.current.delete(knownKey);
-        }
-        const freshFiles = files.filter(({ sourcePath, file }) => {
-          const key = `${sourcePath}:${file.size}:${file.lastModified}`;
-          if (queuedSourceKeysRef.current.has(key)) return false;
-          queuedSourceKeysRef.current.add(key);
-          return true;
-        });
-        if (freshFiles.length === 0) return;
-        setPendingFilesAlreadyArchived(true);
-        setPendingCurationFiles(freshFiles);
-        // Keep automatic intake in the background; the red menu indicator opens details on demand.
-      } catch (error) {
-        console.error('Surveillance de réception indisponible', error);
-        setWorkFolderStatus('error');
-      } finally {
-        scanInFlightRef.current = false;
-      }
-    };
-    void scanReception();
-    const timer = window.setInterval(() => void scanReception(), 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [libraryRoot, isAutoCuratorOpen, isCuratorProcessing]);
 
   // Filtered and Sorted Samples list
   const filteredSamples = useMemo(() => {
@@ -503,7 +373,7 @@ export default function App() {
     onPlayPrev: handlePlayPrev,
     onToggleLoop: () => audioEngine.toggleLoop(),
     onOpenBatchNaming: () => setIsBatchNamingOpen(true),
-    onReactivateWorkFolder: () => void handleReactivateWorkFolder(),
+    onReactivateWorkFolder: () => void reactivateWorkFolder(),
     onOpenFxRackForSelected: () => {
       if (selectedSample) {
         setSampleForFxRack(selectedSample);
@@ -821,7 +691,7 @@ export default function App() {
         derivedFrom: newSample.id,
         processing: 'dsp-rack',
       }]);
-      await handleRefreshLibrary();
+      await refreshLibrary();
     } catch (error) {
       console.error('Impossible de sauvegarder le rendu DSP dans la bibliothèque', error);
       alert("Le rendu DSP est visible dans l'application mais n'a pas pu être écrit dans le dossier de travail.");
@@ -945,10 +815,10 @@ export default function App() {
 
       {/* 1. TOP CLASSIC DAW MENU BAR */}
       <AppMenuBar
-        onChooseLibrary={handleChooseLibrary}
-        onProcessReception={libraryRoot ? handleProcessReception : undefined}
-        onRefreshLibrary={libraryRoot ? handleRefreshLibrary : undefined}
-        onCleanEmptyFolders={libraryRoot ? handleCleanEmptyFolders : undefined}
+        onChooseLibrary={chooseLibrary}
+        onProcessReception={libraryRoot ? processReception : undefined}
+        onRefreshLibrary={libraryRoot ? refreshLibrary : undefined}
+        onCleanEmptyFolders={libraryRoot ? cleanEmptyFolders : undefined}
         isBackgroundProcessing={isCuratorProcessing}
         onOpenBackgroundProcessing={() => setIsAutoCuratorOpen(true)}
         libraryName={libraryName}
@@ -985,7 +855,7 @@ export default function App() {
       <Header
         searchQuery={filterState.searchQuery}
         onSearchChange={(q) => setFilterState((prev) => ({ ...prev, searchQuery: q }))}
-        onReactivateWorkFolder={() => void handleReactivateWorkFolder()}
+        onReactivateWorkFolder={() => void reactivateWorkFolder()}
         workFolderName={libraryName}
         workFolderStatus={workFolderStatus}
         incomingCount={incomingCount}
@@ -1169,11 +1039,8 @@ export default function App() {
         }}
         libraryRoot={libraryRoot}
         libraryName={libraryName}
-        onLibraryRootChange={(root) => {
-          setLibraryRoot(root);
-          setLibraryName(root.name);
-        }}
-        onLibraryChanged={() => void handleRefreshLibrary()}
+        onLibraryRootChange={adoptExternalRoot}
+        onLibraryChanged={() => void refreshLibrary()}
         onProcessingChange={setIsCuratorProcessing}
         onQueueResult={({ errors }) => setFailedIncomingCount(errors)}
         autoTransfer
