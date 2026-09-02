@@ -1,5 +1,6 @@
 import { SampleItem } from '../types/sample';
 import { frequencyToNote } from './audioAnalyzer';
+import { audioGraph } from './audioGraph';
 
 export interface MultiBandEnergy {
   subBassDb: number; // 20 - 60 Hz
@@ -320,7 +321,7 @@ export function analyzeFullDspReport(buffer: AudioBuffer, sampleItem?: SampleIte
 export function removeDcOffsetFromBuffer(buffer: AudioBuffer): AudioBuffer {
   const numChannels = buffer.numberOfChannels;
   const length = buffer.length;
-  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const ctx = audioGraph.getContext();
   const fixedBuffer = ctx.createBuffer(numChannels, length, buffer.sampleRate);
 
   for (let c = 0; c < numChannels; c++) {
@@ -357,7 +358,7 @@ export function normalizeBufferToLufs(buffer: AudioBuffer, targetLufs: number = 
 
   const numChannels = buffer.numberOfChannels;
   const length = buffer.length;
-  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const ctx = audioGraph.getContext();
   const outputBuffer = ctx.createBuffer(numChannels, length, buffer.sampleRate);
 
   for (let c = 0; c < numChannels; c++) {

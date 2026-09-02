@@ -1,5 +1,20 @@
 import { audioEngine } from './audioEngine';
+import { audioGraph } from './audioGraph';
 import * as Tone from 'tone';
+
+let toneContextBound = false;
+/** Route Tone.js through the shared realtime AudioContext, once. */
+function ensureSharedToneContext(): void {
+  if (toneContextBound) return;
+  toneContextBound = true;
+  try {
+    (Tone as unknown as { setContext: (ctx: AudioContext) => void }).setContext(
+      audioGraph.getContext()
+    );
+  } catch {
+    // Older Tone builds without setContext: keep Tone's own context.
+  }
+}
 
 export type SynthWave = OscillatorType;
 export type CreatorEngineType = 'native' | 'tone-synth' | 'tone-fm' | 'tone-am' | 'tone-membrane' | 'tone-metal' | 'tone-pluck' | 'tone-noise';
@@ -67,6 +82,7 @@ export class SynthRackEngine {
   private getToneInstrument(layer: SynthLayer): any {
     const existing = this.toneInstruments.get(layer.id);
     if (existing) return existing;
+    ensureSharedToneContext();
     let instrument: any;
     if (layer.engine === 'tone-fm') instrument = new (Tone as any).PolySynth((Tone as any).FMSynth);
     else if (layer.engine === 'tone-am') instrument = new (Tone as any).PolySynth((Tone as any).AMSynth);
@@ -76,7 +92,7 @@ export class SynthRackEngine {
     else if (layer.engine === 'tone-noise') instrument = new (Tone as any).NoiseSynth();
     else instrument = new (Tone as any).PolySynth((Tone as any).Synth);
     instrument.volume.value = Math.max(-48, 20 * Math.log10(Math.max(0.0001, layer.gain)));
-    instrument.toDestination();
+    instrument.connect(audioGraph.getMasterInput());
     this.toneInstruments.set(layer.id, instrument);
     return instrument;
   }
@@ -97,7 +113,7 @@ export class SynthRackEngine {
     if (!this.master) {
       this.master = ctx.createGain();
       this.master.gain.value = 0.8;
-      this.master.connect(ctx.destination);
+      this.master.connect(audioGraph.getMasterInput());
     }
     return this.master;
   }

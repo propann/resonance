@@ -24,6 +24,7 @@ import {
   applyEffectsToAudioBuffer,
 } from '../services/dspEffectsEngine';
 import { audioBufferToWavBlob } from '../services/audioConverter';
+import { audioGraph } from '../services/audioGraph';
 import { DspSidebar } from './dsp/DspSidebar';
 import { DspWaveformMonitor } from './dsp/DspWaveformMonitor';
 import { DspControlsCards } from './dsp/DspControlsCards';
@@ -187,13 +188,11 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
       if (!buf) return;
 
       if (!audioCtxRef.current) {
-        const AudioContextClass =
-          window.AudioContext || (window as any).webkitAudioContext;
-        audioCtxRef.current = new AudioContextClass();
+        audioCtxRef.current = audioGraph.getContext();
       }
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') {
-        ctx.resume();
+        void ctx.resume();
       }
 
       stopAudio();
@@ -204,7 +203,7 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
 
       if (!gainNodeRef.current) {
         gainNodeRef.current = ctx.createGain();
-        gainNodeRef.current.connect(ctx.destination);
+        gainNodeRef.current.connect(audioGraph.getMasterInput());
       }
       gainNodeRef.current.gain.value = 1.0;
       source.connect(gainNodeRef.current);
@@ -287,15 +286,20 @@ export const AudioEffectsRackModal: React.FC<AudioEffectsRackModalProps> = ({
     }
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount. The AudioContext is shared (audioGraph) — never close it,
+  // just stop this modal's source and disconnect its local gain node.
   useEffect(() => {
     return () => {
       stopAudio();
-      if (audioCtxRef.current) {
+      if (gainNodeRef.current) {
         try {
-          audioCtxRef.current.close();
-        } catch (e) {}
+          gainNodeRef.current.disconnect();
+        } catch {
+          // already disconnected
+        }
+        gainNodeRef.current = null;
       }
+      audioCtxRef.current = null;
     };
   }, [stopAudio]);
 

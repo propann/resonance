@@ -14,6 +14,8 @@
  *   5. True Peak Transparent (-0.3 dBFS) [Préservation dynamique pure]
  */
 
+import { audioGraph } from './audioGraph';
+
 export type LoudnessStandardKey = 'streaming' | 'sample_pack' | 'club_edm' | 'broadcast_ebu' | 'peak_safe';
 
 export interface LoudnessStandardProfile {
@@ -351,7 +353,7 @@ export function normalizeAudioBufferToStandard(
   const report = auditLoudness(sourceBuffer, standardKey);
   const targetStandard = LOUDNESS_STANDARDS[standardKey];
 
-  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const audioCtx = audioGraph.getContext();
   const numChannels = sourceBuffer.numberOfChannels;
   const length = sourceBuffer.length;
   const sampleRate = sourceBuffer.sampleRate;

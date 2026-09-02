@@ -3,6 +3,8 @@
  * Provides instant auditioning, pitch shift, reverse, loop slicing, filter & FFT analyzer
  */
 
+import { audioGraph } from './audioGraph';
+
 export interface PlaybackState {
   isPlaying: boolean;
   currentTime: number;
@@ -66,15 +68,12 @@ class AudioEngine {
   }
 
   public getAudioContext(): AudioContext {
+    const ctx = audioGraph.getContext();
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx({ latencyHint: 'interactive' });
+      this.ctx = ctx;
       this.setupNodes();
     }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    return this.ctx;
+    return ctx;
   }
 
   private setupNodes() {
@@ -110,7 +109,7 @@ class AudioEngine {
     }
     this.loudnessGainNode.connect(this.gainNode);
     this.gainNode.connect(this.analyserNode);
-    this.analyserNode.connect(this.ctx.destination);
+    this.analyserNode.connect(audioGraph.getMasterInput());
   }
 
   public isAutoLoudnessEnabled(): boolean {
