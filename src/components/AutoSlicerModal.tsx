@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  X,
-  Scissors,
-  Download,
-  Play,
-  Pause,
-  Plus,
-  Trash2,
-  Sliders,
-  Sparkles,
-  Layers,
-  FolderPlus,
-  Check,
-} from 'lucide-react';
+import { Scissors, Download, Play, Trash2, Sparkles, Layers, FolderPlus, Check } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem, SliceRegion, SampleType } from '../types/sample';
 import { detectAutoSlices } from '../services/audioAnalyzer';
 import { audioEngine } from '../services/audioEngine';
@@ -214,39 +202,22 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div id="auto-slicer-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-[#0D0D10] border border-[#26262B] rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-[#EDEDEE]">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#222226] bg-[#141417]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/30 flex items-center justify-center text-[#00F0FF]">
-              <Scissors className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-[#EDEDEE] flex items-center gap-2">
-                <span>Découpe Automatique de Multi-Sons</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30">
-                  {slices.length} Slices Détectées
-                </span>
-              </h2>
-              <p className="text-xs text-[#8E8E93] font-mono mt-0.5">
-                {sample.name} • {sample.duration.toFixed(2)}s • {sample.channels === 2 ? 'Stereo' : 'Mono'}
-              </p>
-            </div>
-          </div>
-
-          <button
-            id="close-slicer-modal-btn"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#8E8E93] hover:text-[#EDEDEE] hover:bg-[#1E1E24] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="xl"
+      accent="#00F0FF"
+      icon={<Scissors className="h-5 w-5" />}
+      title="Découpe automatique de multi-sons"
+      subtitle={`${sample.name} • ${sample.duration.toFixed(2)}s • ${sample.channels === 2 ? 'Stereo' : 'Mono'}`}
+      bodyClassName="flex flex-col overflow-hidden"
+      headerRight={
+        <span className="rounded border border-[#00F0FF]/30 bg-[#00F0FF]/15 px-2 py-0.5 font-mono text-[10px] text-[#00F0FF]">
+          {slices.length} slices
+        </span>
+      }
+    >
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Slicer Settings Controls */}
@@ -488,7 +459,6 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

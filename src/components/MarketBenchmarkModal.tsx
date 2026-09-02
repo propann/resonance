@@ -1,21 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Sparkles,
-  Zap,
-  CheckCircle2,
-  X,
-  Layers,
-  Volume2,
-  Radio,
-  Music,
-  Sliders,
-  Cpu,
-  ArrowRight,
-  ExternalLink,
-  ShieldCheck,
-  Disc,
-  FolderSync
-} from 'lucide-react';
+import { Sparkles, Zap, CheckCircle2, Layers, Volume2, Radio, Music, Cpu, ShieldCheck, Disc } from 'lucide-react';
+import { Modal } from './Modal';
 
 interface MarketBenchmarkModalProps {
   isOpen: boolean;
@@ -24,8 +9,6 @@ interface MarketBenchmarkModalProps {
 
 export const MarketBenchmarkModal: React.FC<MarketBenchmarkModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'comparison' | 'ep133' | 'dsp'>('comparison');
-
-  if (!isOpen) return null;
 
   const competitors = [
     {
@@ -73,34 +56,15 @@ export const MarketBenchmarkModal: React.FC<MarketBenchmarkModalProps> = ({ isOp
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0D0D11] border border-[#222228] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-[#222228] flex items-center justify-between bg-[#121218]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#00F0FF]/10 border border-[#00F0FF]/30 flex items-center justify-center text-[#00F0FF]">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-[#E0E0E6] flex items-center gap-2">
-                Étude Comparative & Benchmark Outils Pro
-                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30">
-                  Resonance Studio Engine
-                </span>
-              </h2>
-              <p className="text-xs text-[#8E8E9A]">
-                Analyse des meilleurs logiciels du marché (XO, Atlas, Sononym, Mixed In Key) et innovations apportées
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#8E8E9A] hover:text-[#E0E0E6] hover:bg-[#1C1C24] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      icon={<Sparkles className="h-5 w-5" />}
+      title="Étude comparative & benchmark"
+      subtitle="XO, Atlas, Sononym, Mixed In Key… et ce que Resonance apporte"
+      bodyClassName="flex flex-col overflow-hidden"
+    >
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 px-6 pt-3 border-b border-[#222228] bg-[#0F0F14]">
           <button
@@ -290,18 +254,9 @@ export const MarketBenchmarkModal: React.FC<MarketBenchmarkModalProps> = ({ isOp
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-[#222228] bg-[#121218] flex items-center justify-between">
-          <span className="text-xs text-[#8E8E9A] flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-[#00F0FF]" /> DSP WebAudio & Wasm haute fidélité
-          </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-[#00F0FF] text-[#0A0A0B] font-semibold text-xs hover:bg-[#33F3FF] transition-colors"
-          >
-            Fermer le Benchmark
-          </button>
+        <div className="flex shrink-0 items-center gap-1.5 border-t border-[#222228] bg-[#121218] px-6 py-2.5 text-xs text-[#8E8E9A]">
+          <ShieldCheck className="h-4 w-4 text-[#00F0FF]" /> DSP WebAudio & Wasm haute fidélité
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

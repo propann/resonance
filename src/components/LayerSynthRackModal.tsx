@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, Piano, Save, RotateCcw, Circle, Wand2 } from 'lucide-react';
+import { Piano, Save, RotateCcw, Circle, Wand2 } from 'lucide-react';
+import { Modal } from './Modal';
 import { CREATOR_ENGINES, DEFAULT_SYNTH_LAYERS, SynthLayer, synthRackEngine, SynthWave, CreatorEngineType, renderSynthPatch } from '../services/synthRackEngine';
 import { readStudioSettings, writeStudioSettings, type DirectoryHandle } from '../services/localLibrary';
 import { SampleItem } from '../types/sample';
@@ -85,7 +86,6 @@ export const LayerSynthRackModal: React.FC<LayerSynthRackModalProps> = ({ isOpen
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
   const sourceSample = librarySamples.find((sample) => sample.id === sourceSampleId) || null;
   const updateLayer = (id: string, patch: Partial<SynthLayer>) => setLayers((previous) => previous.map((layer) => layer.id === id ? { ...layer, ...patch } : layer));
   const handleCreateSample = async () => {
@@ -99,14 +99,26 @@ export const LayerSynthRackModal: React.FC<LayerSynthRackModalProps> = ({ isOpen
     }
   };
 
-  return <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur p-4 flex items-center justify-center">
-    <div className="w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col bg-[#090A10] border-2 border-[#A855F7] rounded-xl text-[#EDEDEE]">
-      <header className="px-5 py-3 bg-[#11131C] border-b border-[#2B2540] flex justify-between items-center gap-3">
-        <div><h2 className="font-bold text-[#E9D5FF] flex items-center gap-2"><Piano className="w-5 h-5" /> RACK SYNTH LAYER — 10 MOTEURS</h2><p className="text-xs text-[#A9A9B8]">{midiStatus} · Les couches actives jouent ensemble et conservent leurs réglages.</p></div>
-        <div className="flex gap-2"><button onClick={() => void handleCreateSample()} disabled={isRendering} className="px-3 py-1.5 text-xs bg-[#00F0FF] text-black font-bold rounded disabled:opacity-50"><Wand2 className="w-3 h-3 inline mr-1" />{isRendering ? 'Rendu…' : 'CRÉER SAMPLE'}</button><button onClick={() => setLayers(DEFAULT_SYNTH_LAYERS.map((layer) => ({ ...layer })))} className="px-3 py-1.5 text-xs border border-[#3A3650] rounded"><RotateCcw className="w-3 h-3 inline mr-1" />Reset</button><button onClick={() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(layers)); if (libraryRoot) void writeStudioSettings(libraryRoot, { synthLayers: layers }); }} className="px-3 py-1.5 text-xs bg-[#A855F7] text-black font-bold rounded"><Save className="w-3 h-3 inline mr-1" />Sauver</button><button onClick={onClose} className="p-1.5"><X /></button></div>
-      </header>
-      <button onClick={() => setIsLibraryOpen((open) => !open)} className="absolute left-0 top-28 z-20 px-1.5 py-4 bg-[#00F0FF] text-black text-[9px] font-bold [writing-mode:vertical-rl]">BANQUE</button>
-      <aside className={`absolute left-0 top-16 bottom-20 z-10 w-60 overflow-y-auto bg-[#10121B] border-r border-[#00F0FF]/50 transition-transform duration-500 ease-out ${isLibraryOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+  return (
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="full"
+      accent="#A855F7"
+      icon={<Piano className="h-5 w-5" />}
+      title="Rack Synth Layer — 10 moteurs"
+      subtitle={`${midiStatus} · Les couches actives jouent ensemble et conservent leurs réglages.`}
+      bodyClassName="relative flex flex-col overflow-hidden"
+      headerRight={
+        <>
+          <button onClick={() => void handleCreateSample()} disabled={isRendering} className="px-3 py-1.5 text-xs bg-[#00F0FF] text-black font-bold rounded disabled:opacity-50"><Wand2 className="w-3 h-3 inline mr-1" />{isRendering ? 'Rendu…' : 'CRÉER SAMPLE'}</button>
+          <button onClick={() => setLayers(DEFAULT_SYNTH_LAYERS.map((layer) => ({ ...layer })))} className="px-3 py-1.5 text-xs border border-[#3A3650] rounded"><RotateCcw className="w-3 h-3 inline mr-1" />Reset</button>
+          <button onClick={() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(layers)); if (libraryRoot) void writeStudioSettings(libraryRoot, { synthLayers: layers }); }} className="px-3 py-1.5 text-xs bg-[#A855F7] text-black font-bold rounded"><Save className="w-3 h-3 inline mr-1" />Sauver</button>
+        </>
+      }
+    >
+      <button onClick={() => setIsLibraryOpen((open) => !open)} className="absolute left-0 top-16 z-20 px-1.5 py-4 bg-[#00F0FF] text-black text-[9px] font-bold [writing-mode:vertical-rl]">BANQUE</button>
+      <aside className={`absolute left-0 top-2 bottom-16 z-10 w-60 overflow-y-auto bg-[#10121B] border-r border-[#00F0FF]/50 transition-transform duration-500 ease-out ${isLibraryOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-3 text-xs font-bold text-[#00F0FF]">BANQUE DE SONS</div>
         <div className="px-2 pb-3 text-[10px] text-[#A9A9B8]">Glisse un son dans la zone centrale pour en faire la source du patch.</div>
         {librarySamples.map((sample) => <div key={sample.id} draggable onDragStart={(event) => event.dataTransfer.setData('application/x-resonance-sample', sample.id)} className="mx-2 mb-1 p-2 rounded bg-[#181A26] hover:bg-[#252943] cursor-grab text-xs truncate">{sample.name}</div>)}
@@ -125,6 +137,6 @@ export const LayerSynthRackModal: React.FC<LayerSynthRackModalProps> = ({ isOpen
         </div>
       </main>
       <footer className="p-4 border-t border-[#242432] flex gap-1 justify-center">{keyboardNotes.map((note) => <button key={note} onMouseDown={() => synthRackEngine.noteOn(note)} onMouseUp={() => synthRackEngine.noteOff(note)} onMouseLeave={() => synthRackEngine.noteOff(note)} className="w-12 h-16 bg-[#F4F4F5] text-black border border-black rounded-b">{note}</button>)}</footer>
-    </div>
-  </div>;
+    </Modal>
+  );
 };

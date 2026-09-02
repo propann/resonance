@@ -1,20 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { toast } from '../stores/toastStore';
-import {
-  X,
-  Sparkles,
-  Sliders,
-  FolderTree,
-  CheckCircle2,
-  FileCode2,
-  Download,
-  Github,
-  ArrowRight,
-  RefreshCw,
-  Layers,
-  HelpCircle,
-  FolderOpen,
-} from 'lucide-react';
+import { Sparkles, Sliders, FolderTree, CheckCircle2, Download, Github, ArrowRight } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import {
   NamingConventionConfig,
@@ -64,8 +51,6 @@ export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
 
   const changedCount = diffList.filter((d) => d.changed).length;
 
-  if (!isOpen) return null;
-
   const handleApplyChanges = () => {
     onApplyRename(updatedSamples);
     setStatusMessage(`${samples.length} samples renommés et réorganisés selon la convention !`);
@@ -102,69 +87,46 @@ export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-[#10121A] border border-[#272A38] rounded-2xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden text-[#EDEDEE]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#272A38] bg-[#141722]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00F0FF] via-[#3B82F6] to-[#8B5CF6] p-[2px] shadow-md">
-              <div className="w-full h-full bg-[#10121A] rounded-[9px] flex items-center justify-center">
-                <FolderTree className="w-4 h-4 text-[#00F0FF]" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                  Convention de Nommage & Rangement Standard Studio
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-semibold">
-                    Pro Pack Format
-                  </span>
-                </h2>
-              </div>
-              <p className="text-[11px] text-[#8A8F9E] font-mono">
-                Standardisation universelle des tags, tonalités, BPM, catégories et arborescence de dossiers
-              </p>
-            </div>
-          </div>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="full"
+      icon={<FolderTree className="h-5 w-5" />}
+      title="Convention de nommage & rangement standard studio"
+      subtitle="Standardisation des tags, tonalités, BPM, catégories et arborescence de dossiers"
+      bodyClassName="flex flex-col overflow-hidden"
+      headerRight={
+        <>
+          <button
+            onClick={handleApplyChanges}
+            className="px-3.5 py-1.5 rounded-lg bg-[#00F0FF] hover:bg-[#00D8E6] text-black font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Appliquer ({changedCount})
+          </button>
 
-          <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportZip}
+            disabled={isExportingZip}
+            className="px-3 py-1.5 rounded-lg bg-[#181B28] hover:bg-[#222638] border border-[#272A38] text-xs font-mono text-white flex items-center gap-1.5 transition-all"
+          >
+            <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
+            Exporter ZIP
+          </button>
+
+          {onOpenGitHubSync && (
             <button
-              onClick={handleApplyChanges}
-              className="px-3.5 py-1.5 rounded-lg bg-[#00F0FF] hover:bg-[#00D8E6] text-black font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow"
+              onClick={onOpenGitHubSync}
+              className="px-3 py-1.5 rounded-lg bg-[#24292e] hover:bg-[#2f363d] border border-[#444d56] text-white text-xs font-mono font-medium flex items-center gap-1.5 transition-all shadow-sm"
+              title="Pousser les samples normalisés vers le dépôt Git propann/az-sample"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Appliquer ({changedCount} modifications)
+              <Github className="w-3.5 h-3.5 text-white" />
+              <span className="hidden sm:inline">Pousser sur Git</span>
             </button>
-
-            <button
-              onClick={handleExportZip}
-              disabled={isExportingZip}
-              className="px-3 py-1.5 rounded-lg bg-[#181B28] hover:bg-[#222638] border border-[#272A38] text-xs font-mono text-white flex items-center gap-1.5 transition-all"
-            >
-              <Download className="w-3.5 h-3.5 text-[#F59E0B]" />
-              Exporter ZIP
-            </button>
-
-            {onOpenGitHubSync && (
-              <button
-                onClick={onOpenGitHubSync}
-                className="px-3 py-1.5 rounded-lg bg-[#24292e] hover:bg-[#2f363d] border border-[#444d56] text-white text-xs font-mono font-medium flex items-center gap-1.5 transition-all shadow-sm"
-                title="Pousser les samples normalisés vers le dépôt Git propann/az-sample"
-              >
-                <Github className="w-3.5 h-3.5 text-white" />
-                <span className="hidden sm:inline">Pousser sur Git</span>
-              </button>
-            )}
-
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8A8F9E] hover:text-white hover:bg-[#272A38] transition-colors ml-2"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
+          )}
+        </>
+      }
+    >
         {/* Status banner */}
         {statusMessage && (
           <div className="bg-[#00F0FF]/15 border-b border-[#00F0FF]/30 px-5 py-1.5 text-xs font-mono text-[#00F0FF] flex items-center gap-2 animate-in fade-in">
@@ -364,7 +326,6 @@ export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

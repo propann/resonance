@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { toast } from '../stores/toastStore';
-import { Mic, Square, Play, Pause, X, Check, RefreshCw, Sparkles, Volume2 } from 'lucide-react';
+import { Mic, Square, Play, Pause, Check } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import {
@@ -225,34 +226,18 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div id="audio-recorder-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-[#0D0D10] border border-[#26262B] rounded-xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col text-[#EDEDEE]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#222226] bg-[#141417]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#EF4444]/15 border border-[#EF4444]/30 flex items-center justify-center text-[#EF4444]">
-              <Mic className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-[#EDEDEE]">Enregistreur Micro & Studio Line-In</h2>
-              <p className="text-xs text-[#8E8E93] font-mono mt-0.5">
-                Capture directe avec auto-triage et découpe automatique
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#8E8E93] hover:text-[#EDEDEE] hover:bg-[#1E1E24] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="sm"
+      accent="#EF4444"
+      icon={<Mic className="h-5 w-5" />}
+      title="Enregistreur micro & studio line-in"
+      subtitle="Capture directe avec auto-triage et découpe automatique"
+    >
         {/* Body */}
-        <div className="p-6 space-y-5 text-center">
+        <div className="space-y-5 text-center">
           {/* Waveform / Live Canvas */}
           <div className="relative w-full h-32 bg-[#0A0A0B] rounded-lg border border-[#26262B] overflow-hidden flex items-center justify-center">
             <canvas ref={canvasRef} width={400} height={128} className="w-full h-full block" />
@@ -314,14 +299,8 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#222226] bg-[#141417]">
-          <button
-            onClick={onClose}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#8E8E93] hover:text-[#EDEDEE] transition font-mono"
-          >
-            Annuler
-          </button>
+        {/* Footer action */}
+        <div className="mt-6 flex items-center justify-end border-t border-[#222226] pt-4">
           <button
             id="save-recording-to-lib-btn"
             onClick={handleSaveToLibrary}
@@ -332,7 +311,6 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
             <span>Ajouter à la Bibliothèque</span>
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

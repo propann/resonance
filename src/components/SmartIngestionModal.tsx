@@ -11,13 +11,13 @@ import {
   Radio,
   Download,
   Loader2,
-  X,
   Sliders,
   Scissors,
   Check,
   Disc,
   ArrowRight
 } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem, SampleCategory, MusicGenre } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import {
@@ -79,8 +79,6 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-
-  if (!isOpen) return null;
 
   const handleFilesSelected = (files: FileList | File[]) => {
     const newItems: IngestionItem[] = Array.from(files)
@@ -283,34 +281,16 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
   const completedCount = items.filter((i) => i.status === 'done').length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0D0D11] border border-[#222228] rounded-xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#222228] flex items-center justify-between bg-[#121218]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/30 flex items-center justify-center text-[#00F0FF]">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-[#E0E0E6] flex items-center gap-2">
-                Ingestion Intelligente & Batch Auto-Triage
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/30">
-                  Pipeline Pro
-                </span>
-              </h2>
-              <p className="text-xs text-[#8E8E9A]">
-                Glissez un dossier complet : détection BPM/Clé, One-Shot vs Loop, égalisation de volume (LUFS) et assignation EP-133
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#8E8E9A] hover:text-[#E0E0E6] hover:bg-[#1C1C24] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="xl"
+      accent="#00F0FF"
+      icon={<Sparkles className="h-5 w-5" />}
+      title="Ingestion intelligente & batch auto-triage"
+      subtitle="Détection BPM/Clé, One-Shot vs Loop, égalisation LUFS et assignation EP-133"
+      bodyClassName="flex flex-col overflow-hidden"
+    >
         {/* Global Controls & Targets */}
         <div className="px-6 py-3 border-b border-[#222228] bg-[#0F0F14] flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-4">
@@ -602,7 +582,6 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

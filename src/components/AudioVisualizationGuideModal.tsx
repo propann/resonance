@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Activity, Waves, Layers, BarChart2, Radio, Info, Compass } from 'lucide-react';
+import { Activity, Waves, Layers, BarChart2, Radio, Info } from 'lucide-react';
+import { Modal } from './Modal';
 
 interface AudioVisualizationGuideModalProps {
   isOpen: boolean;
@@ -10,29 +11,16 @@ export const AudioVisualizationGuideModal: React.FC<AudioVisualizationGuideModal
   isOpen,
   onClose,
 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-      <div className="w-full max-w-2xl bg-[#0C0C14] border-2 border-[#262638] p-5 shadow-2xl pixel-box text-[#EDEDEE]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-[#1E1E2C] pb-3 mb-4">
-          <div className="flex items-center gap-2 text-[#00F0FF]">
-            <Info className="w-5 h-5" />
-            <h2 className="text-sm font-pixel font-bold uppercase tracking-wider">
-              LEXIQUE & GUIDE DES VISUALISATIONS AUDIO
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-[#8E8E98] hover:text-white hover:bg-[#1C1C28] pixel-btn"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="md"
+      icon={<Info className="h-5 w-5" />}
+      title="Guide des visualisations audio"
+    >
         {/* Content Guide Cards */}
-        <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1 text-xs">
+        <div className="space-y-3 text-xs">
           {/* 1. Forme d'onde HD */}
           <div className="p-3 bg-[#07070B] border border-[#00F0FF]/30 space-y-1">
             <div className="flex items-center gap-2 text-[#00F0FF] font-pixel font-bold">
@@ -109,19 +97,10 @@ export const AudioVisualizationGuideModal: React.FC<AudioVisualizationGuideModal
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="mt-4 pt-3 border-t border-[#1E1E2C] flex items-center justify-between">
-          <span className="text-[10px] font-pixel text-[#8E8E98]">
-            Astuce : Utilisez les boutons en haut à droite de l'onde pour combiner les calques !
-          </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-[#00F0FF] text-black font-bold font-pixel text-xs pixel-btn hover:bg-[#38BDF8]"
-          >
-            COMPRIS !
-          </button>
-        </div>
-      </div>
-    </div>
+        <p className="mt-4 border-t border-[#1E1E2C] pt-3 text-[10px] text-[#8E8E98]">
+          Astuce : combinez les calques via les boutons en haut à droite de l'onde.
+        </p>
+    </Modal>
   );
 };
+

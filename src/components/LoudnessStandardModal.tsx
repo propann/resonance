@@ -1,19 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  X,
-  Volume2,
-  CheckCircle2,
-  AlertTriangle,
-  Zap,
-  Sliders,
-  Sparkles,
-  ShieldCheck,
-  RotateCcw,
-  Layers,
-  ArrowRight,
-  Radio,
-  FileCheck,
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Volume2, CheckCircle2, AlertTriangle, Zap, Sliders, ShieldCheck, Layers, FileCheck } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import {
   LoudnessStandardKey,
@@ -56,8 +43,6 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
       }
     }
   }, [isOpen, sample, selectedStandard]);
-
-  if (!isOpen) return null;
 
   const currentStandard = LOUDNESS_STANDARDS[selectedStandard];
 
@@ -114,37 +99,16 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl bg-[#0C0C18] border-2 border-[#00F0FF] shadow-[0_0_40px_rgba(0,240,255,0.25)] rounded-lg overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#121224] border-b border-[#00F0FF]/30">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#00F0FF]/15 border border-[#00F0FF]/40 rounded text-[#00F0FF]">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-pixel font-bold text-white tracking-wide">
-                  ÉTALON INTERNATIONAL DE NORMALISATION DU SON
-                </h2>
-                <span className="text-[10px] font-mono bg-[#00F0FF]/20 text-[#00F0FF] px-2 py-0.5 rounded border border-[#00F0FF]/40">
-                  NORME ITU-R BS.1770-4 / EBU R128
-                </span>
-              </div>
-              <p className="text-[11px] font-mono text-[#8E8E98]">
-                Calibrage acoustique certifié avec filtrage K-Weighting et True-Peak 4x anti-écrêtage
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-[#8E8E98] hover:text-white hover:bg-[#1E1E38] rounded border border-transparent hover:border-[#3A3A5A] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      accent="#00F0FF"
+      icon={<ShieldCheck className="h-5 w-5" />}
+      title="Étalon international de normalisation du son"
+      subtitle="Calibrage certifié K-Weighting & True-Peak 4x — ITU-R BS.1770-4 / EBU R128"
+      bodyClassName="flex flex-col overflow-hidden"
+    >
         {/* Content Body */}
         <div className="p-5 overflow-y-auto space-y-5 custom-scrollbar flex-1">
           {/* Explication Scientifique de l'Étalon */}
@@ -346,7 +310,6 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

@@ -1,17 +1,8 @@
 import React, { useState } from 'react';
-import {
-  X,
-  FileCode2,
-  Download,
-  CheckCircle2,
-  Sliders,
-  Sparkles,
-  Volume2,
-  RefreshCw,
-  FolderArchive,
-} from 'lucide-react';
+import { FileCode2, CheckCircle2, RefreshCw, FolderArchive } from 'lucide-react';
 import { SampleItem, BatchConvertSettings } from '../types/sample';
 import { processBatchConvert, triggerFileDownload } from '../services/audioConverter';
+import { Modal } from './Modal';
 
 interface BatchConverterModalProps {
   samples: SampleItem[];
@@ -45,8 +36,6 @@ export const BatchConverterModal: React.FC<BatchConverterModalProps> = ({
   });
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
 
-  if (!isOpen) return null;
-
   const handleStartConversion = async () => {
     try {
       setIsProcessing(true);
@@ -71,38 +60,21 @@ export const BatchConverterModal: React.FC<BatchConverterModalProps> = ({
   };
 
   return (
-    <div id="batch-converter-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-[#0D0D10] border border-[#26262B] rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col text-[#EDEDEE]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#222226] bg-[#141417]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/30 flex items-center justify-center text-[#00F0FF]">
-              <FileCode2 className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-[#EDEDEE] flex items-center gap-2">
-                <span>Convertisseur & Traitement Audio par Lot</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30">
-                  {samples.length} Fichiers
-                </span>
-              </h2>
-              <p className="text-xs text-[#8E8E93] font-mono mt-0.5">
-                Conversion haute-fidélité, normalisation True Peak et export ZIP
-              </p>
-            </div>
-          </div>
-
-          <button
-            id="close-converter-btn"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#8E8E93] hover:text-[#EDEDEE] hover:bg-[#1E1E24] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="md"
+      icon={<FileCode2 className="h-5 w-5" />}
+      title="Convertisseur & traitement audio par lot"
+      subtitle="Conversion haute-fidélité, normalisation True Peak et export ZIP"
+      headerRight={
+        <span className="rounded border border-[#00F0FF]/30 bg-[#00F0FF]/15 px-2 py-0.5 font-mono text-[10px] text-[#00F0FF]">
+          {samples.length} fichiers
+        </span>
+      }
+    >
+      {/* Form Body */}
+      <div className="space-y-5">
           {/* Output Format & Bit Depth */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -285,14 +257,8 @@ export const BatchConverterModal: React.FC<BatchConverterModalProps> = ({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#222226] bg-[#141417]">
-          <button
-            onClick={onClose}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#8E8E93] hover:text-[#EDEDEE] transition font-mono"
-          >
-            Fermer
-          </button>
+        {/* Footer action */}
+        <div className="mt-6 flex items-center justify-end border-t border-[#222226] pt-4">
           <button
             id="start-batch-convert-btn"
             onClick={handleStartConversion}
@@ -303,7 +269,6 @@ export const BatchConverterModal: React.FC<BatchConverterModalProps> = ({
             <span>{isProcessing ? 'Traitement en cours...' : 'Lancer la Conversion & Exporter ZIP'}</span>
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

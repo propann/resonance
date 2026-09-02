@@ -41,6 +41,7 @@ import {
   batchGenerateOp1Kits,
 } from '../services/op1PatchEncoder';
 import { triggerFileDownload } from '../services/audioConverter';
+import { Modal } from './Modal';
 import {
   calculateAudioMetrics,
   classifySample,
@@ -655,35 +656,18 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   const selectedSlice = slices[selectedPadIndex];
   const totalAllocatedSec = compositeBuffer ? compositeBuffer.duration.toFixed(2) : '0.00';
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-[#10121A] border border-[#272A38] rounded-2xl w-full max-w-[1440px] h-[94vh] flex flex-col shadow-2xl overflow-hidden text-[#EDEDEE]">
-        {/* Header with Teenage Engineering OP-1 aesthetic */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#272A38] bg-[#141722]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF5E00] via-[#F59E0B] to-[#00F0FF] p-[2px] shadow-md">
-              <div className="w-full h-full bg-[#10121A] rounded-[9px] flex items-center justify-center">
-                <Music className="w-4 h-4 text-[#00F0FF]" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                  Studio Drum Kit OP-1
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#FF5E00]/15 text-[#FF5E00] border border-[#FF5E00]/30 font-semibold">
-                    Teenage Engineering OG
-                  </span>
-                </h2>
-              </div>
-              <p className="text-[11px] text-[#8A8F9E] font-mono">
-                Balisage temporel APPL JSON, glisser-déposer modulaire et export patch .AIF 12.0s
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="full"
+      accent="#FF5E00"
+      icon={<Music className="h-5 w-5" />}
+      title="Studio Drum Kit OP-1"
+      subtitle="Balisage temporel APPL JSON, glisser-déposer modulaire et export patch .AIF 12.0s"
+      bodyClassName="flex flex-col overflow-hidden"
+      headerRight={
+        <>
             <div className="flex bg-[#08090E] p-0.5 rounded-lg border border-[#272A38] text-xs font-mono">
               <button
                 onClick={() => setActiveTab('editor')}
@@ -727,16 +711,9 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
                 <span className="hidden sm:inline">propann/az-sample</span>
               </button>
             )}
-
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8A8F9E] hover:text-white hover:bg-[#272A38] transition-colors ml-2"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
+        </>
+      }
+    >
         {/* Status banner */}
         {statusMessage && (
           <div className="bg-[#00F0FF]/15 border-b border-[#00F0FF]/30 px-5 py-1.5 text-xs font-mono text-[#00F0FF] flex items-center justify-between animate-in fade-in">
@@ -1341,7 +1318,6 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

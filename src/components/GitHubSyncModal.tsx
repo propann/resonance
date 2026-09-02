@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  GitBranch,
   Github,
   CheckCircle2,
   AlertCircle,
@@ -16,11 +15,11 @@ import {
   Sparkles,
   Layers,
   Music,
-  X,
   FileCode,
   ShieldCheck,
   Zap,
 } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import {
   GitHubSyncConfig,
@@ -102,8 +101,6 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     storePat(config.token || '');
   }, [config.token]);
 
-  if (!isOpen) return null;
-
   const handlePushDirect = async () => {
     setIsProcessing(true);
     setCommitResult(null);
@@ -169,50 +166,28 @@ git push origin ${config.branch}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-[#12121A] border border-[#2A2A3C] rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Header with Repo Target */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2A2A3C] bg-[#161622]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#24292e] to-[#0d1117] border border-[#30363d] flex items-center justify-center shadow-md">
-              <Github className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-wide">
-                  GitHub Hub : <span className="text-[#00F0FF]">propann / az-sample</span>
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-semibold">
-                  Git Sync
-                </span>
-              </div>
-              <p className="text-xs text-[#8A8A9E] flex items-center gap-1.5 mt-0.5">
-                <GitBranch className="w-3 h-3 text-[#A855F7]" />
-                Cible : <code className="text-[#E2E8F0] bg-[#1E1E2E] px-1.5 py-0.2 rounded font-mono text-[11px]">{config.repoUrl}</code>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <a
-              href="https://github.com/propann/az-sample"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1F1F2E] hover:bg-[#2A2A3E] text-[#E2E8F0] border border-[#2E2E42] text-xs font-medium transition"
-              title="Ouvrir le dépôt sur GitHub"
-            >
-              <span>Voir sur GitHub</span>
-              <ExternalLink className="w-3.5 h-3.5 text-[#8A8A9E]" />
-            </a>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8A8A9E] hover:text-white hover:bg-[#1E1E2E] transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      accent="#00F0FF"
+      icon={<Github className="h-5 w-5" />}
+      title="GitHub Hub · propann / az-sample"
+      subtitle={`Cible : ${config.repoUrl}`}
+      bodyClassName="flex flex-col overflow-hidden"
+      headerRight={
+        <a
+          href="https://github.com/propann/az-sample"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1F1F2E] hover:bg-[#2A2A3E] text-[#E2E8F0] border border-[#2E2E42] text-xs font-medium transition"
+          title="Ouvrir le dépôt sur GitHub"
+        >
+          <span>Voir sur GitHub</span>
+          <ExternalLink className="w-3.5 h-3.5 text-[#8A8A9E]" />
+        </a>
+      }
+    >
         {/* Tab Navigation */}
         <div className="flex items-center gap-1 px-6 border-b border-[#2A2A3C] bg-[#14141E]">
           <button
@@ -630,7 +605,6 @@ git push origin ${config.branch}`;
             Fermer
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

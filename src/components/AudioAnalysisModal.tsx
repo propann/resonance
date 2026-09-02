@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  X,
   Play,
   Pause,
   Activity,
@@ -17,6 +16,7 @@ import {
   Wand2,
   RefreshCw,
 } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import {
@@ -241,61 +241,38 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-[#10121A] border border-[#272A38] rounded-2xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden text-[#EDEDEE]">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#272A38] bg-[#141722]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00F0FF] via-[#8B5CF6] to-[#EC4899] p-[2px] shadow-md">
-              <div className="w-full h-full bg-[#10121A] rounded-[9px] flex items-center justify-center">
-                <Activity className="w-4 h-4 text-[#00F0FF]" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                  Laboratoire d'Analyse Acoustique & DSP
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-semibold">
-                    Studio Grade EBU R128
-                  </span>
-                </h2>
-              </div>
-              <p className="text-[11px] text-[#8A8F9E] font-mono truncate max-w-xl">
-                Inspection harmonique, spectre multi-bande, phase stéréo et dynamique :{' '}
-                <span className="text-white font-medium">{sample.name}</span>
-              </p>
-            </div>
-          </div>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="xl"
+      accent="#00F0FF"
+      icon={<Activity className="h-5 w-5" />}
+      title="Laboratoire d'analyse acoustique & DSP"
+      subtitle={`Spectre multi-bande, phase stéréo, harmoniques et dynamique — ${sample.name}`}
+      bodyClassName="flex flex-col overflow-hidden"
+      headerRight={
+        <>
+          <button
+            onClick={handlePlayToggle}
+            className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow ${
+              isPlaying ? 'bg-[#EF4444] text-white' : 'bg-[#00F0FF] text-black hover:bg-[#00D8E6]'
+            }`}
+          >
+            {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+            {isPlaying ? 'Arrêter' : 'Écouter'}
+          </button>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePlayToggle}
-              className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow ${
-                isPlaying ? 'bg-[#EF4444] text-white' : 'bg-[#00F0FF] text-black hover:bg-[#00D8E6]'
-              }`}
-            >
-              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              {isPlaying ? 'Arrêter' : 'Écouter'}
-            </button>
-
-            <button
-              onClick={handleExportJsonReport}
-              className="px-3 py-1.5 rounded-lg bg-[#181B28] hover:bg-[#222638] border border-[#272A38] text-xs font-mono text-white flex items-center gap-1.5 transition-all"
-              title="Exporter le rapport complet en JSON"
-            >
-              <Download className="w-3.5 h-3.5 text-[#00F0FF]" />
-              Rapport JSON
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8A8F9E] hover:text-white hover:bg-[#272A38] transition-colors ml-2"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
+          <button
+            onClick={handleExportJsonReport}
+            className="px-3 py-1.5 rounded-lg bg-[#181B28] hover:bg-[#222638] border border-[#272A38] text-xs font-mono text-white flex items-center gap-1.5 transition-all"
+            title="Exporter le rapport complet en JSON"
+          >
+            <Download className="w-3.5 h-3.5 text-[#00F0FF]" />
+            Rapport JSON
+          </button>
+        </>
+      }
+    >
         {/* Action success alert */}
         {actionSuccessMessage && (
           <div className="bg-[#10B981]/15 border-b border-[#10B981]/30 px-5 py-1.5 text-xs font-mono text-[#10B981] flex items-center gap-2 animate-in fade-in">
@@ -558,7 +535,6 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

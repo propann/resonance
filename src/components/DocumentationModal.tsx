@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
+import { Modal } from './Modal';
 import {
   BookOpen,
-  X,
   FileCode,
   FolderTree,
   Activity,
@@ -37,8 +37,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedCode(id);
@@ -56,45 +54,16 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
   ];
 
   return (
-    <div
-      id="documentation-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 overflow-y-auto"
-      onClick={onClose}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      accent="#00F0FF"
+      icon={<BookOpen className="h-5 w-5" />}
+      title="Documentation officielle & conventions studio"
+      subtitle="Nommage, architecture 7 dossiers, laboratoire DSP et sync propann/az-sample"
+      bodyClassName="flex flex-col overflow-hidden"
     >
-      <div
-        id="documentation-modal-container"
-        onClick={(e) => e.stopPropagation()}
-        className="bg-[#0c1017] border-2 border-[#00F0FF]/40 w-full max-w-5xl rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150"
-      >
-        {/* Header */}
-        <div className="bg-[#121824] border-b border-[#00F0FF]/30 px-5 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#00F0FF]/15 border border-[#00F0FF]/40 rounded text-[#00F0FF]">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-pixel text-base text-white tracking-wide">
-                  DOCUMENTATION OFFICIELLE & CONVENTIONS STUDIO
-                </h2>
-                <span className="px-2 py-0.5 bg-[#00F0FF]/20 text-[#00F0FF] text-[9px] font-pixel border border-[#00F0FF]/40">
-                  v2.4.0 MASTER
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 font-mono">
-                Référence complète de nommage, architecture 7 dossiers, laboratoire DSP et sync propann/az-sample
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition"
-            title="Fermer (Échap)"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
         {/* Tab Navigation */}
         <div className="bg-[#0f141f] border-b border-gray-800 px-4 flex items-center gap-1 overflow-x-auto py-1.5 scrollbar-none">
           {navTabs.map((tab) => {
@@ -638,7 +607,6 @@ git push origin main`}
             FERMER
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

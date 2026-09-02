@@ -12,7 +12,6 @@ import {
   Pause,
   Download,
   Loader2,
-  X,
   Sliders,
   FolderTree,
   Check,
@@ -26,6 +25,7 @@ import {
   Layers,
   Wand2,
 } from 'lucide-react';
+import { Modal } from './Modal';
 import { SampleItem, SampleCategory, SampleType, MusicGenre } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import {
@@ -712,35 +712,18 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
   const readyCount = items.filter((i) => i.status === 'ready').length;
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-[#0B0C12] border-2 border-[#20222F] rounded-2xl w-full max-w-6xl h-[94vh] flex flex-col shadow-2xl overflow-hidden font-mono text-xs text-[#EDEDEE]">
-        {/* Header */}
-        <div className="px-5 py-3.5 border-b border-[#20222F] bg-[#11131C] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00F0FF] via-[#3B82F6] to-[#A855F7] p-[2px] shadow-lg">
-              <div className="w-full h-full bg-[#0B0C12] rounded-[10px] flex items-center justify-center">
-                <Wand2 className="w-5 h-5 text-[#00F0FF]" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                  Studio Auto-Curateur & Rangement Intelligent
-                </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/40">
-                  DSP Pipeline
-                </span>
-              </div>
-              <p className="text-[11px] text-[#8E8E9A]">
-                Puisage, analyse spectrale, enrichissement des tags, mise au format WAV & rangement sans prolifération de dossiers
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="full"
+      accent="#00F0FF"
+      icon={<Wand2 className="h-5 w-5" />}
+      title="Studio Auto-Curateur & rangement intelligent"
+      subtitle="Puisage, analyse spectrale, enrichissement des tags, mise au format WAV & rangement"
+      bodyClassName="flex flex-col overflow-hidden font-mono text-xs"
+      headerRight={
+        <>
             <button
               onClick={handleChooseLibrary}
               className="px-3 py-1.5 rounded-lg bg-[#A855F7]/15 hover:bg-[#A855F7]/25 border border-[#A855F7]/40 text-xs font-semibold text-[#C084FC] flex items-center gap-1.5 transition"
@@ -786,16 +769,9 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
               <Check className="w-4 h-4" />
               <span>Valider & Ranger ({readyCount})</span>
             </button>
-
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8E8E9A] hover:text-white hover:bg-[#1E202C] transition-colors ml-2"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
+        </>
+      }
+    >
         {/* Notification banner */}
         {notification && (
           <div className="bg-[#00F0FF]/15 border-b border-[#00F0FF]/30 px-5 py-2 text-xs text-[#00F0FF] flex items-center gap-2 font-semibold animate-in fade-in">
@@ -1221,7 +1197,6 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
