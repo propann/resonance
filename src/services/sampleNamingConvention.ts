@@ -115,6 +115,82 @@ export function cleanRawSampleName(raw: string): string {
   return name || 'Sample';
 }
 
+/** Folders that say nothing about the sound: staging buckets, not packs. */
+const NON_DESCRIPTIVE_FOLDERS = new Set([
+  '00_reception',
+  'a_trier',
+  'atrier',
+  'divers',
+  'misc',
+  'new',
+  'nouveau',
+  'samples',
+  'sons',
+  'to_sort',
+  'tri',
+  'wav',
+]);
+
+/**
+ * A name that carries no information: empty, or nothing but digits and
+ * separators (`1-001_01`, `01`, `track_02`…). Those are what turn a library
+ * into `AZ_808_01`, `AZ_808_01_2`, `AZ_808_01_3`.
+ */
+export function isMeaninglessName(name: string): boolean {
+  const bare = name.replace(/[\s_.-]+/g, '');
+  if (!bare) return true;
+  if (/^\d+$/.test(bare)) return true;
+  // Nothing left once digits and one generic word are removed.
+  return /^(sample|audio|track|sound|untitled|export|recording|bounce)?\d*$/i.test(bare);
+}
+
+/**
+ * The most descriptive name available for a source file: its own cleaned name
+ * when it says something, otherwise the nearest meaningful folder it sits in
+ * (a pack or genre folder), otherwise its timbral description. Keeps a numeric
+ * suffix around so files from one pack stay distinguishable.
+ */
+/** SHOUTY_FOLDER -> Shouty_Folder, so a fallback name reads like a name. */
+const titleCase = (name: string): string =>
+  name
+    .split('_')
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ''))
+    .filter(Boolean)
+    .join('_');
+
+export function deriveSourceName(
+  fileName: string,
+  sourcePath?: string,
+  hints: { tags?: string[] } = {}
+): string {
+  const own = cleanRawSampleName(fileName);
+  if (!isMeaninglessName(own)) return own;
+
+  const digits = own.replace(/\D+/g, '').slice(-3);
+  const folders = (sourcePath ?? '')
+    .split('/')
+    .slice(0, -1)
+    .reverse()
+    .filter((folder) => !NON_DESCRIPTIVE_FOLDERS.has(folder.toLowerCase()));
+  const folder = folders.map((f) => cleanRawSampleName(f)).find((f) => !isMeaninglessName(f));
+  if (folder) return digits ? `${titleCase(folder)}_${digits}` : titleCase(folder);
+
+  const tag = (hints.tags ?? [])
+    .map((t) => cleanRawSampleName(t))
+    .find((t) => !isMeaninglessName(t));
+  if (tag) return digits ? `${titleCase(tag)}_${digits}` : titleCase(tag);
+
+  // Nothing descriptive anywhere: keep the source's full stem rather than the
+  // "01" left after cleaning. It says little, but it is unique per file, so
+  // the library stops collecting _2 / _3 collisions.
+  const stem = fileName
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[^\w]+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_|_$/g, '');
+  return stem || own;
+}
+
 /**
  * Standardized audio file specs string (e.g. 24b44k or 16b44k)
  */

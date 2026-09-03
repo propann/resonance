@@ -448,6 +448,34 @@ export async function readLibraryManifest(_root: LibraryRoot): Promise<Array<Rec
   return Array.isArray(parsed?.samples) ? (parsed!.samples as Array<Record<string, unknown>>) : [];
 }
 
+/**
+ * Content hashes of everything already in the library. A source dropped twice
+ * — renamed, moved, re-downloaded — has a different path fingerprint but the
+ * same bytes, and must not land a second time as `..._2`.
+ */
+export async function getLibraryContentHashes(_root: LibraryRoot): Promise<Set<string>> {
+  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
+  if (!Array.isArray(parsed?.samples)) return new Set();
+  return new Set(
+    parsed!.samples
+      .map((sample) => sample.contentHash)
+      .filter((hash): hash is string => typeof hash === 'string')
+  );
+}
+
+/** SHA-256 of the source bytes, as hex. Identity of the audio on disk. */
+export async function hashFileContent(file: Blob): Promise<string | undefined> {
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch (error) {
+    console.error('[library] hachage impossible', error);
+    return undefined;
+  }
+}
+
 export async function getProcessedSourceFingerprints(_root: LibraryRoot): Promise<Set<string>> {
   const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
   if (!Array.isArray(parsed?.samples)) return new Set();

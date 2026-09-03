@@ -49,6 +49,7 @@ import {
 } from '../services/audioConverter';
 import {
   cleanRawSampleName,
+  deriveSourceName,
   generateStandardSampleName,
   NamingConventionConfig,
   DEFAULT_NAMING_CONFIG,
@@ -65,7 +66,9 @@ import {
   supportsLocalLibrary,
   writeUniqueFile,
   writeLibraryManifest,
+  getLibraryContentHashes,
   getProcessedSourceFingerprints,
+  hashFileContent,
   removeWorkFolderFiles,
   type WorkFolderAudioFile,
   type DirectoryHandle,
@@ -425,7 +428,12 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
         const dummySample: SampleItem = {
           id: item.id,
-          name: cleanRawSampleName(item.originalName),
+          // A source called "1-001_01" says nothing: fall back to its pack
+          // folder, then to its timbre, so the library does not fill up with
+          // AZ_808_01, AZ_808_01_2, AZ_808_01_3…
+          name: deriveSourceName(item.originalName, item.sourcePath, {
+            tags: [...classification.tags, ...timbralTags],
+          }),
           originalFileName: item.originalName,
           format: isOp1Patch ? 'aiff' : 'wav',
           size: 0,
@@ -603,13 +611,23 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       }
 
       const processedFingerprints = await getProcessedSourceFingerprints(exportRoot);
+      const knownContentHashes = await getLibraryContentHashes(exportRoot);
       const transferredSourceFiles: string[] = [];
+      let duplicatesSkipped = 0;
       for (const item of readyItems) {
         const sourceFingerprint = item.sourcePath && item.file
           ? `${item.sourcePath}:${item.file.size}:${item.file.lastModified}`
           : undefined;
         if (sourceFingerprint && processedFingerprints.has(sourceFingerprint)) {
           transferredSourceFiles.push(item.sourcePath!);
+          continue;
+        }
+        // Same bytes as something already filed: drop the source instead of
+        // writing a second copy under a "_2" name.
+        const contentHash = item.file ? await hashFileContent(item.file) : undefined;
+        if (contentHash && knownContentHashes.has(contentHash)) {
+          duplicatesSkipped++;
+          if (item.sourcePath) transferredSourceFiles.push(item.sourcePath);
           continue;
         }
         const targetDirectory = await getDirectoryForPath(exportRoot, item.targetFolderPath);
@@ -635,11 +653,13 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
           bitDepth: item.bitDepth,
           format: item.isOp1Patch ? 'op-1-aiff' : 'wav',
           sourceFingerprint,
+          contentHash,
         };
         // Commit each item immediately. If a later file fails, the next pass skips
         // already written files instead of creating suffixed duplicates.
         await writeLibraryManifest(exportRoot, [manifestItem]);
         if (sourceFingerprint) processedFingerprints.add(sourceFingerprint);
+        if (contentHash) knownContentHashes.add(contentHash);
         if (item.sourcePath) transferredSourceFiles.push(item.sourcePath);
       }
       const removedCount = await removeWorkFolderFiles(exportRoot, transferredSourceFiles);
@@ -650,7 +670,11 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         setItems((current) => current.filter((item) => !transferredIds.has(item.id)));
       }
 
-      setNotification(`${readyItems.length} sons exportés, sans écrasement, dans ${exportRoot.name}. ${removedCount} fichier(s) retiré(s) de 00_RECEPTION.`);
+      const written = readyItems.length - duplicatesSkipped;
+      setNotification(
+        `${written} son(s) rangé(s), ${removedCount} source(s) retirée(s) de la réception` +
+          (duplicatesSkipped > 0 ? `, ${duplicatesSkipped} doublon(s) déjà en bibliothèque ignoré(s).` : '.')
+      );
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       console.error('Erreur export vers dossier', err);
