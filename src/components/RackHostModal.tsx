@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Save, RotateCcw, Repeat, Sliders } from 'lucide-react';
+import { Play, Pause, Save, RotateCcw, Repeat, Sliders, Bookmark } from 'lucide-react';
 import { SampleItem } from '../types/sample';
 import { Modal } from './Modal';
 import { audioGraph } from '../services/audioGraph';
@@ -11,6 +11,7 @@ import { registerBuiltinModules } from '../rack/modules';
 import { RackModulePanel } from '../rack/RackModulePanel';
 import { RACK_TEMPLATES } from '../rack/templates';
 import { useAudition } from '../stores/transportStore';
+import { useUiStore } from '../stores/uiStore';
 import { useRackStore } from '../stores/rackStore';
 import type { ParamValues, RackState } from '../rack/types';
 import { RackWaveformStrip, type WaveRegion } from './waveform/RackWaveformStrip';
@@ -61,6 +62,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   const reset = useRackStore((s) => s.reset);
   const exportJson = useRackStore((s) => s.exportJson);
   const importJson = useRackStore((s) => s.importJson);
+
+  const openModal = useUiStore((s) => s.openModal);
 
   const rackRef = useRef<Rack | null>(null);
   const srcRef = useRef<AudioBufferSourceNode | null>(null);
@@ -309,6 +312,14 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
           >
             {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
             {isPlaying ? 'STOP' : 'ÉCOUTER'}
+          </button>
+          <button
+            onClick={() => openModal('patches')}
+            className="flex items-center gap-1.5 rounded border border-[#A855F7] bg-[#A855F7]/15 px-3 py-1.5 font-mono text-xs font-bold text-[#C084FC] transition hover:bg-[#A855F7] hover:text-white"
+            title="Enregistrer cette chaîne comme patch nommé (rappel depuis le menu PATCHS)"
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+            <span>PATCH</span>
           </button>
           <button
             onClick={() => setLoop((v) => !v)}

@@ -26,11 +26,13 @@ import {
   RefreshCw,
   Trash2,
   Bookmark,
+  Save,
   Flame,
   BookOpen,
   ShieldCheck,
 } from 'lucide-react';
 import { useUiStore } from '../stores/uiStore';
+import { usePatchStore } from '../stores/patchStore';
 
 export interface AppMenuBarProps {
   onImportFiles?: () => void;
@@ -57,6 +59,8 @@ export interface AppMenuBarProps {
   onZoomIn?: () => void;
   onZoomOut?: () => void;
   onResetZoom?: () => void;
+  /** Load a saved rack patch, then show the rack. */
+  onLoadPatch?: (patchId: string) => void;
   samplesCount: number;
 }
 
@@ -85,9 +89,11 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  onLoadPatch,
   samplesCount,
 }) => {
   const openModal = useUiStore((state) => state.openModal);
+  const patches = usePatchStore((state) => state.patches);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuBarRef = useRef<HTMLDivElement>(null);
 
@@ -626,7 +632,74 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
           )}
         </div>
 
-        {/* 5. HARDWARE */}
+        {/* 5. PATCHS */}
+        <div className="relative">
+          <button
+            id="menu-patches-btn"
+            onClick={() => handleMenuTrigger('patches')}
+            onMouseEnter={() => handleMenuHover('patches')}
+            className={`px-2 py-1 transition ${
+              activeMenu === 'patches'
+                ? 'bg-[#00F0FF] text-black font-bold'
+                : 'text-[#C5C5D2] hover:bg-[#14141E] hover:text-white'
+            }`}
+          >
+            PATCHS
+          </button>
+          {activeMenu === 'patches' && (
+            <div className="absolute left-0 top-full mt-0.5 w-72 bg-[#0D0D14] border-2 border-[#242436] shadow-2xl p-1 space-y-0.5 pixel-box">
+              <button
+                onClick={() => {
+                  openModal('patches');
+                  closeMenus();
+                }}
+                className="w-full flex items-center gap-2 px-2 py-2 text-left bg-[#A855F7]/15 text-[#E9D5FF] hover:bg-[#A855F7] hover:text-white transition font-bold"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Enregistrer / nommer le patch en cours...</span>
+              </button>
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              {patches.length === 0 ? (
+                <div className="px-2 py-2 text-[9px] text-[#8E8E98]">
+                  Aucun patch enregistré pour l&apos;instant.
+                </div>
+              ) : (
+                patches.slice(0, 12).map((patch) => (
+                  <button
+                    key={patch.id}
+                    onClick={() => {
+                      onLoadPatch?.(patch.id);
+                      closeMenus();
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                    title={`Charger « ${patch.name} » dans le rack`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Bookmark className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{patch.name}</span>
+                    </div>
+                    <span className="text-[8px] opacity-60 flex-shrink-0">
+                      {patch.state.modules.length} mod.
+                    </span>
+                  </button>
+                ))
+              )}
+              <div className="h-px bg-[#1E1E2C] my-1" />
+              <button
+                onClick={() => {
+                  openModal('patches');
+                  closeMenus();
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Gérer les patchs (renommer, supprimer)...</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 6. HARDWARE */}
         <div className="relative">
           <button
             id="menu-hardware-btn"

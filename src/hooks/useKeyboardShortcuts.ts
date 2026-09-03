@@ -25,7 +25,22 @@ export interface KeyboardShortcutHandlers {
   onCloseTopModal: () => void;
 }
 
-const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+/** Input types that are knobs, not text: they must not swallow the shortcuts. */
+const CONTROL_INPUT_TYPES = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset']);
+
+/**
+ * True when the key would be typing into something. A slider or a checkbox
+ * keeps focus after you drag it, so treating every INPUT as text entry left
+ * the space bar dead until the user clicked elsewhere.
+ */
+export function isTextEntry(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  if (el.isContentEditable) return true;
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  if (el.tagName !== 'INPUT') return false;
+  return !CONTROL_INPUT_TYPES.has((el as HTMLInputElement).type);
+}
 
 /**
  * Global transport & workspace keyboard shortcuts. Handlers are read through a
@@ -45,7 +60,7 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers): void {
         return;
       }
 
-      if (TYPING_TAGS.has((e.target as HTMLElement).tagName)) return;
+      if (isTextEntry(e.target)) return;
 
       const mod = e.ctrlKey || e.metaKey;
 

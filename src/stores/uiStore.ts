@@ -16,6 +16,7 @@ export type ModalKey =
   | 'advancedRack'
   | 'shortcuts'
   | 'doc'
+  | 'patches'
   | 'loudnessModal';
 
 export type WorkspaceView = 'library' | 'timbre';
@@ -35,6 +36,7 @@ const ALL_CLOSED: Record<ModalKey, boolean> = {
   advancedRack: false,
   shortcuts: false,
   doc: false,
+  patches: false,
   loudnessModal: false,
 };
 
