@@ -37,5 +37,17 @@ export default tseslint.config(
     files: ['*.{js,ts}', 'vite.config.ts', 'vitest.config.ts'],
     languageOptions: { globals: { ...globals.node } },
   },
+  {
+    // CommonJS Node scripts (tooling, Electron helpers run outside the bundle)
+    files: ['**/*.cjs', 'tools/**/*.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { ...globals.node },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-undef': 'off',
+    },
+  },
   prettier
 );

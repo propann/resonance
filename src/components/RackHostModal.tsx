@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, Save, RotateCcw, Repeat, Sliders } from 'lucide-react';
 import { SampleItem } from '../types/sample';
 import { Modal } from './Modal';
@@ -12,8 +12,26 @@ import { RackModulePanel } from '../rack/RackModulePanel';
 import { RACK_TEMPLATES } from '../rack/templates';
 import { useRackStore } from '../stores/rackStore';
 import type { ParamValues, RackState } from '../rack/types';
+import { RackWaveformStrip, type WaveRegion } from './waveform/RackWaveformStrip';
 
 registerBuiltinModules();
+
+/** Keep only [start,end] (0..1 fractions) of a rendered buffer. */
+function sliceRegion(buf: AudioBuffer, r: WaveRegion): AudioBuffer {
+  if (r.start <= 0.0005 && r.end >= 0.9995) return buf;
+  const a = Math.max(0, Math.floor(r.start * buf.length));
+  const b = Math.min(buf.length, Math.floor(r.end * buf.length));
+  const len = Math.max(1, b - a);
+  const out = new AudioBuffer({
+    length: len,
+    numberOfChannels: buf.numberOfChannels,
+    sampleRate: buf.sampleRate,
+  });
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    out.copyToChannel(buf.getChannelData(c).subarray(a, b), c);
+  }
+  return out;
+}
 
 interface RackHostModalProps {
   isOpen: boolean;
@@ -55,6 +73,22 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   const [isRendering, setIsRendering] = useState(false);
   const [jsonText, setJsonText] = useState('');
 
+  // Waveform-editor state
+  const [region, setRegion] = useState<WaveRegion>({ start: 0, end: 1 });
+  const [processedBuffer, setProcessedBuffer] = useState<AudioBuffer | null>(null);
+  const [previewPending, setPreviewPending] = useState(false);
+  const [playhead, setPlayhead] = useState<number | null>(null);
+  const previewTokenRef = useRef(0);
+  const playStartRef = useRef(0);
+
+  const activeFamilies = useMemo(() => {
+    const defs = listModuleDefs();
+    return rack.modules
+      .filter((m) => m.enabled)
+      .map((m) => defs.find((d) => d.type === m.type)?.family)
+      .filter((f): f is string => !!f);
+  }, [rack.modules]);
+
   const stopAudition = useCallback(() => {
     if (srcRef.current) {
       try {
@@ -85,6 +119,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
       }
     };
     src.start();
+    playStartRef.current = ctx.currentTime;
     srcRef.current = src;
     setIsPlaying(true);
   }, [sample, loop, stopAudition]);
@@ -99,6 +134,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     lastStructRef.current = null;
     lastParamsRef.current = {};
     syncChainRef.current = Promise.resolve();
+    setRegion({ start: 0, end: 1 });
+    setProcessedBuffer(null);
 
     return () => {
       stopAudition();
@@ -106,6 +143,54 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
       rackRef.current = null;
     };
   }, [isOpen, stopAudition]);
+
+  // Offline-render the rack output so the strip can show the processed wave.
+  // Debounced — a slider drag shouldn't fire a bounce per frame.
+  useEffect(() => {
+    if (!isOpen || !sample?.audioBuffer) {
+      setProcessedBuffer(null);
+      setPreviewPending(false);
+      return;
+    }
+    if (rack.modules.filter((m) => m.enabled).length === 0) {
+      setProcessedBuffer(null);
+      setPreviewPending(false);
+      return;
+    }
+    const token = ++previewTokenRef.current;
+    setPreviewPending(true);
+    const timer = setTimeout(() => {
+      const hasTail = rack.modules.some(
+        (m) => m.enabled && (m.type === 'fx.delay' || m.type === 'fx.reverb')
+      );
+      renderRackOffline(rack, sample.audioBuffer!, hasTail ? 1.5 : 0)
+        .then((out) => {
+          if (token === previewTokenRef.current) setProcessedBuffer(out);
+        })
+        .catch((error) => console.error('[rack] preview render failed', error))
+        .finally(() => {
+          if (token === previewTokenRef.current) setPreviewPending(false);
+        });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [rack, isOpen, sample]);
+
+  // Advance the strip playhead while auditioning.
+  useEffect(() => {
+    if (!isPlaying || !sample?.audioBuffer) {
+      setPlayhead(null);
+      return;
+    }
+    const dur = sample.audioBuffer.duration || 1;
+    let raf = 0;
+    const tick = () => {
+      const elapsed = (audioGraph.getContext().currentTime - playStartRef.current) % dur;
+      setPlayhead(elapsed / dur);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, sample]);
 
   // Keep the live Rack in sync with the store: rebuild the chain on a
   // structural change (add / remove / reorder / enable), otherwise patch the
@@ -153,7 +238,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     setIsRendering(true);
     try {
       const hasDelay = rack.modules.some((m) => m.enabled && m.type === 'fx.delay');
-      const rendered = await renderRackOffline(rack, sample.audioBuffer, hasDelay ? 2 : 0);
+      const full = await renderRackOffline(rack, sample.audioBuffer, hasDelay ? 2 : 0);
+      const rendered = sliceRegion(full, region);
       const blob = audioBufferToWavBlob(rendered, { bitDepth: 24, normalize: false });
       const metrics = calculateAudioMetrics(rendered);
       onSaveAsNewSample({
@@ -286,6 +372,19 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
           </aside>
 
           <main className="flex-1 overflow-y-auto bg-[#06060A] p-4">
+            {sample?.audioBuffer && (
+              <div className="mb-3">
+                <RackWaveformStrip
+                  source={sample.audioBuffer}
+                  processed={processedBuffer}
+                  activeFamilies={activeFamilies}
+                  region={region}
+                  onRegionChange={setRegion}
+                  playhead={playhead}
+                  isRendering={previewPending}
+                />
+              </div>
+            )}
             {rack.modules.length === 0 ? (
               <div className="mx-auto mt-16 max-w-md rounded-lg border-2 border-dashed border-[#202036] p-6 text-center text-xs text-[#8E8E98]">
                 Ajoute des modules depuis la colonne de gauche. Ils se chaînent de haut en bas,
