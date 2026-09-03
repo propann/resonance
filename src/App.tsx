@@ -493,12 +493,6 @@ export default function App() {
     );
   };
 
-  const handleSetRating = (sampleId: string, rating: number) => {
-    setSamples((prev) =>
-      prev.map((s) => (s.id === sampleId ? { ...s, rating } : s))
-    );
-  };
-
   const handleDeleteSample = (sampleId: string) => {
     setSamples((prev) => prev.filter((s) => s.id !== sampleId));
     if (selectedSampleId === sampleId) {
@@ -935,7 +929,6 @@ export default function App() {
                 selectedSampleId={selectedSampleId}
                 onSelectSample={(s) => setSelectedSampleId(s.id)}
                 onToggleFavorite={handleToggleFavorite}
-                onSetRating={handleSetRating}
                 onDeleteSample={handleDeleteSample}
                 filterState={filterState}
                 onFilterChange={(newF) => setFilterState((prev) => ({ ...prev, ...newF }))}
