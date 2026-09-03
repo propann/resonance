@@ -1,5 +1,7 @@
 # Resonance - audit et feuille de route (01/09/2026)
 
+> **Historique (2026-09-01, avant la refonte Electron).** État courant : voir `docs/CONTINUATION.md`.
+
 ## Etat actuel
 
 ### Bibliotheque et dossiers
