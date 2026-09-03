@@ -167,8 +167,13 @@ export default function App() {
   const menuOp1InputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const selected = samples.find((sample) => sample.id === selectedSampleId);
-    if (!selected || selected.audioBuffer || !selected.diskPath || !libraryRoot) return;
+    if (!selectedSampleId || !libraryRoot) return;
+    // Read `samples` fresh from the store so this effect fires only on a
+    // selection or work-folder change, not on every library mutation.
+    const selected = useLibraryStore
+      .getState()
+      .samples.find((sample) => sample.id === selectedSampleId);
+    if (!selected || selected.audioBuffer || !selected.diskPath) return;
     let cancelled = false;
     const loadSelectedAudio = async () => {
       try {
@@ -186,7 +191,7 @@ export default function App() {
     };
     void loadSelectedAudio();
     return () => { cancelled = true; };
-  }, [selectedSampleId, samples, libraryRoot]);
+  }, [selectedSampleId, libraryRoot, setSamples]);
 
   // Filters State
   const filterState = useLibraryStore((s) => s.filterState);

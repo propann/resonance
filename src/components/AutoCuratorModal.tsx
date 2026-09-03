@@ -125,48 +125,6 @@ interface AutoCuratorModalProps {
   onOpenGitHubSync?: () => void;
 }
 
-// 7 Clean Streamlined Studio Folders (Évitant la prolifération excessive de dossiers)
-export const STREAMLINED_PRO_FOLDERS = [
-  { id: 'f-drums', path: '/01_DRUMS', label: '01_DRUMS', color: '#00F0FF', icon: 'Drum' },
-  { id: 'f-bass', path: '/02_BASS_808', label: '02_BASS_808', color: '#A855F7', icon: 'Flame' },
-  { id: 'f-melodic', path: '/03_MELODIC', label: '03_MELODIC', color: '#3B82F6', icon: 'Music' },
-  { id: 'f-vocals', path: '/04_VOCALS', label: '04_VOCALS', color: '#EC4899', icon: 'Mic' },
-  { id: 'f-fx', path: '/05_FX_TEXTURES', label: '05_FX_TEXTURES', color: '#EAB308', icon: 'Sparkles' },
-  { id: 'f-loops', path: '/06_LOOPS', label: '06_LOOPS', color: '#10B981', icon: 'Repeat' },
-  { id: 'f-misc', path: '/07_INSTRUMENTS', label: '07_INSTRUMENTS', color: '#8E8E93', icon: 'Disc' },
-];
-
-export function mapTypeToStreamlinedFolder(type: SampleType, isLoop: boolean): { folderPath: string; folderId: string } {
-  if (isLoop) {
-    return { folderPath: '/06_LOOPS', folderId: 'f-loops' };
-  }
-
-  switch (type) {
-    case 'kick':
-    case 'snare':
-    case 'hihat':
-    case 'clap':
-    case 'cymbal':
-    case 'percussion':
-      return { folderPath: '/01_DRUMS', folderId: 'f-drums' };
-    case '808':
-    case 'bass':
-      return { folderPath: '/02_BASS_808', folderId: 'f-bass' };
-    case 'lead':
-    case 'pad':
-      return { folderPath: '/03_MELODIC', folderId: 'f-melodic' };
-    case 'vocal':
-      return { folderPath: '/04_VOCALS', folderId: 'f-vocals' };
-    case 'fx':
-      return { folderPath: '/05_FX_TEXTURES', folderId: 'f-fx' };
-    case 'loop':
-    case 'multi-sound':
-      return { folderPath: '/06_LOOPS', folderId: 'f-loops' };
-    default:
-      return { folderPath: '/07_INSTRUMENTS', folderId: 'f-misc' };
-  }
-}
-
 export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   isOpen,
   onClose,

@@ -78,6 +78,19 @@ export const RackWaveformStrip: React.FC<RackWaveformStripProps> = ({
     return activeFamilies.filter((f) => (seen.has(f) ? false : (seen.add(f), true)));
   }, [activeFamilies]);
 
+  // Envelopes are the expensive part; recompute only when the buffer or the
+  // pixel width changes — never on a region-handle drag.
+  const wrapW = wrapRef.current?.clientWidth ?? 0;
+  const buckets = Math.max(1, Math.floor(wrapW || 600));
+  const sourceEnv = useMemo(
+    () => (source ? peakEnvelope(source, buckets) : null),
+    [source, buckets]
+  );
+  const processedEnv = useMemo(
+    () => ((processed ?? source) ? peakEnvelope((processed ?? source)!, buckets) : null),
+    [processed, source, buckets]
+  );
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -101,28 +114,27 @@ export const RackWaveformStrip: React.FC<RackWaveformStripProps> = ({
     ctx.lineTo(cssW, mid);
     ctx.stroke();
 
-    const buckets = Math.max(1, Math.floor(cssW));
+    const n = Math.min(buckets, Math.floor(cssW));
     const amp = mid - 3;
 
     // source — dim grey reference
-    if (source) {
-      const env = peakEnvelope(source, buckets);
+    if (sourceEnv) {
       ctx.fillStyle = 'rgba(150,160,175,0.28)';
       ctx.beginPath();
-      for (let x = 0; x < buckets; x++) ctx.rect(x, mid - env.max[x] * amp, 1, Math.max(1, (env.max[x] - env.min[x]) * amp));
+      for (let x = 0; x < n; x++)
+        ctx.rect(x, mid - sourceEnv.max[x] * amp, 1, Math.max(1, (sourceEnv.max[x] - sourceEnv.min[x]) * amp));
       ctx.fill();
     }
 
     // processed — bright, tinted by the active families
-    const wet = processed ?? source;
-    if (wet) {
-      const env = peakEnvelope(wet, buckets);
+    if (processedEnv) {
       const grad = ctx.createLinearGradient(0, 0, 0, cssH);
       grad.addColorStop(0, wetColor);
       grad.addColorStop(1, `${wetColor}22`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      for (let x = 0; x < buckets; x++) ctx.rect(x, mid - env.max[x] * amp, 1, Math.max(1, (env.max[x] - env.min[x]) * amp));
+      for (let x = 0; x < n; x++)
+        ctx.rect(x, mid - processedEnv.max[x] * amp, 1, Math.max(1, (processedEnv.max[x] - processedEnv.min[x]) * amp));
       ctx.fill();
     }
 
@@ -150,7 +162,7 @@ export const RackWaveformStrip: React.FC<RackWaveformStripProps> = ({
       ctx.lineTo(playhead * cssW, cssH);
       ctx.stroke();
     }
-  }, [source, processed, wetColor, region, playhead, height]);
+  }, [sourceEnv, processedEnv, buckets, wetColor, region, playhead, height]);
 
   useEffect(() => {
     draw();
