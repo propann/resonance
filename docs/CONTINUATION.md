@@ -1,6 +1,6 @@
 # Reprise du travail — Resonance
 
-Dernière mise à jour : **2026-09-03** (session soir)
+Dernière mise à jour : **2026-09-03** (session nuit)
 
 Ce fichier est le point de reprise versionné : lu depuis le dépôt, il survit à
 tout redémarrage de console (et à un changement de modèle). Historique
@@ -13,10 +13,10 @@ détaillé : `git log`. Mémoire longue durée : `resonance-refonte.md` +
 cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
-npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build   # doit tout passer (0 erreur, 49 tests)
+npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build   # doit tout passer (0 erreur, 67 tests)
 ```
 
-- `main` @ `05e1dc7` (2026-09-03 soir). Working tree propre, tout poussé.
+- `main` @ `c4b4ef2` (2026-09-03 nuit). Working tree propre, **non poussé**.
 - App installée : `%LOCALAPPDATA%\Programs\Resonance\`, connectée à `D:\Son`
   (442 samples). Config : `%APPDATA%\Resonance\resonance-config.json`.
 - Rebuild + réinstall :
@@ -30,7 +30,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build   # doit to
 
 Application desktop **Electron** (React 19 / Vite 6 / Tailwind 4 / Tone.js).
 Portes de vérification à chaque commit : `tsc --noEmit` · `eslint .` (0 erreur) ·
-`vitest run` (49 tests) · `vite build`.
+`vitest run` (67 tests) · `vite build`.
 
 ### Fait — phases 0 à 5 de la refonte
 
@@ -88,11 +88,48 @@ Compiler Plaits / Rings / Clouds / Dexed en `AudioWorklet` + WASM.
 - Perf : enveloppes d'onde en cache ; effet de décodage du sample sélectionné
   ne dépend plus de `samples` (se relançait à chaque mutation de la biblio).
 
+## Session 2026-09-03 nuit
+
+| Commit | Ce qui change |
+|---|---|
+| `8c620da` | **Scan de réception paresseux.** `listWorkFolderAudioEntries()` ne lit plus que les métadonnées (`readDir` porte déjà taille + mtime) ; `readWorkFolderAudioFiles()` ne lit les octets que des fichiers réellement mis en curation, et ne les marque « vus » qu'une fois lus (une lecture ratée est retentée). `listWorkFolderAudioFiles` / `listReceptionAudioFiles` supprimées. Tests : `src/services/localLibrary.test.ts`. |
+| `849f827` | **Table virtualisée.** Seules les lignes visibles (+6 d'overscan) sont montées, entre deux cales ; `sampleTableColumns.ts` (géométrie, badges, `ROW_HEIGHT` = 36, `visibleRowRange()` testée) + `SampleRow.tsx` mémoïsé. Sélection via `Set`. Une sélection faite ailleurs (dernier sample restauré, modale) défile jusqu'à sa ligne. `SampleTable` 664 → 435 l. Vérifié : 442 samples, `scrollHeight` 15912 = 442 × 36, 17-23 lignes montées. |
+| `300aefd` | **Bundle 595 → 419 kB** (gzip 171 → 126). Onze modales passent en `React.lazy` derrière `LazyModal`, montées seulement quand elles sont ouvertes. Restent chargées d'office : `AutoCuratorModal` (transfert de fond `autoTransfer && !isOpen`) et `AudioRecorderModal` (coupure du micro sur `isOpen` → false). |
+| `6e23e57` | **Zone libre** dans l'éditeur d'onde : ALT-glisser dessine une sous-région, la puce jaune l'écoute ou la copie en nouveau sample (`<base>_ZONE_<début>-<fin>ms`), source intacte. |
+| `c4b4ef2` | **Poignées + fondus + ligne de volume + barre espace unique** (voir ci-dessous). |
+
+### Éditeur d'onde v2 (`c4b4ef2`)
+
+- **Poignées carrées** en haut des deux bords de zone : glisser un bord
+  redimensionne, glisser la barre centrale déplace toute la zone ; ré-aimantation
+  aux passages à zéro au relâchement.
+- **Fondus automatiques** FD IN / OUT (5 ms par défaut, réglables dans la puce)
+  appliqués à l'écoute **et** à la copie — plus de clic en début/fin de coupe.
+- **Ligne de volume** : bouton `VOLUME` → cliquer la ligne crée un point, le
+  glisser règle le niveau (±6 dB, affiché en dB), `Suppr` efface le point
+  sélectionné, le bouton `n PT` remet à plat.
+- Maths pures et testées dans `src/components/waveform/gainEnvelope.ts`
+  (interpolation, rendu de région, fondus qui ne se chevauchent jamais).
+- L'écoute d'une zone joue le rendu traité ; le playhead reste sur la timeline
+  du son source (décalage `playbackOffsetSec`).
+
+### Transport unique (`c4b4ef2`)
+
+`src/stores/transportStore.ts` : chaque page/modale enregistre son écoute tant
+qu'elle est ouverte (`useAudition`), et **le seul** raccourci Espace de l'app
+pilote la plus haute de la pile — sinon il retombe sur la sélection de la
+bibliothèque. Fin des doubles lectures (le slicer et le studio OP-1 avaient
+chacun leur écouteur Espace en plus de celui de l'app). Enregistrés : onde
+(zone ou sample entier), rack, découpe, DSP Lab, kit OP-1, enregistreur (au
+repos seulement). Le rack **ne démarre plus en boucle**. Le bouton PLAY de
+l'en-tête indique en infobulle ce que la barre espace jouerait.
+
 ## Pistes ouvertes
 
-- **Éditeur d'onde v2** : copie d'une sous-région vers un nouveau sample (indépendant du rack) ; réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro) dans le rack avec le calque couleur des effets.
-- **Perf à creuser** : bundle principal 595 kB (splitter davantage) ; table de 442+ samples non virtualisée ; `listWorkFolderAudioFiles` lit tous les octets d'un coup — lourd si `00_RECEPTION` a des centaines de fichiers (scan paresseux + n'utiliser `listReceptionAudioFiles` que pour l'action "Analyser la réception").
-- `WaveformCanvas` (~1400 l), `Op1KitBuilderModal` / `AutoCuratorModal` (>1 kLOC) à découper.
+- Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.
+- Enveloppe de volume : la garder par sample (elle est remise à plat au changement de sample) et l'appliquer aussi à `DÉCOUPER WAV`.
+- **Perf restante** : bundle principal 429 kB — `AutoCuratorModal` (~1,2 kl) reste chargé d'office parce que le transfert de fond vit dedans ; extraire ce pipeline en service le sortirait du chunk de démarrage.
+- `WaveformCanvas` (~1,8 kl), `Op1KitBuilderModal` / `AutoCuratorModal` (>1 kLOC) à découper.
 - Test réel OP-1 : figer `reverse: 19968`, `playmode 20480`, `drum_version: 2`.
 
 ## Règle produit
