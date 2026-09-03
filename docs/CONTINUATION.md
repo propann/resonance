@@ -3,7 +3,28 @@
 Dernière mise à jour : **2026-09-03** (session soir)
 
 Ce fichier est le point de reprise versionné : lu depuis le dépôt, il survit à
-tout redémarrage de console. Historique détaillé : `git log`.
+tout redémarrage de console (et à un changement de modèle). Historique
+détaillé : `git log`. Mémoire longue durée : `resonance-refonte.md` +
+`resonance-op1-format.md` (chargées automatiquement chaque session).
+
+## Reprise immédiate
+
+```bash
+cd C:\Users\azoth\resonance
+git pull                       # dernier état sur origin/main
+npm ci                         # si node_modules absent
+npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build   # doit tout passer (0 erreur, 49 tests)
+```
+
+- `main` @ `05e1dc7` (2026-09-03 soir). Working tree propre, tout poussé.
+- App installée : `%LOCALAPPDATA%\Programs\Resonance\`, connectée à `D:\Son`
+  (442 samples). Config : `%APPDATA%\Resonance\resonance-config.json`.
+- Rebuild + réinstall :
+  `npm run build && npx electron-builder --win -c.directories.output=C:/Users/azoth/resonance-release`
+  puis lancer le `.exe` avec `/S`. (En sandbox il faut rediriger l'output
+  hors du dépôt ; sur la vraie machine `npm run dist:win` suffit.)
+- Test headless : lancer `Resonance.exe --remote-debugging-port=9222` et
+  piloter via CDP (voir les scripts `/tmp/*.mjs` des sessions précédentes).
 
 ## État actuel
 
@@ -50,14 +71,22 @@ Compiler Plaits / Rings / Clouds / Dexed en `AudioWorklet` + WASM.
   ```
 - `LayerSynthRackModal` / `AdvancedEngineRackModal` restent des modals séparés tant que les binaires n'existent pas.
 
-## Audit / perf — fait cette session
+## Corrections / audit — session 2026-09-03 soir
 
+- **Config qui se perdait** (`05e1dc7`) : l'écriture atomique `.tmp`→`rename`
+  échouait sur Windows (EPERM si le fichier est ouvert par une lecture) →
+  `.tmp` orphelin, valeur perdue. Symptôme : `libraryRoot` puis `lastSampleId`
+  qui ne persistaient pas. Corrigé : `rename` retenté 5× puis repli
+  `writeFile` en place. **Cycle fermeture→relance vérifié : le dernier son
+  travaillé revient bien.**
+- **Éditeur d'onde** qui ne s'affichait pas pour les samples du disque
+  (`131db30`) : `App.liveSample()` ré-résout la cible contre la biblio vivante.
 - Code mort retiré (~1,3 kl) : `AudioPlayerBottomBar.tsx` (composant entier),
   `detectPitch`, `extractSliceBuffer`, `generateDefaultLibrary`,
   `STREAMLINED_PRO_FOLDERS`/`mapTypeToStreamlinedFolder`.
-- `eslint .` : 0 erreur (172 warnings, réduits phase par phase).
+- `eslint .` : 0 erreur (≈170 warnings, réduits phase par phase).
 - Perf : enveloppes d'onde en cache ; effet de décodage du sample sélectionné
-  ne dépend plus de `samples` (se relançait à chaque mutation de la bibliothèque).
+  ne dépend plus de `samples` (se relançait à chaque mutation de la biblio).
 
 ## Pistes ouvertes
 
