@@ -3,6 +3,7 @@ import type { FsEntry } from './desktopBridge';
 import {
   listWorkFolderAudioEntries,
   readWorkFolderAudioFiles,
+  scanWorkFolderAudioEntries,
   workFolderEntryKey,
 } from './localLibrary';
 
@@ -83,5 +84,22 @@ describe('readWorkFolderAudioFiles', () => {
     expect(files[0].sourcePath).toBe('a.wav');
     expect(files[0].file.name).toBe('a.wav');
     expect(files[0].file.lastModified).toBe(1);
+  });
+});
+
+describe('scanWorkFolderAudioEntries', () => {
+  it('stops at the limit and says so, instead of walking a huge backlog', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => file(`s${i}.wav`));
+    fakeRoot({ '.': [dir('00_RECEPTION')], '00_RECEPTION': many });
+    const { entries, truncated } = await scanWorkFolderAudioEntries(undefined, 10);
+    expect(entries).toHaveLength(10);
+    expect(truncated).toBe(true);
+  });
+
+  it('reports the walk as complete when everything fits', async () => {
+    fakeRoot({ '.': [file('a.wav'), file('b.wav')] });
+    const { entries, truncated } = await scanWorkFolderAudioEntries(undefined, 10);
+    expect(entries).toHaveLength(2);
+    expect(truncated).toBe(false);
   });
 });

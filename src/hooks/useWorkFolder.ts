@@ -4,9 +4,9 @@ import {
   adoptLibraryRoot,
   chooseLibraryRoot,
   folderDisplayName,
-  listWorkFolderAudioEntries,
   readLibraryManifest,
   readWorkFolderAudioFiles,
+  scanWorkFolderAudioEntries,
   removeEmptyManagedFolders,
   restoreLibraryRoot,
   scanManagedLibrary,
@@ -21,6 +21,15 @@ export type WorkFolderStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 
 // chokidar drives the scan; this is only a slow safety net for missed events.
 const RECEPTION_FALLBACK_INTERVAL_MS = 30000;
+/**
+ * How many source files go to curation at once. Each one is decoded, analysed,
+ * normalised and rewritten, so the queue is worked in batches: a drop folder
+ * holding tens of thousands of files must still make progress file by file,
+ * and each batch removes its sources before the next one is picked up.
+ */
+const RECEPTION_BATCH_SIZE = 24;
+/** How deep a scan looks to fill a batch. Bounded: the backlog can be huge. */
+const RECEPTION_SCAN_WINDOW = 240;
 
 export interface UseWorkFolderOptions {
   /** The curator modal is open — pause the background reception scan. */
@@ -44,6 +53,8 @@ export interface WorkFolderApi {
   diskSampleCount: number;
   diskFolderCounts: Record<string, number>;
   incomingCount: number;
+  /** True when more files wait behind `incomingCount` (bounded scan). */
+  incomingIsPartial: boolean;
   failedIncomingCount: number;
   setFailedIncomingCount: (count: number) => void;
   /** Adopt a root the curator already connected, without re-scanning here. */
@@ -67,6 +78,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   const [diskFolderCounts, setDiskFolderCounts] = useState<Record<string, number>>({});
   const [workFolderStatus, setWorkFolderStatus] = useState<WorkFolderStatus>('disconnected');
   const [incomingCount, setIncomingCount] = useState(0);
+  const [incomingIsPartial, setIncomingIsPartial] = useState(false);
   const [failedIncomingCount, setFailedIncomingCount] = useState(0);
 
   const scanInFlightRef = useRef(false);
@@ -151,7 +163,10 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   const processReception = useCallback(async () => {
     if (!libraryRoot) return;
     try {
-      const entries = await listWorkFolderAudioEntries(libraryRoot);
+      const { entries, truncated } = await scanWorkFolderAudioEntries(
+        libraryRoot,
+        RECEPTION_SCAN_WINDOW
+      );
       queuedSourceKeysRef.current.clear();
       if (entries.length === 0) {
         toast.info(
@@ -159,7 +174,14 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
         );
         return;
       }
-      optionsRef.current.onReceptionFilesReady(await readWorkFolderAudioFiles(entries), true);
+      const batch = entries.slice(0, RECEPTION_BATCH_SIZE);
+      for (const entry of batch) queuedSourceKeysRef.current.add(workFolderEntryKey(entry));
+      if (entries.length > batch.length || truncated) {
+        toast.info(
+          `Lot de ${batch.length} son(s) envoyé au curateur. Le reste de la réception suit automatiquement, lot par lot.`
+        );
+      }
+      optionsRef.current.onReceptionFilesReady(await readWorkFolderAudioFiles(batch), true);
     } catch (error) {
       console.error('Erreur analyse réception', error);
       toast.error(
@@ -205,18 +227,22 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       if (scanInFlightRef.current) return;
       scanInFlightRef.current = true;
       try {
-        // Metadata only: this runs on every watch event and on a timer, so it
-        // must not read the bytes of files that are already known.
-        const entries = await listWorkFolderAudioEntries(libraryRoot);
+        // Metadata only, and bounded: this runs on every watch event and on a
+        // timer, over a folder that may hold tens of thousands of files.
+        const { entries, truncated } = await scanWorkFolderAudioEntries(
+          libraryRoot,
+          RECEPTION_SCAN_WINDOW
+        );
         if (cancelled) return;
         setIncomingCount(entries.length);
+        setIncomingIsPartial(truncated);
         const currentKeys = new Set(entries.map(workFolderEntryKey));
         for (const knownKey of queuedSourceKeysRef.current) {
           if (!currentKeys.has(knownKey)) queuedSourceKeysRef.current.delete(knownKey);
         }
-        const freshEntries = entries.filter(
-          (entry) => !queuedSourceKeysRef.current.has(workFolderEntryKey(entry))
-        );
+        const freshEntries = entries
+          .filter((entry) => !queuedSourceKeysRef.current.has(workFolderEntryKey(entry)))
+          .slice(0, RECEPTION_BATCH_SIZE);
         if (freshEntries.length === 0) return;
         const freshFiles = await readWorkFolderAudioFiles(freshEntries);
         if (cancelled) return;
@@ -249,6 +275,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     diskSampleCount,
     diskFolderCounts,
     incomingCount,
+    incomingIsPartial,
     failedIncomingCount,
     setFailedIncomingCount,
     adoptExternalRoot,

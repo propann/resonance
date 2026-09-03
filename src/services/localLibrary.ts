@@ -216,15 +216,35 @@ export async function archiveIncomingFiles(_root: LibraryRoot, files: File[]): P
  * no file bytes are read, so this stays cheap enough for the background scan
  * even with hundreds of files waiting in 00_RECEPTION.
  */
-export async function listWorkFolderAudioEntries(
-  _root?: LibraryRoot
-): Promise<WorkFolderAudioEntry[]> {
+export interface WorkFolderScan {
+  entries: WorkFolderAudioEntry[];
+  /** The walk stopped at `limit`: more files are waiting behind these. */
+  truncated: boolean;
+}
+
+/**
+ * Walk the drop zones for audio files, newest folder listings only — no file
+ * bytes. `limit` stops the walk early, which matters: a working folder can
+ * hold tens of thousands of files waiting in 00_RECEPTION, and a full walk of
+ * those takes ~20 s. Ingestion works one batch at a time, so it only ever
+ * needs the head of the list.
+ */
+export async function scanWorkFolderAudioEntries(
+  _root?: LibraryRoot,
+  limit: number = Number.POSITIVE_INFINITY
+): Promise<WorkFolderScan> {
   const fs = desktopFS();
   const out: WorkFolderAudioEntry[] = [];
+  let truncated = false;
 
   const visit = async (rel: string): Promise<void> => {
+    if (out.length >= limit) return;
     const entries = await fs.readDir(rel || '.');
     for (const entry of entries) {
+      if (out.length >= limit) {
+        truncated = true;
+        return;
+      }
       const childRel = j(rel, entry.name);
       if (entry.isFile && AUDIO_FILE.test(entry.name)) {
         out.push({
@@ -241,7 +261,14 @@ export async function listWorkFolderAudioEntries(
   };
 
   await visit('');
-  return out;
+  return { entries: out, truncated };
+}
+
+/** Every audio file waiting in the drop zones. Prefer the bounded scan above. */
+export async function listWorkFolderAudioEntries(
+  root?: LibraryRoot
+): Promise<WorkFolderAudioEntry[]> {
+  return (await scanWorkFolderAudioEntries(root)).entries;
 }
 
 /** Stable identity of a source file: path + size + mtime. */

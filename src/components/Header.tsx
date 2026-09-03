@@ -34,6 +34,8 @@ interface HeaderProps {
   workFolderName?: string | null;
   workFolderStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
   incomingCount?: number;
+  /** More files wait behind `incomingCount` (the scan is bounded). */
+  incomingIsPartial?: boolean;
   failedIncomingCount?: number;
   onOpenDspAnalyzer?: () => void;
   onOpenFxRack?: () => void;
@@ -57,6 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   workFolderName,
   workFolderStatus = 'disconnected',
   incomingCount = 0,
+  incomingIsPartial = false,
   failedIncomingCount = 0,
   onOpenDspAnalyzer,
   onOpenFxRack,
@@ -253,7 +256,15 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <FolderOpen className="w-3 h-3" />
             <span className="hidden sm:inline">{workFolderStatus === 'connecting' ? 'CONNEXION…' : workFolderStatus === 'connected' ? 'DOSSIER ACTIF' : 'CONNECTER DOSSIER'}</span>
-            {incomingCount > 0 && <span className="min-w-4 px-1 bg-black/20 text-[8px] text-current">{incomingCount}</span>}
+            {incomingCount > 0 && (
+              <span
+                className="min-w-4 px-1 bg-black/20 text-[8px] text-current"
+                title={`${incomingCount}${incomingIsPartial ? ' au moins' : ''} son(s) en attente de tri dans le dossier de travail`}
+              >
+                {incomingCount}
+                {incomingIsPartial ? '+' : ''}
+              </span>
+            )}
             {failedIncomingCount > 0 && <span className="min-w-4 px-1 bg-[#FF3366] text-[8px] text-white">!{failedIncomingCount}</span>}
           </button>
         )}

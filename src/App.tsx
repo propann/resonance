@@ -154,6 +154,7 @@ export default function App() {
     diskSampleCount,
     diskFolderCounts,
     incomingCount,
+    incomingIsPartial,
     failedIncomingCount,
     setFailedIncomingCount,
     adoptExternalRoot,
@@ -869,6 +870,7 @@ export default function App() {
         workFolderName={libraryName}
         workFolderStatus={workFolderStatus}
         incomingCount={incomingCount}
+        incomingIsPartial={incomingIsPartial}
         failedIncomingCount={failedIncomingCount}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenFxRack={() => handleOpenFxRack()}
