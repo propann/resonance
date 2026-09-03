@@ -20,6 +20,15 @@ export interface WorkFolderAudioFile {
   sourcePath: string;
 }
 
+/** A source file seen on disk, without its bytes. */
+export interface WorkFolderAudioEntry {
+  /** Path relative to the working folder. */
+  sourcePath: string;
+  name: string;
+  size: number;
+  mtimeMs: number;
+}
+
 export const LIBRARY_FOLDERS = [
   '00_RECEPTION',
   '01_ONE_SHOTS/01_DRUMS',
@@ -201,32 +210,29 @@ export async function archiveIncomingFiles(_root: LibraryRoot, files: File[]): P
 
 // --- reading ------------------------------------------------------------------
 
-export async function listReceptionAudioFiles(_root: LibraryRoot): Promise<File[]> {
-  const fs = desktopFS();
-  await fs.mkdirp('00_RECEPTION');
-  const entries = await fs.readDir('00_RECEPTION');
-  const files: File[] = [];
-  for (const entry of entries) {
-    if (entry.isFile && AUDIO_FILE.test(entry.name)) files.push(await bytesToFile(j('00_RECEPTION', entry.name)));
-  }
-  return files;
-}
-
 /**
- * Every audio file anywhere in the working folder, skipping the managed output
- * areas (but keeping 00_RECEPTION). Reads file bytes eagerly — call it on a
- * change event, not on a timer.
+ * Metadata for every audio file anywhere in the working folder, skipping the
+ * managed output areas (but keeping 00_RECEPTION). Directory listings only —
+ * no file bytes are read, so this stays cheap enough for the background scan
+ * even with hundreds of files waiting in 00_RECEPTION.
  */
-export async function listWorkFolderAudioFiles(_root: LibraryRoot): Promise<WorkFolderAudioFile[]> {
+export async function listWorkFolderAudioEntries(
+  _root?: LibraryRoot
+): Promise<WorkFolderAudioEntry[]> {
   const fs = desktopFS();
-  const out: WorkFolderAudioFile[] = [];
+  const out: WorkFolderAudioEntry[] = [];
 
   const visit = async (rel: string): Promise<void> => {
     const entries = await fs.readDir(rel || '.');
     for (const entry of entries) {
       const childRel = j(rel, entry.name);
       if (entry.isFile && AUDIO_FILE.test(entry.name)) {
-        out.push({ file: await bytesToFile(childRel), sourcePath: childRel });
+        out.push({
+          sourcePath: childRel,
+          name: entry.name,
+          size: entry.size,
+          mtimeMs: entry.mtimeMs,
+        });
       } else if (entry.isDir) {
         if (!rel && MANAGED_TOP_LEVEL_FOLDERS.has(entry.name) && entry.name !== '00_RECEPTION') continue;
         await visit(childRel);
@@ -235,6 +241,31 @@ export async function listWorkFolderAudioFiles(_root: LibraryRoot): Promise<Work
   };
 
   await visit('');
+  return out;
+}
+
+/** Stable identity of a source file: path + size + mtime. */
+export const workFolderEntryKey = (entry: {
+  sourcePath: string;
+  size: number;
+  mtimeMs: number;
+}): string => `${entry.sourcePath}:${entry.size}:${entry.mtimeMs}`;
+
+/**
+ * Read the bytes of already-listed entries. Call it on the entries you are
+ * about to hand to curation, never on a whole folder listing.
+ */
+export async function readWorkFolderAudioFiles(
+  entries: WorkFolderAudioEntry[]
+): Promise<WorkFolderAudioFile[]> {
+  const out: WorkFolderAudioFile[] = [];
+  for (const entry of entries) {
+    const buf = await desktopFS().readFile(entry.sourcePath);
+    out.push({
+      file: new File([buf], entry.name, { lastModified: entry.mtimeMs }),
+      sourcePath: entry.sourcePath,
+    });
+  }
   return out;
 }
 

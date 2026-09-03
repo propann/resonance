@@ -4,13 +4,15 @@ import {
   adoptLibraryRoot,
   chooseLibraryRoot,
   folderDisplayName,
-  listWorkFolderAudioFiles,
+  listWorkFolderAudioEntries,
   readLibraryManifest,
+  readWorkFolderAudioFiles,
   removeEmptyManagedFolders,
   restoreLibraryRoot,
   scanManagedLibrary,
   supportsLocalLibrary,
   watchWorkFolder,
+  workFolderEntryKey,
   type DirectoryHandle,
   type WorkFolderAudioFile,
 } from '../services/localLibrary';
@@ -149,15 +151,15 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   const processReception = useCallback(async () => {
     if (!libraryRoot) return;
     try {
-      const files = await listWorkFolderAudioFiles(libraryRoot);
+      const entries = await listWorkFolderAudioEntries(libraryRoot);
       queuedSourceKeysRef.current.clear();
-      if (files.length === 0) {
+      if (entries.length === 0) {
         toast.info(
           'Aucun nouveau fichier audio dans le dossier de travail. Déposez vos sons ou dossiers à sa racine, puis relancez cette commande.'
         );
         return;
       }
-      optionsRef.current.onReceptionFilesReady(files, true);
+      optionsRef.current.onReceptionFilesReady(await readWorkFolderAudioFiles(entries), true);
     } catch (error) {
       console.error('Erreur analyse réception', error);
       toast.error(
@@ -203,22 +205,24 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
       if (scanInFlightRef.current) return;
       scanInFlightRef.current = true;
       try {
-        const files = await listWorkFolderAudioFiles(libraryRoot);
+        // Metadata only: this runs on every watch event and on a timer, so it
+        // must not read the bytes of files that are already known.
+        const entries = await listWorkFolderAudioEntries(libraryRoot);
         if (cancelled) return;
-        setIncomingCount(files.length);
-        const currentKeys = new Set(
-          files.map(({ sourcePath, file }) => `${sourcePath}:${file.size}:${file.lastModified}`)
-        );
+        setIncomingCount(entries.length);
+        const currentKeys = new Set(entries.map(workFolderEntryKey));
         for (const knownKey of queuedSourceKeysRef.current) {
           if (!currentKeys.has(knownKey)) queuedSourceKeysRef.current.delete(knownKey);
         }
-        const freshFiles = files.filter(({ sourcePath, file }) => {
-          const key = `${sourcePath}:${file.size}:${file.lastModified}`;
-          if (queuedSourceKeysRef.current.has(key)) return false;
-          queuedSourceKeysRef.current.add(key);
-          return true;
-        });
-        if (freshFiles.length === 0) return;
+        const freshEntries = entries.filter(
+          (entry) => !queuedSourceKeysRef.current.has(workFolderEntryKey(entry))
+        );
+        if (freshEntries.length === 0) return;
+        const freshFiles = await readWorkFolderAudioFiles(freshEntries);
+        if (cancelled) return;
+        // Only mark them once the bytes are in hand: a failed read must leave
+        // the entry pending so the next scan retries it.
+        for (const entry of freshEntries) queuedSourceKeysRef.current.add(workFolderEntryKey(entry));
         optionsRef.current.onReceptionFilesReady(freshFiles, false);
       } catch (error) {
         console.error('Surveillance de réception indisponible', error);
