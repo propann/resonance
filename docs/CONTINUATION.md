@@ -1,6 +1,6 @@
 # Reprise du travail — Resonance
 
-Dernière mise à jour : **2026-09-03**
+Dernière mise à jour : **2026-09-03** (session soir)
 
 Ce fichier est le point de reprise versionné : lu depuis le dépôt, il survit à
 tout redémarrage de console. Historique détaillé : `git log`.
@@ -22,7 +22,10 @@ Portes de vérification à chaque commit : `tsc --noEmit` · `eslint .` (0 erreu
 | Conventions hardware | `src/services/hardware/op1og.ts` (encodeurs OG OP-1 drum+sampler corrigés — voir `resonance-op1-format` en mémoire) + `ep133.ts` (44,1 kHz / 16-bit / mono ; **46 875 Hz retiré partout**). |
 | Coquille modale | `<Modal>` commun pour les 17 modals. `size="full"` = plein écran sous la barre de menus. |
 | Packaging | `electron-builder` : installeur NSIS + AppImage/deb + dmg. `app.asar` 2,5 Mo (seul `chokidar` en dépendance runtime). `npm run dist:win` / `dist:linux` / `dist:mac`. |
-| Éditeur d'onde | `RackWaveformStrip` dans `RackHostModal` : onde source + sortie traitée teintée par famille de module, poignées de zone déplaçables, playhead ; « Enregistrer sample » découpe à la zone gardée. |
+| Éditeur d'onde | `RackWaveformStrip` dans `RackHostModal` : onde source (gris) + sortie traitée teintée par un mélange des couleurs de familles des modules actifs, 2 poignées de zone déplaçables (bouton-poignée en haut), bande centrale déplaçable, playhead, légende des familles ; « Enregistrer sample » découpe à la zone gardée (`sliceRegion`). Enveloppes min/max mises en cache (`useMemo` sur `[buffer, buckets]`) → le drag ne re-scanne pas le buffer. |
+| Fenêtre modale | `Modal size="full"` = plein écran **sous la barre de menus** (top:36 px) — la barre FICHIER/ÉDITION reste visible/utilisable ; clic-fond désactivé. RackHost `xl`→`full`. |
+| Sample restauré | `getLastSampleId`/`setLastSampleId` (clé config `lastSampleId`) : au lancement l'app se replace sur le dernier sample travaillé une fois la bibliothèque chargée. |
+| Modals scopées sample | `App.liveSample()` : rack/dsp/loudness/slicer ré-résolvent leur cible contre `samples` vivant → l'`audioBuffer` décodé en différé atteint bien la modale. |
 
 ### Procédure réception → base (vérifiée end-to-end)
 
@@ -47,11 +50,20 @@ Compiler Plaits / Rings / Clouds / Dexed en `AudioWorklet` + WASM.
   ```
 - `LayerSynthRackModal` / `AdvancedEngineRackModal` restent des modals séparés tant que les binaires n'existent pas.
 
+## Audit / perf — fait cette session
+
+- Code mort retiré (~1,3 kl) : `AudioPlayerBottomBar.tsx` (composant entier),
+  `detectPitch`, `extractSliceBuffer`, `generateDefaultLibrary`,
+  `STREAMLINED_PRO_FOLDERS`/`mapTypeToStreamlinedFolder`.
+- `eslint .` : 0 erreur (172 warnings, réduits phase par phase).
+- Perf : enveloppes d'onde en cache ; effet de décodage du sample sélectionné
+  ne dépend plus de `samples` (se relançait à chaque mutation de la bibliothèque).
+
 ## Pistes ouvertes
 
-- Éditeur d'onde : copie d'une sous-région vers un nouveau sample (indépendant du rack) ; même éditeur sur `WaveformCanvas`.
-- `WaveformCanvas` (~1400 l) et `Op1KitBuilderModal` / `AutoCuratorModal` (>1 kLOC) à découper.
-- `listWorkFolderAudioFiles` lit tous les octets de chaque fichier audio d'un coup — lourd si `00_RECEPTION` contient des centaines de fichiers ; scan paresseux à faire.
+- **Éditeur d'onde v2** : copie d'une sous-région vers un nouveau sample (indépendant du rack) ; réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro) dans le rack avec le calque couleur des effets.
+- **Perf à creuser** : bundle principal 595 kB (splitter davantage) ; table de 442+ samples non virtualisée ; `listWorkFolderAudioFiles` lit tous les octets d'un coup — lourd si `00_RECEPTION` a des centaines de fichiers (scan paresseux + n'utiliser `listReceptionAudioFiles` que pour l'action "Analyser la réception").
+- `WaveformCanvas` (~1400 l), `Op1KitBuilderModal` / `AutoCuratorModal` (>1 kLOC) à découper.
 - Test réel OP-1 : figer `reverse: 19968`, `playmode 20480`, `drum_version: 2`.
 
 ## Règle produit
