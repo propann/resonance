@@ -42,12 +42,25 @@ import {
 } from '../services/spectrogramGenerator';
 import { AudioVisualizationGuideModal } from './AudioVisualizationGuideModal';
 import { openSampleModal } from '../stores/sampleTargetStore';
+import { useAudition } from '../stores/transportStore';
 import { getWaveformPalette, type WaveformColorTheme } from './waveform/themes';
+import {
+  MAX_ENVELOPE_GAIN,
+  envelopeGainAt,
+  renderRegionChannels,
+  sortGainPoints,
+  type GainPoint,
+} from './waveform/gainEnvelope';
+import { audioBufferToWavBlob } from '../services/audioConverter';
 
 export type { WaveformColorTheme };
 
 /** Shorter alt-drags are treated as a stray click, not a zone. */
 const MIN_ZONE_SEC = 0.01;
+/** Side of the square grab handles drawn at the top of the zone edges. */
+const ZONE_HANDLE_PX = 11;
+/** Click slop, in pixels, for grabbing a handle or an envelope point. */
+const GRAB_SLOP_PX = 7;
 
 interface WaveformCanvasProps {
   height?: number;
@@ -91,6 +104,20 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   const [zone, setZone] = useState<{ startSec: number; endSec: number } | null>(null);
   const zoneAnchorRef = useRef<number | null>(null);
   const [isCopyingZone, setIsCopyingZone] = useState<boolean>(false);
+  /** Which zone edge (or the whole band) the top handles are dragging. */
+  const [zoneDrag, setZoneDrag] = useState<'start' | 'end' | 'band' | null>(null);
+  const bandDragRef = useRef<{ grabSec: number; startSec: number; endSec: number } | null>(null);
+
+  // Automatic fades applied at the edges of a copied / auditioned zone.
+  const [fadeInMs, setFadeInMs] = useState<number>(5);
+  const [fadeOutMs, setFadeOutMs] = useState<number>(5);
+
+  // Volume envelope drawn over the wave: click the line to add a point, drag a
+  // point to set its level, Suppr to delete the selected one.
+  const [gainPoints, setGainPoints] = useState<GainPoint[]>([]);
+  const [isVolumeEditing, setIsVolumeEditing] = useState<boolean>(false);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
 
   // Visual Display Modes & Layers
   const [showWaveform, setShowWaveform] = useState<boolean>(true);
@@ -144,7 +171,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   }, []);
 
   const isCurrentSample = playbackState.sampleId === sample.id;
-  const currentTime = isCurrentSample ? playbackState.currentTime : 0;
+  // When a zone is auditioned we play a rendered cut, so the engine's clock
+  // starts at 0: shift it back onto the source timeline for the playhead.
+  const [playbackOffsetSec, setPlaybackOffsetSec] = useState<number>(0);
+  const currentTime = isCurrentSample ? playbackState.currentTime + playbackOffsetSec : 0;
   const isPlaying = isCurrentSample && playbackState.isPlaying;
 
   // Format time in 00:00.00s
@@ -606,6 +636,14 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       ctx.lineTo(zoneEndX, height);
       ctx.stroke();
 
+      // Square grab handles at the top of each edge, plus the band between
+      // them: drag an edge to resize, drag the band to slide the whole zone.
+      ctx.fillStyle = zoneDrag ? '#FFFFFF' : '#FFE600';
+      ctx.fillRect(zoneX - ZONE_HANDLE_PX / 2, 0, ZONE_HANDLE_PX, ZONE_HANDLE_PX);
+      ctx.fillRect(zoneEndX - ZONE_HANDLE_PX / 2, 0, ZONE_HANDLE_PX, ZONE_HANDLE_PX);
+      ctx.fillStyle = 'rgba(255, 230, 0, 0.45)';
+      ctx.fillRect(zoneX + ZONE_HANDLE_PX / 2, 2, Math.max(0, zoneWidth - ZONE_HANDLE_PX), 4);
+
       // Duration pill, kept inside the canvas at the zone's left edge.
       const label = `${(zone.endSec - zone.startSec).toFixed(3)} s`;
       ctx.font = 'bold 9px "JetBrains Mono", monospace';
@@ -619,6 +657,53 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       ctx.stroke();
       ctx.fillStyle = '#FFE600';
       ctx.fillText(label, pillX + 7, 35);
+      ctx.restore();
+    }
+
+    // 8c. LAYER: VOLUME ENVELOPE (shown once it has points, editable on demand)
+    if (isVolumeEditing || gainPoints.length > 0) {
+      const gainToY = (gain: number) => height * (1 - gain / MAX_ENVELOPE_GAIN);
+      const timeToX = (t: number) => ((t / duration) * width * zoomLevel) - scrollOffset;
+      ctx.save();
+
+      // Unity reference (0 dB)
+      ctx.strokeStyle = isVolumeEditing ? 'rgba(255, 122, 0, 0.35)' : 'rgba(255, 122, 0, 0.15)';
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(0, gainToY(1));
+      ctx.lineTo(width, gainToY(1));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // The envelope itself, held flat before the first and after the last point
+      ctx.strokeStyle = isVolumeEditing ? '#FF7A00' : 'rgba(255, 122, 0, 0.5)';
+      ctx.lineWidth = isVolumeEditing ? 2 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, gainToY(envelopeGainAt(gainPoints, 0)));
+      gainPoints.forEach((point) => ctx.lineTo(timeToX(point.timeSec), gainToY(point.gain)));
+      ctx.lineTo(width, gainToY(envelopeGainAt(gainPoints, duration)));
+      ctx.stroke();
+
+      gainPoints.forEach((point) => {
+        const px = timeToX(point.timeSec);
+        const py = gainToY(point.gain);
+        const isPointSelected = selectedPointId === point.id;
+        ctx.beginPath();
+        ctx.arc(px, py, isPointSelected ? 5.5 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = isPointSelected ? '#FFFFFF' : '#FF7A00';
+        ctx.fill();
+        ctx.strokeStyle = '#FF7A00';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        if (isPointSelected) {
+          const db = point.gain > 0 ? 20 * Math.log10(point.gain) : -Infinity;
+          const dbLabel = db === -Infinity ? '-∞ dB' : `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
+          ctx.font = 'bold 9px "JetBrains Mono", monospace';
+          ctx.fillStyle = '#FF7A00';
+          ctx.fillText(dbLabel, Math.min(width - 52, px + 8), Math.max(12, py - 8));
+        }
+      });
       ctx.restore();
     }
 
@@ -672,17 +757,40 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     isCurrentSample,
     currentTime,
     zone,
+    zoneDrag,
+    gainPoints,
+    isVolumeEditing,
+    selectedPointId,
   ]);
 
   useEffect(() => {
     drawWaveform();
   }, [drawWaveform]);
 
-  // A zone belongs to one sample's timeline.
+  // A zone and its envelope belong to one sample's timeline.
   useEffect(() => {
     zoneAnchorRef.current = null;
     setZone(null);
+    setZoneDrag(null);
+    setGainPoints([]);
+    setSelectedPointId(null);
+    setPlaybackOffsetSec(0);
   }, [sample.id]);
+
+  // Suppr / Retour arrière removes the selected envelope point.
+  useEffect(() => {
+    if (!selectedPointId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (e.code !== 'Delete' && e.code !== 'Backspace') return;
+      e.preventDefault();
+      setGainPoints((current) => current.filter((point) => point.id !== selectedPointId));
+      setSelectedPointId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedPointId]);
 
   // Convert client X to buffer time in seconds
   const getCanvasTimeFromEvent = (e: React.MouseEvent<HTMLCanvasElement>): number => {
@@ -704,10 +812,64 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     const duration = sample.audioBuffer.duration;
     const rect = canvas.getBoundingClientRect();
 
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+    const timeToX = (t: number) => ((t / duration) * rect.width * zoomLevel) - scrollOffset;
+
     // Alt-drag draws a free zone; it must win over every other gesture.
     if (e.altKey) {
       zoneAnchorRef.current = rawTime;
       setZone({ startSec: rawTime, endSec: rawTime });
+      return;
+    }
+
+    // Zone grab handles, along the top strip: the squares resize an edge, the
+    // bar between them slides the whole zone.
+    if (zone && localY <= ZONE_HANDLE_PX + 2) {
+      const startX = timeToX(zone.startSec);
+      const endX = timeToX(zone.endSec);
+      if (Math.abs(localX - startX) <= ZONE_HANDLE_PX) {
+        setZoneDrag('start');
+        return;
+      }
+      if (Math.abs(localX - endX) <= ZONE_HANDLE_PX) {
+        setZoneDrag('end');
+        return;
+      }
+      if (localX > startX && localX < endX) {
+        bandDragRef.current = { grabSec: rawTime, startSec: zone.startSec, endSec: zone.endSec };
+        setZoneDrag('band');
+        return;
+      }
+    }
+
+    // Volume envelope editing: grab a point, or click the line to create one.
+    if (isVolumeEditing) {
+      const gainToY = (gain: number) => rect.height * (1 - gain / MAX_ENVELOPE_GAIN);
+      const hit = gainPoints.find(
+        (point) =>
+          Math.hypot(localX - timeToX(point.timeSec), localY - gainToY(point.gain)) <= GRAB_SLOP_PX + 2
+      );
+      if (hit) {
+        setSelectedPointId(hit.id);
+        setDraggingPointId(hit.id);
+        return;
+      }
+      const lineY = gainToY(envelopeGainAt(gainPoints, rawTime));
+      if (Math.abs(localY - lineY) <= GRAB_SLOP_PX + 3) {
+        const point: GainPoint = {
+          id: `gp-${Date.now().toString(36)}-${Math.round(rawTime * 1000)}`,
+          timeSec: rawTime,
+          gain: envelopeGainAt(gainPoints, rawTime),
+        };
+        setGainPoints((current) => sortGainPoints([...current, point]));
+        setSelectedPointId(point.id);
+        setDraggingPointId(point.id);
+        return;
+      }
+      // A click away from the line just clears the selection, it never plays:
+      // in edit mode the wave is a canvas, not a transport.
+      setSelectedPointId(null);
       return;
     }
 
@@ -768,6 +930,37 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       return;
     }
 
+    if (zoneDrag) {
+      setZone((current) => {
+        if (!current) return current;
+        if (zoneDrag === 'start') {
+          return { ...current, startSec: Math.min(rawTime, current.endSec - MIN_ZONE_SEC) };
+        }
+        if (zoneDrag === 'end') {
+          return { ...current, endSec: Math.max(rawTime, current.startSec + MIN_ZONE_SEC) };
+        }
+        const grab = bandDragRef.current;
+        if (!grab) return current;
+        const span = grab.endSec - grab.startSec;
+        const shifted = Math.max(0, Math.min(duration - span, grab.startSec + (rawTime - grab.grabSec)));
+        return { startSec: shifted, endSec: shifted + span };
+      });
+      return;
+    }
+
+    if (draggingPointId) {
+      const localY = e.clientY - rect.top;
+      const gain = Math.max(0, Math.min(MAX_ENVELOPE_GAIN, MAX_ENVELOPE_GAIN * (1 - localY / rect.height)));
+      setGainPoints((current) =>
+        sortGainPoints(
+          current.map((point) =>
+            point.id === draggingPointId ? { ...point, timeSec: rawTime, gain } : point
+          )
+        )
+      );
+      return;
+    }
+
     // If currently dragging a slice marker:
     if (draggingSliceIndex !== null && sample.slices) {
       const snappedTime = findZeroCrossing(rawTime);
@@ -825,8 +1018,26 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     });
   };
 
+  /** Settle a handle drag: snap the moved edges the same way a fresh zone is. */
+  const finishHandleDrag = () => {
+    if (!zoneDrag) return;
+    const edge = zoneDrag;
+    setZoneDrag(null);
+    bandDragRef.current = null;
+    setZone((current) =>
+      current
+        ? {
+            startSec: edge === 'end' ? current.startSec : findZeroCrossing(current.startSec),
+            endSec: edge === 'start' ? current.endSec : findZeroCrossing(current.endSec),
+          }
+        : current
+    );
+  };
+
   const handleMouseUp = () => {
     finishZoneDrag();
+    finishHandleDrag();
+    if (draggingPointId) setDraggingPointId(null);
     if (draggingSliceIndex !== null) {
       setDraggingSliceIndex(null);
     }
@@ -836,6 +1047,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     setHoverTime(null);
     setActiveSliceHover(null);
     finishZoneDrag();
+    finishHandleDrag();
+    if (draggingPointId) setDraggingPointId(null);
     if (draggingSliceIndex !== null) {
       setDraggingSliceIndex(null);
     }
@@ -914,12 +1127,40 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     }
   };
 
+  /**
+   * The region as it is heard and exported: envelope baked in, edges faded.
+   * Returns null when nothing has to be processed, so plain playback of the
+   * whole sample keeps using the source buffer.
+   */
+  const renderProcessedRegion = useCallback(
+    (startSec: number, endSec: number): AudioBuffer | null => {
+      const buffer = sample.audioBuffer;
+      if (!buffer) return null;
+      const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) =>
+        buffer.getChannelData(c)
+      );
+      const rendered = renderRegionChannels(channels, buffer.sampleRate, {
+        startSec,
+        endSec,
+        points: gainPoints,
+        fadeInMs,
+        fadeOutMs,
+      });
+      const out = audioEngine
+        .getAudioContext()
+        .createBuffer(buffer.numberOfChannels, rendered[0].length, buffer.sampleRate);
+      rendered.forEach((data, channel) => out.copyToChannel(data, channel));
+      return out;
+    },
+    [sample.audioBuffer, gainPoints, fadeInMs, fadeOutMs]
+  );
+
   const handlePlayZone = () => {
     if (!sample.audioBuffer || !zone) return;
-    audioEngine.play(sample.audioBuffer, sample.id, {
-      startSec: zone.startSec,
-      endSec: zone.endSec,
-    });
+    const processed = renderProcessedRegion(zone.startSec, zone.endSec);
+    if (!processed) return;
+    setPlaybackOffsetSec(zone.startSec);
+    audioEngine.play(processed, sample.id);
   };
 
   /** Copy the zone out as a brand-new library sample, leaving the source untouched. */
@@ -928,14 +1169,19 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     setIsCopyingZone(true);
     try {
       const base = sample.name.replace(/\.[^/.]+$/, '');
-      const [cut] = await extractSlicesToWavBlobs(
-        sample.audioBuffer,
-        [{ startSec: zone.startSec, endSec: zone.endSec, label: 'Zone', index: 1 }],
-        base
-      );
+      const processed = renderProcessedRegion(zone.startSec, zone.endSec);
+      if (!processed) return;
+      const blob = audioBufferToWavBlob(processed);
       const startMs = Math.round(zone.startSec * 1000);
       const endMs = Math.round(zone.endSec * 1000);
-      onAddExtractedSamples([{ ...cut, fileName: `${base}_ZONE_${startMs}-${endMs}ms.wav` }]);
+      onAddExtractedSamples([
+        {
+          fileName: `${base}_ZONE_${startMs}-${endMs}ms.wav`,
+          blob,
+          audioBuffer: processed,
+          duration: processed.duration,
+        },
+      ]);
       setExtractSuccessMsg(`Zone de ${(zone.endSec - zone.startSec).toFixed(2)} s copiée dans un nouveau sample.`);
       setTimeout(() => setExtractSuccessMsg(null), 3500);
     } catch (err) {
@@ -974,17 +1220,38 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * Play/stop the sample. A drawn zone wins over a selected slice: what you see
+   * highlighted is what you hear, from the button and from the space bar alike.
+   */
   const handlePlayToggle = () => {
     if (!sample.audioBuffer) return;
     if (isPlaying) {
       audioEngine.pause();
-    } else {
-      audioEngine.play(sample.audioBuffer, sample.id, {
-        startSec: selectedSlice ? selectedSlice.startSec : 0,
-        endSec: selectedSlice ? selectedSlice.endSec : sample.audioBuffer.duration,
-      });
+      return;
     }
+    if (zone) {
+      handlePlayZone();
+      return;
+    }
+    // Envelope set but no zone: audition the whole sample through it.
+    if (gainPoints.length > 0) {
+      const processed = renderProcessedRegion(0, sample.audioBuffer.duration);
+      if (processed) {
+        setPlaybackOffsetSec(0);
+        audioEngine.play(processed, sample.id);
+        return;
+      }
+    }
+    setPlaybackOffsetSec(0);
+    audioEngine.play(sample.audioBuffer, sample.id, {
+      startSec: selectedSlice ? selectedSlice.startSec : 0,
+      endSec: selectedSlice ? selectedSlice.endSec : sample.audioBuffer.duration,
+    });
   };
+
+  // The space bar drives this view's transport while the library is on screen.
+  useAudition(zone ? 'Zone sélectionnée' : 'Sample', handlePlayToggle);
 
   const handleZoom = (delta: number) => {
     setZoomLevel((prev) => Math.max(1, Math.min(30, prev + delta)));
@@ -1174,6 +1441,37 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
             <Magnet className="w-3 h-3" />
             <span className="hidden sm:inline">SNAP</span>
           </button>
+
+          {/* Volume envelope editing */}
+          <button
+            onClick={() => {
+              setIsVolumeEditing((current) => !current);
+              setSelectedPointId(null);
+            }}
+            className={`px-2 py-1 text-[9px] font-mono flex items-center gap-1 border transition ${
+              isVolumeEditing
+                ? 'bg-[#FF7A00]/20 text-[#FF7A00] border-[#FF7A00] font-bold'
+                : 'bg-[#141420] text-[#8E8E98] border-[#242436] hover:text-white'
+            }`}
+            title="Ligne de volume : cliquer la ligne crée un point, glisser le règle, Suppr efface le point sélectionné"
+          >
+            <Volume2 className="w-3 h-3" />
+            <span className="hidden sm:inline">VOLUME</span>
+          </button>
+
+          {gainPoints.length > 0 && (
+            <button
+              onClick={() => {
+                setGainPoints([]);
+                setSelectedPointId(null);
+              }}
+              className="px-2 py-1 text-[9px] font-mono flex items-center gap-1 border border-[#242436] bg-[#141420] text-[#8E8E98] transition hover:text-white"
+              title="Remettre la ligne de volume à plat"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>{gainPoints.length} PT</span>
+            </button>
+          )}
         </div>
 
         {/* Right: Slicing Actions & Extraction Tools */}
@@ -1187,10 +1485,38 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
               <button
                 onClick={handlePlayZone}
                 className="p-0.5 text-[#FFE600] hover:bg-[#FFE600]/20 transition"
-                title="Écouter uniquement la zone sélectionnée"
+                title="Écouter uniquement la zone sélectionnée (barre espace)"
               >
                 <Play className="w-3 h-3 fill-current" />
               </button>
+              <label
+                className="flex items-center gap-0.5 text-[9px] font-mono text-[#FFE600]"
+                title="Fondu d'ouverture appliqué à la zone (millisecondes)"
+              >
+                <span>FD IN</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={fadeInMs}
+                  onChange={(e) => setFadeInMs(Math.max(0, Number(e.target.value) || 0))}
+                  className="w-10 border border-[#FFE600]/40 bg-[#0F0F14] px-1 py-0.5 text-[9px] text-[#FFE600]"
+                />
+              </label>
+              <label
+                className="flex items-center gap-0.5 text-[9px] font-mono text-[#FFE600]"
+                title="Fondu de fermeture appliqué à la zone (millisecondes)"
+              >
+                <span>OUT</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  value={fadeOutMs}
+                  onChange={(e) => setFadeOutMs(Math.max(0, Number(e.target.value) || 0))}
+                  className="w-10 border border-[#FFE600]/40 bg-[#0F0F14] px-1 py-0.5 text-[9px] text-[#FFE600]"
+                />
+              </label>
               {onAddExtractedSamples && (
                 <button
                   onClick={handleCopyZoneToNewSample}
@@ -1437,7 +1763,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
           {/* Hint Overlay */}
           <div className="absolute top-1.5 right-2 bg-[#000000]/80 px-2 py-0.5 border border-[#222232] text-[8px] font-mono text-[#8E8E98] pointer-events-none rounded">
-            CLIC-GLISSER BALISES P1..Pn • DOUBLE-CLIC : DÉCOUPER • CLIC DROIT : SUPPRIMER • ALT-GLISSER : ZONE
+            ALT-GLISSER : ZONE • CARRÉS DU HAUT : DÉPLACER LA ZONE • VOLUME : CLIC = POINT, SUPPR = EFFACER • DOUBLE-CLIC : DÉCOUPER
           </div>
         </div>
 

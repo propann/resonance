@@ -10,6 +10,7 @@ import { listModuleDefs } from '../rack/registry';
 import { registerBuiltinModules } from '../rack/modules';
 import { RackModulePanel } from '../rack/RackModulePanel';
 import { RACK_TEMPLATES } from '../rack/templates';
+import { useAudition } from '../stores/transportStore';
 import { useRackStore } from '../stores/rackStore';
 import type { ParamValues, RackState } from '../rack/types';
 import { RackWaveformStrip, type WaveRegion } from './waveform/RackWaveformStrip';
@@ -69,7 +70,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   const syncChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [loop, setLoop] = useState(true);
+  // Off by default: nothing in the app starts looping on its own.
+  const [loop, setLoop] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [jsonText, setJsonText] = useState('');
 
@@ -123,6 +125,13 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     srcRef.current = src;
     setIsPlaying(true);
   }, [sample, loop, stopAudition]);
+
+  // Space auditions the rack while this window is open.
+  useAudition(
+    'Rack modulaire',
+    () => (isPlaying ? stopAudition() : startAudition()),
+    isOpen
+  );
 
   // Create / dispose the live Rack while the modal is open. It is left empty
   // here — the sync effect below does the initial build.

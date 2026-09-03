@@ -7,6 +7,7 @@ import { useWorkFolder } from './hooks/useWorkFolder';
 import { useUiStore } from './stores/uiStore';
 import { useLibraryStore } from './stores/libraryStore';
 import { useSampleTargetStore, openSampleModal } from './stores/sampleTargetStore';
+import { activeAudition } from './stores/transportStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
 import { Header } from './components/Header';
@@ -345,6 +346,14 @@ export default function App() {
 
   // Master Playback Transport Handlers (Available globally across all screens)
   const handleTogglePlayPause = useCallback(() => {
+    // The page you are on owns the space bar: the waveform's zone, a modal's
+    // audition… Only with nothing registered does it fall back to the library
+    // selection, so one press never starts two sounds.
+    const audition = activeAudition();
+    if (audition) {
+      audition.toggle();
+      return;
+    }
     const st = audioEngine.getState();
     if (st.isPlaying) {
       audioEngine.pause();

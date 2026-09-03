@@ -19,6 +19,7 @@ import {
 import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
+import { useAudition } from '../stores/transportStore';
 import {
   analyzeFullDspReport,
   DetailedDspReport,
@@ -187,16 +188,21 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
     }
   }, [report]);
 
-  if (!isOpen || !sample) return null;
-
-  const handlePlayToggle = () => {
-    if (!sample.audioBuffer) return;
+  // Space auditions the analysed sample while this window is open. Declared
+  // before the early return so the hook order stays stable.
+  const playToggle = () => {
+    if (!sample?.audioBuffer) return;
     if (isPlaying) {
       audioEngine.pause();
     } else {
       audioEngine.play(sample.audioBuffer, sample.id);
     }
   };
+  useAudition('DSP Lab', playToggle, isOpen && !!sample);
+
+  if (!isOpen || !sample) return null;
+
+  const handlePlayToggle = playToggle;
 
   // DSP Fix: Remove DC Offset
   const handleFixDcOffset = () => {

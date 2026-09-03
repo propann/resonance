@@ -4,6 +4,7 @@ import { Modal } from './Modal';
 import { SampleItem, SliceRegion, SampleType } from '../types/sample';
 import { detectAutoSlices } from '../services/audioAnalyzer';
 import { audioEngine } from '../services/audioEngine';
+import { useAudition } from '../stores/transportStore';
 import { exportSlicesZip, triggerFileDownload, audioBufferToWavBlob } from '../services/audioConverter';
 
 interface AutoSlicerModalProps {
@@ -81,7 +82,11 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
     }
   };
 
-  // Keyboard trigger MPC pads (1-8, Q-I) and Spacebar for full playback
+  // Space plays the whole sample; it goes through the shared transport so the
+  // app-level shortcut and this window never fire together.
+  useAudition('Découpe', handleTogglePlayFull, isOpen);
+
+  // Keyboard trigger MPC pads (1-8, Q-I)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -96,16 +101,6 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
         target?.isContentEditable;
 
       if (isTextInput) return;
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (target && typeof target.blur === 'function') {
-          target.blur();
-        }
-        handleTogglePlayFull();
-        return;
-      }
 
       const keyUpper = e.key.toUpperCase();
       const padIdx = PAD_KEYS.indexOf(keyUpper);

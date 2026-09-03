@@ -23,6 +23,7 @@ import {
   Wand2,
   Repeat,
 } from 'lucide-react';
+import { useAuditionLabel } from '../stores/transportStore';
 import { audioEngine } from '../services/audioEngine';
 
 interface HeaderProps {
@@ -71,6 +72,8 @@ export const Header: React.FC<HeaderProps> = ({
   samplesCount,
 }) => {
   const openModal = useUiStore((state) => state.openModal);
+  // What the space bar would play right now (the page's own audition).
+  const auditionLabel = useAuditionLabel();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [peakMeterLevel, setPeakMeterLevel] = useState<number>(0);
@@ -138,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-[#FF3366] text-white border border-[#FF6688] shadow-sm animate-pulse'
                 : 'bg-[#00F0FF] text-black border border-[#00C8D6] hover:bg-[#38BDF8]'
             }`}
-            title="Lecture / Pause (Barre d'espace)"
+            title={`Lecture / Pause (barre d'espace) — ${auditionLabel ?? 'sample sélectionné'}`}
           >
             {isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
             <span className="hidden md:inline">{isPlaying ? 'PAUSE' : 'PLAY'}</span>

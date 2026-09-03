@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { SampleItem, SampleType } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
+import { useAudition } from '../stores/transportStore';
 import {
   Op1DrumSlice,
   OP1_KEY_NAMES,
@@ -272,7 +273,8 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
     ctx.stroke();
   }, [compositeBuffer, slices, selectedPadIndex, activePlayingPad, hoveredDropTargetPad]);
 
-  // Keyboard shortcut listener for live finger-drumming
+  // Keyboard shortcut listener for live finger-drumming (Space goes through
+  // the shared transport, registered below next to the kit playback toggle)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -285,9 +287,6 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
       if (padIdx >= 0 && padIdx < 24) {
         e.preventDefault();
         triggerPad(padIdx);
-      } else if (e.code === 'Space') {
-        e.preventDefault();
-        togglePlayFullKit();
       }
     };
 
@@ -342,6 +341,9 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
       animationFrameRef.current = requestAnimationFrame(updatePlayhead);
     }
   };
+
+  // Space plays / stops the full kit while this window is open.
+  useAudition('Studio OP-1', togglePlayFullKit, isOpen);
 
   // Assign a sample directly into a target pad slot
   const assignSampleToPad = (sample: SampleItem, targetPadIndex: number) => {

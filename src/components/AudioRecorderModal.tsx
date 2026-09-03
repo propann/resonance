@@ -4,6 +4,7 @@ import { Mic, Square, Play, Pause, Check } from 'lucide-react';
 import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
+import { useAudition } from '../stores/transportStore';
 import {
   calculateAudioMetrics,
   classifySample,
@@ -159,6 +160,10 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       setTimeout(() => setIsPlaying(false), recordedBuffer.duration * 1000);
     }
   };
+
+  // Space previews the take; while recording it does nothing, so a stray press
+  // cannot cut a take short.
+  useAudition('Enregistrement', handlePlayPreview, isOpen && !isRecording);
 
   const handleSaveToLibrary = () => {
     if (!recordedBuffer) return;
