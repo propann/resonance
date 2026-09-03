@@ -59,6 +59,8 @@ export type { WaveformColorTheme };
 const MIN_ZONE_SEC = 0.01;
 /** Side of the square grab handles drawn at the top of the zone edges. */
 const ZONE_HANDLE_PX = 11;
+/** Side of the square grab handle drawn at the top of the playhead. */
+const PLAYHEAD_HANDLE_PX = 11;
 /** Click slop, in pixels, for grabbing a handle or an envelope point. */
 const GRAB_SLOP_PX = 7;
 
@@ -107,6 +109,11 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   /** Which zone edge (or the whole band) the top handles are dragging. */
   const [zoneDrag, setZoneDrag] = useState<'start' | 'end' | 'band' | null>(null);
   const bandDragRef = useRef<{ grabSec: number; startSec: number; endSec: number } | null>(null);
+
+  // Playhead: its own square handle at the top, and the position the user
+  // parked it at (playback and the space bar start from there).
+  const [cursorSec, setCursorSec] = useState<number | null>(null);
+  const [scrubSec, setScrubSec] = useState<number | null>(null);
 
   // Automatic fades applied at the edges of a copied / auditioned zone.
   const [fadeInMs, setFadeInMs] = useState<number>(5);
@@ -707,9 +714,12 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       ctx.restore();
     }
 
-    // 9. Active Playhead Neon Cursor
-    if (isCurrentSample) {
-      const playheadX = ((currentTime / duration) * width * zoomLevel) - scrollOffset;
+    // 9. Active Playhead Neon Cursor — while scrubbing it follows the hand,
+    // otherwise the engine's clock, and when nothing plays it stays parked
+    // where the user last dropped it.
+    const headSec = scrubSec ?? (isCurrentSample ? currentTime : cursorSec);
+    if (headSec !== null) {
+      const playheadX = ((headSec / duration) * width * zoomLevel) - scrollOffset;
       if (playheadX >= 0 && playheadX <= width) {
         ctx.save();
         ctx.shadowColor = '#00F0FF';
@@ -717,15 +727,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(playheadX - 1, 0, 2, height);
 
-        // Top & bottom glowing diamonds
+        // Square grab handle on top, glowing diamond at the bottom
+        ctx.fillStyle = scrubSec !== null ? '#FFFFFF' : '#00F0FF';
+        ctx.fillRect(playheadX - PLAYHEAD_HANDLE_PX / 2, 0, PLAYHEAD_HANDLE_PX, PLAYHEAD_HANDLE_PX);
         ctx.fillStyle = '#00F0FF';
-        ctx.beginPath();
-        ctx.moveTo(playheadX, 8);
-        ctx.lineTo(playheadX - 5, 0);
-        ctx.lineTo(playheadX + 5, 0);
-        ctx.closePath();
-        ctx.fill();
-
         ctx.beginPath();
         ctx.moveTo(playheadX, height - 8);
         ctx.lineTo(playheadX - 5, height);
@@ -758,6 +763,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     currentTime,
     zone,
     zoneDrag,
+    cursorSec,
+    scrubSec,
     gainPoints,
     isVolumeEditing,
     selectedPointId,
@@ -775,6 +782,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     setGainPoints([]);
     setSelectedPointId(null);
     setPlaybackOffsetSec(0);
+    setCursorSec(null);
+    setScrubSec(null);
   }, [sample.id]);
 
   // Suppr / Retour arrière removes the selected envelope point.
@@ -836,9 +845,22 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
         setZoneDrag('end');
         return;
       }
-      if (localX > startX && localX < endX) {
+      // The playhead handle sits in the same strip: let it be grabbed inside
+      // the zone rather than sliding the band out from under it.
+      const headSec = isCurrentSample ? currentTime : cursorSec;
+      const overHead = headSec !== null && Math.abs(localX - timeToX(headSec)) <= PLAYHEAD_HANDLE_PX;
+      if (!overHead && localX > startX && localX < endX) {
         bandDragRef.current = { grabSec: rawTime, startSec: zone.startSec, endSec: zone.endSec };
         setZoneDrag('band');
+        return;
+      }
+    }
+
+    // Playhead grab handle: drag it along the top strip to park the head.
+    if (localY <= PLAYHEAD_HANDLE_PX + 2) {
+      const headSec = isCurrentSample ? currentTime : cursorSec;
+      if (headSec === null || Math.abs(localX - timeToX(headSec)) <= PLAYHEAD_HANDLE_PX) {
+        setScrubSec(rawTime);
         return;
       }
     }
@@ -904,6 +926,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     }
 
     if (sample.audioBuffer) {
+      setCursorSec(rawTime);
+      setPlaybackOffsetSec(0);
       audioEngine.play(sample.audioBuffer, sample.id, {
         startSec: rawTime,
         endSec: clickedSlice ? clickedSlice.endSec : duration,
@@ -927,6 +951,11 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
         startSec: Math.min(zoneAnchor, rawTime),
         endSec: Math.max(zoneAnchor, rawTime),
       });
+      return;
+    }
+
+    if (scrubSec !== null) {
+      setScrubSec(rawTime);
       return;
     }
 
@@ -1034,9 +1063,19 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     );
   };
 
+  /** Drop the playhead where it was dragged; playback follows it live. */
+  const finishScrub = () => {
+    if (scrubSec === null) return;
+    const target = scrubSec;
+    setScrubSec(null);
+    setCursorSec(target);
+    if (isCurrentSample) audioEngine.seek(target);
+  };
+
   const handleMouseUp = () => {
     finishZoneDrag();
     finishHandleDrag();
+    finishScrub();
     if (draggingPointId) setDraggingPointId(null);
     if (draggingSliceIndex !== null) {
       setDraggingSliceIndex(null);
@@ -1048,6 +1087,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     setActiveSliceHover(null);
     finishZoneDrag();
     finishHandleDrag();
+    finishScrub();
     if (draggingPointId) setDraggingPointId(null);
     if (draggingSliceIndex !== null) {
       setDraggingSliceIndex(null);
@@ -1245,7 +1285,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     }
     setPlaybackOffsetSec(0);
     audioEngine.play(sample.audioBuffer, sample.id, {
-      startSec: selectedSlice ? selectedSlice.startSec : 0,
+      startSec: selectedSlice ? selectedSlice.startSec : cursorSec ?? 0,
       endSec: selectedSlice ? selectedSlice.endSec : sample.audioBuffer.duration,
     });
   };
@@ -1732,7 +1772,9 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
         <div
           style={{ height: height ? `${height}px` : undefined }}
           className={`relative flex-1 ${height ? '' : 'h-44'} overflow-hidden ${
-            isHoveringMarker || draggingSliceIndex !== null ? 'cursor-ew-resize' : 'cursor-crosshair'
+            isHoveringMarker || draggingSliceIndex !== null || scrubSec !== null || zoneDrag
+              ? 'cursor-ew-resize'
+              : 'cursor-crosshair'
           }`}
         >
           <canvas
@@ -1763,7 +1805,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
           {/* Hint Overlay */}
           <div className="absolute top-1.5 right-2 bg-[#000000]/80 px-2 py-0.5 border border-[#222232] text-[8px] font-mono text-[#8E8E98] pointer-events-none rounded">
-            ALT-GLISSER : ZONE • CARRÉS DU HAUT : DÉPLACER LA ZONE • VOLUME : CLIC = POINT, SUPPR = EFFACER • DOUBLE-CLIC : DÉCOUPER
+            ALT-GLISSER : ZONE • CARRÉS DU HAUT : TÊTE DE LECTURE & ZONE • VOLUME : CLIC = POINT, SUPPR = EFFACER • DOUBLE-CLIC : DÉCOUPER
           </div>
         </div>
 
