@@ -94,16 +94,34 @@ export async function chooseLibraryRoot(): Promise<LibraryRoot> {
 
 export async function restoreLibraryRoot(): Promise<LibraryRoot | null> {
   if (!isDesktop()) return null;
+  let saved: unknown;
   try {
-    const saved = await desktopFS().getSetting('libraryRoot');
-    if (typeof saved !== 'string' || !saved) return null;
-    const adopted = await desktopFS().setRoot(saved);
-    if (!adopted) return null;
-    await ensureLibraryStructure();
-    return adopted;
-  } catch {
+    saved = await desktopFS().getSetting('libraryRoot');
+  } catch (error) {
+    console.error('[library] could not read the saved work folder', error);
     return null;
   }
+  if (typeof saved !== 'string' || !saved) return null;
+
+  let adopted: LibraryRoot | null = null;
+  try {
+    adopted = await desktopFS().setRoot(saved);
+  } catch (error) {
+    console.error('[library] saved work folder could not be re-adopted:', saved, error);
+    return null;
+  }
+  if (!adopted) {
+    console.warn('[library] saved work folder no longer exists:', saved);
+    return null;
+  }
+
+  // Best-effort — a read-only or partially-populated folder should still open.
+  try {
+    await ensureLibraryStructure();
+  } catch (error) {
+    console.warn('[library] could not ensure the folder structure (read-only?)', error);
+  }
+  return adopted;
 }
 
 /** Re-point the main process at a root the caller already has (e.g. from the curator). */

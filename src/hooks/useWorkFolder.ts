@@ -172,21 +172,26 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     setLibraryName(folderDisplayName(root));
   }, []);
 
-  // Restore a previously granted work folder on mount.
+  // Restore a previously connected work folder on mount, so the user does not
+  // have to re-pick it every launch.
   useEffect(() => {
-    void restoreLibraryRoot().then((root) => {
-      if (!root) return;
-      setLibraryRoot(root);
-      setLibraryName(folderDisplayName(root));
-      setWorkFolderStatus('connected');
-      void scanManagedLibrary(root).then((scan) => {
-        setDiskSampleCount(scan.totalSamples);
-        setDiskFolderCounts(scan.folderCounts);
-      });
-      void readLibraryManifest(root).then((entries) =>
-        optionsRef.current.onManifestSamples(entries)
-      );
-    });
+    void restoreLibraryRoot()
+      .then((root) => {
+        if (!root) return;
+        setLibraryRoot(root);
+        setLibraryName(folderDisplayName(root));
+        setWorkFolderStatus('connected');
+        void scanManagedLibrary(root)
+          .then((scan) => {
+            setDiskSampleCount(scan.totalSamples);
+            setDiskFolderCounts(scan.folderCounts);
+          })
+          .catch((error) => console.error('[library] restore: scan failed', error));
+        void readLibraryManifest(root)
+          .then((entries) => optionsRef.current.onManifestSamples(entries))
+          .catch((error) => console.error('[library] restore: manifest read failed', error));
+      })
+      .catch((error) => console.error('[library] restore failed', error));
   }, []);
 
   // Background reception scan: pick up new source files while idle.
