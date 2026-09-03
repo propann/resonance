@@ -16,7 +16,10 @@ npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build   # doit tout passer (0 erreur, 67 tests)
 ```
 
-- `main` @ `c4b4ef2` (2026-09-03 nuit). Working tree propre, **non poussé**.
+- `main` @ `3a38c2f` (2026-09-03 nuit), poussé. Build installé depuis
+  `C:\Users\azoth\resonance-release\Resonance-1.0.0-x64.exe`
+  (electron-builder avec `-c.directories.output` hors du dépôt : dans le dépôt,
+  le rename de `release\win-unpacked.tmp` échoue en EPERM).
 - App installée : `%LOCALAPPDATA%\Programs\Resonance\`, connectée à `D:\Son`
   (442 samples). Config : `%APPDATA%\Resonance\resonance-config.json`.
 - Rebuild + réinstall :
@@ -97,12 +100,13 @@ Compiler Plaits / Rings / Clouds / Dexed en `AudioWorklet` + WASM.
 | `300aefd` | **Bundle 595 → 419 kB** (gzip 171 → 126). Onze modales passent en `React.lazy` derrière `LazyModal`, montées seulement quand elles sont ouvertes. Restent chargées d'office : `AutoCuratorModal` (transfert de fond `autoTransfer && !isOpen`) et `AudioRecorderModal` (coupure du micro sur `isOpen` → false). |
 | `6e23e57` | **Zone libre** dans l'éditeur d'onde : ALT-glisser dessine une sous-région, la puce jaune l'écoute ou la copie en nouveau sample (`<base>_ZONE_<début>-<fin>ms`), source intacte. |
 | `c4b4ef2` | **Poignées + fondus + ligne de volume + barre espace unique** (voir ci-dessous). |
+| `3a38c2f` | **Poignée sur la tête de lecture** : carré à saisir en haut du playhead ; le glisser la pose où on veut (seek live si ça joue), et la lecture / barre espace repart de là. Dans une zone, la poignée passe avant le glissement de bande. |
 
 ### Éditeur d'onde v2 (`c4b4ef2`)
 
-- **Poignées carrées** en haut des deux bords de zone : glisser un bord
-  redimensionne, glisser la barre centrale déplace toute la zone ; ré-aimantation
-  aux passages à zéro au relâchement.
+- **Poignées carrées** en haut : les deux bords de zone (glisser un bord
+  redimensionne, la barre centrale déplace toute la zone, ré-aimantation aux
+  passages à zéro au relâchement) et la **tête de lecture** (`3a38c2f`).
 - **Fondus automatiques** FD IN / OUT (5 ms par défaut, réglables dans la puce)
   appliqués à l'écoute **et** à la copie — plus de clic en début/fin de coupe.
 - **Ligne de volume** : bouton `VOLUME` → cliquer la ligne crée un point, le
