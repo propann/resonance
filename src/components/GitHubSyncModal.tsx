@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Github,
   CheckCircle2,
@@ -97,7 +97,14 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     };
   }, []);
 
+  // Persist the token only after the user has actually touched it — never on
+  // the initial empty mount (that write raced config persistence on startup).
+  const tokenTouched = useRef(false);
   useEffect(() => {
+    if (!tokenTouched.current) {
+      if (!config.token) return; // still empty / not yet loaded — nothing to store
+      tokenTouched.current = true;
+    }
     storePat(config.token || '');
   }, [config.token]);
 

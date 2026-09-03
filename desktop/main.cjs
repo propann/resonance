@@ -15,16 +15,47 @@ let watcher = null;
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'resonance-config.json');
 
+/**
+ * Read the config. A missing file is a normal first run ({}). A parse/read
+ * failure falls back to the last-known-good backup so a transient error never
+ * makes a caller think the config is empty (which a later merge-write would
+ * then persist, wiping libraryRoot / secrets).
+ */
 async function readConfig() {
   try {
     return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8'));
-  } catch {
-    return {};
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return {};
+    try {
+      return JSON.parse(await fs.readFile(CONFIG_PATH() + '.bak', 'utf8'));
+    } catch {
+      console.error('[config] unreadable and no usable backup — starting empty', err);
+      return {};
+    }
   }
 }
-async function writeConfig(patch) {
-  const current = await readConfig();
-  await fs.writeFile(CONFIG_PATH(), JSON.stringify({ ...current, ...patch }, null, 2), 'utf8');
+
+// All writes go through one queue so concurrent secret:set / fs:setRoot calls
+// can't read-modify-write over each other.
+let configWriteQueue = Promise.resolve();
+function writeConfig(patch) {
+  configWriteQueue = configWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      const p = CONFIG_PATH();
+      const current = await readConfig();
+      const next = JSON.stringify({ ...current, ...patch }, null, 2);
+      // keep a backup of the previous good file, then swap atomically
+      try {
+        await fs.copyFile(p, p + '.bak');
+      } catch {
+        /* no prior file yet */
+      }
+      await fs.writeFile(p + '.tmp', next, 'utf8');
+      await fs.rename(p + '.tmp', p);
+    })
+    .catch((err) => console.error('[config] write failed', err));
+  return configWriteQueue;
 }
 
 /** Resolve a path relative to the chosen root and refuse anything outside it. */
