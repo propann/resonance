@@ -170,9 +170,13 @@ export const RackWaveformStrip: React.FC<RackWaveformStripProps> = ({
 
   const onPointerDown = (which: 'start' | 'end' | 'body') => (e: React.PointerEvent) => {
     e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     dragRef.current = which;
     dragOriginRef.current = { x: fracFromEvent(e.clientX), start: region.start, end: region.end };
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* synthetic / already-released pointer */
+    }
   };
 
   const onPointerMove = (e: React.PointerEvent) => {

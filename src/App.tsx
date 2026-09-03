@@ -53,6 +53,8 @@ import {
   writeUniqueFile,
   writeLibraryManifest,
   readLibraryAudioFile,
+  getLastSampleId,
+  setLastSampleId,
   type WorkFolderAudioFile,
 } from './services/localLibrary';
 
@@ -302,6 +304,30 @@ export default function App() {
   const selectedSample = useMemo(() => {
     return samples.find((s) => s.id === selectedSampleId) || filteredSamples[0] || null;
   }, [samples, selectedSampleId, filteredSamples]);
+
+  // A sample-scoped modal stores a snapshot of its target sample; re-resolve it
+  // against the live library so a later disk-decode (audioBuffer) reaches the modal.
+  const liveSample = useCallback(
+    (snap: SampleItem | null): SampleItem | null =>
+      snap ? samples.find((s) => s.id === snap.id) ?? snap : null,
+    [samples]
+  );
+
+  // Restore the last-worked sample once the library is populated, and persist
+  // the current selection so a fresh launch lands on it.
+  const restoredSampleRef = useRef(false);
+  useEffect(() => {
+    if (restoredSampleRef.current || samples.length === 0 || selectedSampleId) return;
+    restoredSampleRef.current = true;
+    void getLastSampleId().then((id) => {
+      if (id && samples.some((s) => s.id === id)) setSelectedSampleId(id);
+    });
+  }, [samples, selectedSampleId, setSelectedSampleId]);
+  useEffect(() => {
+    if (!selectedSampleId) return;
+    const t = setTimeout(() => setLastSampleId(selectedSampleId), 600);
+    return () => clearTimeout(t);
+  }, [selectedSampleId]);
 
   // Master Playback Transport Handlers (Available globally across all screens)
   const handleTogglePlayPause = useCallback(() => {
@@ -974,7 +1000,7 @@ export default function App() {
       {/* Slicer Modal */}
       {slicerSample && (
         <AutoSlicerModal
-          sample={slicerSample}
+          sample={liveSample(slicerSample)!}
           isOpen={!!slicerSample}
           onClose={() => setSampleTarget('slicer', null)}
           onUpdateSampleSlices={handleUpdateSampleSlices}
@@ -1040,7 +1066,7 @@ export default function App() {
           closeModal('dspModal');
           setSampleTarget('dsp', null);
         }}
-        sample={sampleForDsp || selectedSample}
+        sample={liveSample(sampleForDsp) || selectedSample}
         onUpdateSample={handleUpdateSampleFromDsp}
       />
 
@@ -1055,7 +1081,7 @@ export default function App() {
             closeModal('rackHost');
             setSampleTarget('rack', null);
           }}
-          sample={sampleForRack || selectedSample}
+          sample={liveSample(sampleForRack) || selectedSample}
           onSaveAsNewSample={handleSaveProcessedAsNew}
         />
       </Suspense>
@@ -1067,7 +1093,7 @@ export default function App() {
           closeModal('loudnessModal');
           setSampleTarget('loudness', null);
         }}
-        sample={sampleForLoudness || selectedSample}
+        sample={liveSample(sampleForLoudness) || selectedSample}
         allSelectedSamples={
           selectedSampleIds.length > 0
             ? samples.filter((s) => selectedSampleIds.includes(s.id))

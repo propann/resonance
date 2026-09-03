@@ -130,6 +130,22 @@ export async function adoptLibraryRoot(root: LibraryRoot): Promise<LibraryRoot |
   return desktopFS().setRoot(root);
 }
 
+/** The sample id the user last worked on — restored on the next launch. */
+export async function getLastSampleId(): Promise<string | null> {
+  if (!isDesktop()) return null;
+  try {
+    const v = await desktopFS().getSetting('lastSampleId');
+    return typeof v === 'string' && v ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLastSampleId(id: string | null): void {
+  if (!isDesktop()) return;
+  void desktopFS().setSetting('lastSampleId', id).catch(() => undefined);
+}
+
 /**
  * Watch the working folder for changes. Returns a cleanup function.
  * No-op in the browser build.
