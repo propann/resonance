@@ -283,7 +283,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
         stopAudition();
         onClose();
       }}
-      size="xl"
+      size="full"
       accent="#A855F7"
       icon={<Sliders className="h-5 w-5" />}
       title="Rack Modulaire"
@@ -322,10 +322,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
       }
     >
       <>
-        <aside className="w-56 shrink-0 overflow-y-auto border-r border-[#202034] bg-[#0A0A16] p-3">
-            <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#A855F7]">
-              Templates
-            </div>
+        <aside className="flex w-52 min-h-0 shrink-0 flex-col border-r border-[#202034] bg-[#0A0A16]">
+          <div className="shrink-0 space-y-2 border-b border-[#1A1A28] p-2.5">
             <select
               defaultValue=""
               onChange={(e) => {
@@ -333,7 +331,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
                 if (tpl) applyTemplate(tpl.modules);
                 e.currentTarget.value = '';
               }}
-              className="mb-3 w-full rounded border border-[#303046] bg-[#161724] px-1 py-1 text-[11px]"
+              className="w-full rounded border border-[#303046] bg-[#161724] px-1 py-1 text-[11px]"
             >
               <option value="">Charger un template…</option>
               {RACK_TEMPLATES.map((t) => (
@@ -342,36 +340,40 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
                 </option>
               ))}
             </select>
-            <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#A855F7]">
-              Modules
-            </div>
+            <button
+              onClick={reset}
+              className="flex w-full items-center justify-center gap-1 rounded border border-[#55451D] px-2 py-1 text-[10px] text-[#FFE08A]"
+            >
+              <RotateCcw className="h-3 w-3" /> Vider le rack
+            </button>
+          </div>
+          {/* the module palette — scrolls independently, compact 2-up grid */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
             {families.map((family) => (
-              <div key={family} className="mb-3">
-                <div className="mb-1 text-[10px] font-bold text-[#77778A]">{family}</div>
-                <div className="flex flex-col gap-1">
+              <div key={family} className="mb-2">
+                <div className="mb-1 font-mono text-[9px] font-bold uppercase tracking-widest text-[#77778A]">
+                  {family}
+                </div>
+                <div className="grid grid-cols-2 gap-1">
                   {palette
                     .filter((d) => d.family === family)
                     .map((d) => (
                       <button
                         key={d.type}
                         onClick={() => addModule(d.type)}
-                        className="rounded border border-[#2A2934] bg-[#11121A] px-2 py-1.5 text-left text-[11px] hover:border-[#A855F7]"
+                        title={`Ajouter ${d.label}`}
+                        className="truncate rounded border border-[#2A2934] bg-[#11121A] px-1.5 py-1 text-left text-[10px] leading-tight hover:border-[#A855F7] hover:bg-[#17131F]"
                       >
-                        + {d.label}
+                        {d.label}
                       </button>
                     ))}
                 </div>
               </div>
             ))}
-            <button
-              onClick={reset}
-              className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-[#55451D] px-2 py-1 text-[10px] text-[#FFE08A]"
-            >
-              <RotateCcw className="h-3 w-3" /> Vider le rack
-            </button>
-          </aside>
+          </div>
+        </aside>
 
-          <main className="flex-1 overflow-y-auto bg-[#06060A] p-4">
+          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#06060A] p-4">
             {sample?.audioBuffer && (
               <div className="mb-3">
                 <RackWaveformStrip
