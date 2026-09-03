@@ -233,35 +233,6 @@ export function audioBufferToWavBlob(
   return new Blob([arrayBuffer], { type: 'audio/wav' });
 }
 
-/**
- * Creates an AudioBuffer for a specific slice region
- */
-export function extractSliceBuffer(
-  sourceBuffer: AudioBuffer,
-  slice: SliceRegion
-): AudioBuffer {
-  const ctx = audioEngine.getAudioContext();
-  const sampleRate = sourceBuffer.sampleRate;
-  const startSample = Math.max(0, Math.floor(slice.startSec * sampleRate));
-  const endSample = Math.min(sourceBuffer.length, Math.floor(slice.endSec * sampleRate));
-  const sliceLength = Math.max(1, endSample - startSample);
-
-  const sliceBuffer = ctx.createBuffer(
-    sourceBuffer.numberOfChannels,
-    sliceLength,
-    sampleRate
-  );
-
-  for (let c = 0; c < sourceBuffer.numberOfChannels; c++) {
-    const src = sourceBuffer.getChannelData(c);
-    const dest = sliceBuffer.getChannelData(c);
-    for (let i = 0; i < sliceLength; i++) {
-      dest[i] = src[startSample + i];
-    }
-  }
-
-  return sliceBuffer;
-}
 
 /**
  * Multi-Sound Slice Pack Export: creates a zip with all slices

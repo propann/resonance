@@ -155,13 +155,6 @@ export function detectPitchAndKey(buffer: AudioBuffer): { pitchHz?: number; keyS
 }
 
 /**
- * Backward compatibility alias for detectPitch
- */
-export function detectPitch(buffer: AudioBuffer) {
-  return detectPitchAndKey(buffer);
-}
-
-/**
  * Detect BPM / Tempo using energy peaks & autocorrelation of onset intervals
  */
 export function detectBpm(buffer: AudioBuffer): number | undefined {
