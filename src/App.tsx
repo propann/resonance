@@ -14,22 +14,31 @@ import { Sidebar } from './components/Sidebar';
 import { SampleTable } from './components/SampleTable';
 import { WaveformCanvas } from './components/WaveformCanvas';
 import { TimbreMap } from './components/TimbreMap';
-import { AutoSlicerModal } from './components/AutoSlicerModal';
-import { BatchConverterModal } from './components/BatchConverterModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
-import { SmartIngestionModal } from './components/SmartIngestionModal';
 import { AutoCuratorModal } from './components/AutoCuratorModal';
-import { MarketBenchmarkModal } from './components/MarketBenchmarkModal';
-import { Op1KitBuilderModal } from './components/Op1KitBuilderModal';
-import { GitHubSyncModal } from './components/GitHubSyncModal';
-import { BatchNamingModal } from './components/BatchNamingModal';
-import { AudioAnalysisModal } from './components/AudioAnalysisModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { DocumentationModal } from './components/DocumentationModal';
-import { LoudnessStandardModal } from './components/LoudnessStandardModal';
+const AudioAnalysisModal = lazy(() => import('./components/AudioAnalysisModal').then((m) => ({ default: m.AudioAnalysisModal })));
+const AutoSlicerModal = lazy(() => import('./components/AutoSlicerModal').then((m) => ({ default: m.AutoSlicerModal })));
+const BatchConverterModal = lazy(() => import('./components/BatchConverterModal').then((m) => ({ default: m.BatchConverterModal })));
+const BatchNamingModal = lazy(() => import('./components/BatchNamingModal').then((m) => ({ default: m.BatchNamingModal })));
+const DocumentationModal = lazy(() => import('./components/DocumentationModal').then((m) => ({ default: m.DocumentationModal })));
+const GitHubSyncModal = lazy(() => import('./components/GitHubSyncModal').then((m) => ({ default: m.GitHubSyncModal })));
+const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then((m) => ({ default: m.KeyboardShortcutsModal })));
+const LoudnessStandardModal = lazy(() => import('./components/LoudnessStandardModal').then((m) => ({ default: m.LoudnessStandardModal })));
+const MarketBenchmarkModal = lazy(() => import('./components/MarketBenchmarkModal').then((m) => ({ default: m.MarketBenchmarkModal })));
+const Op1KitBuilderModal = lazy(() => import('./components/Op1KitBuilderModal').then((m) => ({ default: m.Op1KitBuilderModal })));
+const SmartIngestionModal = lazy(() => import('./components/SmartIngestionModal').then((m) => ({ default: m.SmartIngestionModal })));
 const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
 const AdvancedEngineRackModal = lazy(() => import('./components/AdvancedEngineRackModal').then((module) => ({ default: module.AdvancedEngineRackModal })));
 const RackHostModal = lazy(() => import('./components/RackHostModal').then((module) => ({ default: module.RackHostModal })));
+
+/**
+ * Mounts a lazily-loaded modal only while it is open, so its chunk is fetched
+ * on first use instead of at startup. Modals that must keep working while
+ * closed (the auto-curator's background transfer, the recorder's mic
+ * teardown) stay eagerly imported.
+ */
+const LazyModal: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) =>
+  open ? <Suspense fallback={null}>{children}</Suspense> : null;
 import { LoudnessAuditReport, LoudnessStandardKey } from './services/audioLoudnessStandard';
 import { audioEngine } from './services/audioEngine';
 import {
@@ -43,7 +52,7 @@ import {
   exportEp133ProjectPack,
   exportMultipleWavsAsZip,
 } from './services/audioConverter';
-import { parseOp1AiffPatch, extractSlicesToWavBlobs } from './services/op1PatchEncoder';
+import { parseOp1AiffPatch } from './services/op1PatchEncoder';
 import {
   autoOrganizeLibrary,
   classifySampleForLibrary,
@@ -949,23 +958,25 @@ export default function App() {
       </div>
 
       {/* Smart Ingestion Magic Drop Modal */}
-      <SmartIngestionModal
-        isOpen={modals.smartIngest}
-        onClose={() => closeModal('smartIngest')}
-        onImportComplete={(newImportedSamples) => {
-          setSamples((prev) => [...newImportedSamples, ...prev]);
-          if (newImportedSamples.length > 0) {
-            setSelectedSampleId(newImportedSamples[0].id);
-            if (newImportedSamples[0].audioBuffer) {
-              audioEngine.play(
-                newImportedSamples[0].audioBuffer,
-                newImportedSamples[0].id,
-                newImportedSamples[0].loudnessGainDb
-              );
+      <LazyModal open={modals.smartIngest}>
+        <SmartIngestionModal
+          isOpen={modals.smartIngest}
+          onClose={() => closeModal('smartIngest')}
+          onImportComplete={(newImportedSamples) => {
+            setSamples((prev) => [...newImportedSamples, ...prev]);
+            if (newImportedSamples.length > 0) {
+              setSelectedSampleId(newImportedSamples[0].id);
+              if (newImportedSamples[0].audioBuffer) {
+                audioEngine.play(
+                  newImportedSamples[0].audioBuffer,
+                  newImportedSamples[0].id,
+                  newImportedSamples[0].loudnessGainDb
+                );
+              }
             }
-          }
-        }}
-      />
+          }}
+        />
+      </LazyModal>
 
       {/* Auto-Curator Studio DSP Pipeline Modal */}
       <AutoCuratorModal
@@ -990,45 +1001,53 @@ export default function App() {
       />
 
       {/* Market Benchmark Modal */}
-      <MarketBenchmarkModal
-        isOpen={modals.benchmark}
-        onClose={() => closeModal('benchmark')}
-      />
+      <LazyModal open={modals.benchmark}>
+        <MarketBenchmarkModal
+          isOpen={modals.benchmark}
+          onClose={() => closeModal('benchmark')}
+        />
+      </LazyModal>
 
       {/* Slicer Modal */}
-      {slicerSample && (
-        <AutoSlicerModal
-          sample={liveSample(slicerSample)!}
-          isOpen={!!slicerSample}
-          onClose={() => setSampleTarget('slicer', null)}
-          onUpdateSampleSlices={handleUpdateSampleSlices}
-          onExtractSlicesToLibrary={(extracted) => setSamples((prev) => [...extracted, ...prev])}
-        />
-      )}
+      <LazyModal open={!!slicerSample}>
+        {slicerSample && (
+          <AutoSlicerModal
+            sample={liveSample(slicerSample)!}
+            isOpen
+            onClose={() => setSampleTarget('slicer', null)}
+            onUpdateSampleSlices={handleUpdateSampleSlices}
+            onExtractSlicesToLibrary={(extracted) => setSamples((prev) => [...extracted, ...prev])}
+          />
+        )}
+      </LazyModal>
 
       {/* Batch Converter Modal */}
-      <BatchConverterModal
-        samples={
-          selectedSampleIds.length > 0
-            ? samples.filter((s) => selectedSampleIds.includes(s.id))
-            : filteredSamples
-        }
-        isOpen={modals.batchConverter}
-        onClose={() => closeModal('batchConverter')}
-      />
+      <LazyModal open={modals.batchConverter}>
+        <BatchConverterModal
+          samples={
+            selectedSampleIds.length > 0
+              ? samples.filter((s) => selectedSampleIds.includes(s.id))
+              : filteredSamples
+          }
+          isOpen={modals.batchConverter}
+          onClose={() => closeModal('batchConverter')}
+        />
+      </LazyModal>
 
       {/* OP-1 OG Drum Kit Builder Modal */}
-      <Op1KitBuilderModal
-        isOpen={modals.op1Studio}
-        onClose={() => closeModal('op1Studio')}
-        availableSamples={samples}
-        currentSelectedSample={selectedSample}
-        onImportNewSamples={(newS) => {
-          setSamples((prev) => [...newS, ...prev]);
-          if (newS.length > 0) setSelectedSampleId(newS[0].id);
-        }}
-        onOpenGitHubSync={() => openModal('gitHubSync')}
-      />
+      <LazyModal open={modals.op1Studio}>
+        <Op1KitBuilderModal
+          isOpen={modals.op1Studio}
+          onClose={() => closeModal('op1Studio')}
+          availableSamples={samples}
+          currentSelectedSample={selectedSample}
+          onImportNewSamples={(newS) => {
+            setSamples((prev) => [...newS, ...prev]);
+            if (newS.length > 0) setSelectedSampleId(newS[0].id);
+          }}
+          onOpenGitHubSync={() => openModal('gitHubSync')}
+        />
+      </LazyModal>
 
       {/* Audio Recorder Modal */}
       <AudioRecorderModal
@@ -1041,32 +1060,38 @@ export default function App() {
       />
 
       {/* GitHub Hub (propann/az-sample) Modal */}
-      <GitHubSyncModal
-        isOpen={modals.gitHubSync}
-        onClose={() => closeModal('gitHubSync')}
-        samples={samples}
-      />
+      <LazyModal open={modals.gitHubSync}>
+        <GitHubSyncModal
+          isOpen={modals.gitHubSync}
+          onClose={() => closeModal('gitHubSync')}
+          samples={samples}
+        />
+      </LazyModal>
 
       {/* Professional Batch Naming & Organization Modal */}
-      <BatchNamingModal
-        isOpen={modals.batchNaming}
-        onClose={() => closeModal('batchNaming')}
-        samples={samples}
-        selectedSampleIds={selectedSampleIds}
-        onApplyRename={handleApplyBatchRename}
-        onOpenGitHubSync={() => openModal('gitHubSync')}
-      />
+      <LazyModal open={modals.batchNaming}>
+        <BatchNamingModal
+          isOpen={modals.batchNaming}
+          onClose={() => closeModal('batchNaming')}
+          samples={samples}
+          selectedSampleIds={selectedSampleIds}
+          onApplyRename={handleApplyBatchRename}
+          onOpenGitHubSync={() => openModal('gitHubSync')}
+        />
+      </LazyModal>
 
       {/* Studio DSP Audio Analysis Modal */}
-      <AudioAnalysisModal
-        isOpen={modals.dspModal}
-        onClose={() => {
-          closeModal('dspModal');
-          setSampleTarget('dsp', null);
-        }}
-        sample={liveSample(sampleForDsp) || selectedSample}
-        onUpdateSample={handleUpdateSampleFromDsp}
-      />
+      <LazyModal open={modals.dspModal}>
+        <AudioAnalysisModal
+          isOpen={modals.dspModal}
+          onClose={() => {
+            closeModal('dspModal');
+            setSampleTarget('dsp', null);
+          }}
+          sample={liveSample(sampleForDsp) || selectedSample}
+          onUpdateSample={handleUpdateSampleFromDsp}
+        />
+      </LazyModal>
 
       <Suspense fallback={modals.synthRack ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
         <LayerSynthRackModal isOpen={modals.synthRack} onClose={() => closeModal('synthRack')} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
@@ -1085,41 +1110,47 @@ export default function App() {
       </Suspense>
 
       {/* International Loudness Standard Modal (ITU-R BS.1770-4 / EBU R128) */}
-      <LoudnessStandardModal
-        isOpen={modals.loudnessModal}
-        onClose={() => {
-          closeModal('loudnessModal');
-          setSampleTarget('loudness', null);
-        }}
-        sample={liveSample(sampleForLoudness) || selectedSample}
-        allSelectedSamples={
-          selectedSampleIds.length > 0
-            ? samples.filter((s) => selectedSampleIds.includes(s.id))
-            : filteredSamples
-        }
-        onApplyNormalization={handleApplyLoudnessNormalization}
-        onBatchApplyNormalization={handleBatchApplyLoudnessNormalization}
-      />
+      <LazyModal open={modals.loudnessModal}>
+        <LoudnessStandardModal
+          isOpen={modals.loudnessModal}
+          onClose={() => {
+            closeModal('loudnessModal');
+            setSampleTarget('loudness', null);
+          }}
+          sample={liveSample(sampleForLoudness) || selectedSample}
+          allSelectedSamples={
+            selectedSampleIds.length > 0
+              ? samples.filter((s) => selectedSampleIds.includes(s.id))
+              : filteredSamples
+          }
+          onApplyNormalization={handleApplyLoudnessNormalization}
+          onBatchApplyNormalization={handleBatchApplyLoudnessNormalization}
+        />
+      </LazyModal>
 
       {/* Keyboard Shortcuts Modal */}
-      <KeyboardShortcutsModal
-        isOpen={modals.shortcuts}
-        onClose={() => closeModal('shortcuts')}
-      />
+      <LazyModal open={modals.shortcuts}>
+        <KeyboardShortcutsModal
+          isOpen={modals.shortcuts}
+          onClose={() => closeModal('shortcuts')}
+        />
+      </LazyModal>
 
       {/* Documentation & Naming Conventions Modal */}
-      <DocumentationModal
-        isOpen={modals.doc}
-        onClose={() => closeModal('doc')}
-        onOpenAutoCurator={() => {
-          closeModal('doc');
-          openModal('autoCurator');
-        }}
-        onOpenGitHubSync={() => {
-          closeModal('doc');
-          openModal('gitHubSync');
-        }}
-      />
+      <LazyModal open={modals.doc}>
+        <DocumentationModal
+          isOpen={modals.doc}
+          onClose={() => closeModal('doc')}
+          onOpenAutoCurator={() => {
+            closeModal('doc');
+            openModal('autoCurator');
+          }}
+          onOpenGitHubSync={() => {
+            closeModal('doc');
+            openModal('gitHubSync');
+          }}
+        />
+      </LazyModal>
 
       <Toaster />
     </div>
