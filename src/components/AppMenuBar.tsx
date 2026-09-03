@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Trash2,
   Bookmark,
+  Copy,
   Save,
   Flame,
   BookOpen,
@@ -215,6 +216,18 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Supprimer les dossiers vides</span>
+                </button>
+              )}
+              {libraryName && (
+                <button
+                  onClick={() => {
+                    openModal('dedupe');
+                    closeMenus();
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Dédoublonner la bibliothèque...</span>
                 </button>
               )}
               <div className="h-px bg-[#1E1E2C] my-1" />

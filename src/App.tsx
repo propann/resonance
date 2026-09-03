@@ -29,6 +29,7 @@ const LoudnessStandardModal = lazy(() => import('./components/LoudnessStandardMo
 const MarketBenchmarkModal = lazy(() => import('./components/MarketBenchmarkModal').then((m) => ({ default: m.MarketBenchmarkModal })));
 const Op1KitBuilderModal = lazy(() => import('./components/Op1KitBuilderModal').then((m) => ({ default: m.Op1KitBuilderModal })));
 const SmartIngestionModal = lazy(() => import('./components/SmartIngestionModal').then((m) => ({ default: m.SmartIngestionModal })));
+const LibraryDedupeModal = lazy(() => import('./components/LibraryDedupeModal').then((m) => ({ default: m.LibraryDedupeModal })));
 const PatchesModal = lazy(() => import('./components/PatchesModal').then((m) => ({ default: m.PatchesModal })));
 const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
 const AdvancedEngineRackModal = lazy(() => import('./components/AdvancedEngineRackModal').then((module) => ({ default: module.AdvancedEngineRackModal })));
@@ -1177,6 +1178,15 @@ export default function App() {
             closeModal('doc');
             openModal('gitHubSync');
           }}
+        />
+      </LazyModal>
+
+      <LazyModal open={modals.dedupe}>
+        <LibraryDedupeModal
+          isOpen={modals.dedupe}
+          onClose={() => closeModal('dedupe')}
+          libraryRoot={libraryRoot}
+          onLibraryChanged={() => void refreshLibrary()}
         />
       </LazyModal>
 

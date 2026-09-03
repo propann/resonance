@@ -332,6 +332,62 @@ export async function scanManagedLibrary(_root: LibraryRoot): Promise<LibrarySca
   return { totalSamples, folderCounts };
 }
 
+/** One audio file sitting in the managed library folders. */
+export interface ManagedLibraryFile {
+  /** Path relative to the working folder, e.g. `01_ONE_SHOTS/01_DRUMS/kick.wav`. */
+  relPath: string;
+  name: string;
+  size: number;
+  mtimeMs: number;
+}
+
+/** Every audio file the library actually holds, listings only (no bytes). */
+export async function listManagedLibraryFiles(_root?: LibraryRoot): Promise<ManagedLibraryFile[]> {
+  const fs = desktopFS();
+  const out: ManagedLibraryFile[] = [];
+
+  const walk = async (rel: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await fs.readDir(rel);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const childRel = j(rel, entry.name);
+      if (entry.isFile && AUDIO_FILE.test(entry.name)) {
+        out.push({ relPath: childRel, name: entry.name, size: entry.size, mtimeMs: entry.mtimeMs });
+      } else if (entry.isDir) {
+        await walk(childRel);
+      }
+    }
+  };
+
+  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) await walk(top);
+  return out;
+}
+
+/** Read one library file's bytes for hashing. */
+export async function readLibraryFileBlob(relPath: string): Promise<Blob> {
+  return new Blob([await desktopFS().readFile(j(relPath))]);
+}
+
+/**
+ * Replace the manifest with `samples` exactly (unlike `writeLibraryManifest`,
+ * which merges). Used when entries have to disappear, e.g. after removing
+ * duplicate files.
+ */
+export async function replaceLibraryManifest(
+  _root: LibraryRoot,
+  samples: Array<Record<string, unknown>>
+): Promise<void> {
+  await writeJsonFile(MANIFEST_FILE, {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 1,
+    samples,
+  });
+}
+
 // --- deletion / cleanup -----------------------------------------------------
 
 export async function removeWorkFolderFiles(_root: LibraryRoot, sourcePaths: string[]): Promise<number> {
