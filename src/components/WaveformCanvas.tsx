@@ -27,6 +27,8 @@ import {
   BarChart2,
   Waves,
   Flame,
+  Copy,
+  X,
 } from 'lucide-react';
 import { SampleItem, SliceRegion, SampleType } from '../types/sample';
 import { audioEngine, PlaybackState } from '../services/audioEngine';
@@ -44,6 +46,9 @@ import { getWaveformPalette, type WaveformColorTheme } from './waveform/themes';
 
 export type { WaveformColorTheme };
 
+/** Shorter alt-drags are treated as a stray click, not a zone. */
+const MIN_ZONE_SEC = 0.01;
+
 interface WaveformCanvasProps {
   height?: number;
   sample: SampleItem;
@@ -51,7 +56,9 @@ interface WaveformCanvasProps {
   onNextSample?: () => void;
   onPrevSample?: () => void;
   onUpdateSlices?: (sampleId: string, slices: SliceRegion[]) => void;
-  onAddExtractedSamples?: (newSamples: Array<{ name: string; blob: Blob; audioBuffer: AudioBuffer; duration: number }>) => void;
+  onAddExtractedSamples?: (
+    newSamples: Array<{ fileName: string; blob: Blob; audioBuffer: AudioBuffer; duration: number }>
+  ) => void;
 }
 
 export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
@@ -78,6 +85,12 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractSuccessMsg, setExtractSuccessMsg] = useState<string | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
+
+  // Free zone (alt-drag): an arbitrary sub-region of the sample, independent
+  // of the pad slices, that can be auditioned or copied out as a new sample.
+  const [zone, setZone] = useState<{ startSec: number; endSec: number } | null>(null);
+  const zoneAnchorRef = useRef<number | null>(null);
+  const [isCopyingZone, setIsCopyingZone] = useState<boolean>(false);
 
   // Visual Display Modes & Layers
   const [showWaveform, setShowWaveform] = useState<boolean>(true);
@@ -575,6 +588,40 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       }
     }
 
+    // 8b. LAYER: FREE ZONE (alt-drag selection)
+    if (zone) {
+      const zoneX = ((zone.startSec / duration) * width * zoomLevel) - scrollOffset;
+      const zoneEndX = ((zone.endSec / duration) * width * zoomLevel) - scrollOffset;
+      const zoneWidth = Math.max(1, zoneEndX - zoneX);
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 230, 0, 0.14)';
+      ctx.fillRect(zoneX, 0, zoneWidth, height);
+      ctx.strokeStyle = '#FFE600';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(zoneX, 0);
+      ctx.lineTo(zoneX, height);
+      ctx.moveTo(zoneEndX, 0);
+      ctx.lineTo(zoneEndX, height);
+      ctx.stroke();
+
+      // Duration pill, kept inside the canvas at the zone's left edge.
+      const label = `${(zone.endSec - zone.startSec).toFixed(3)} s`;
+      ctx.font = 'bold 9px "JetBrains Mono", monospace';
+      const pillWidth = ctx.measureText(label).width + 14;
+      const pillX = Math.max(2, Math.min(width - pillWidth - 2, zoneX + 4));
+      ctx.fillStyle = '#0F0F14';
+      ctx.beginPath();
+      ctx.roundRect(pillX, 22, pillWidth, 18, 4);
+      ctx.fill();
+      ctx.strokeStyle = '#FFE600';
+      ctx.stroke();
+      ctx.fillStyle = '#FFE600';
+      ctx.fillText(label, pillX + 7, 35);
+      ctx.restore();
+    }
+
     // 9. Active Playhead Neon Cursor
     if (isCurrentSample) {
       const playheadX = ((currentTime / duration) * width * zoomLevel) - scrollOffset;
@@ -624,11 +671,18 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     hoverTime,
     isCurrentSample,
     currentTime,
+    zone,
   ]);
 
   useEffect(() => {
     drawWaveform();
   }, [drawWaveform]);
+
+  // A zone belongs to one sample's timeline.
+  useEffect(() => {
+    zoneAnchorRef.current = null;
+    setZone(null);
+  }, [sample.id]);
 
   // Convert client X to buffer time in seconds
   const getCanvasTimeFromEvent = (e: React.MouseEvent<HTMLCanvasElement>): number => {
@@ -649,6 +703,13 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     const rawTime = getCanvasTimeFromEvent(e);
     const duration = sample.audioBuffer.duration;
     const rect = canvas.getBoundingClientRect();
+
+    // Alt-drag draws a free zone; it must win over every other gesture.
+    if (e.altKey) {
+      zoneAnchorRef.current = rawTime;
+      setZone({ startSec: rawTime, endSec: rawTime });
+      return;
+    }
 
     // Check if clicked near an existing slice start boundary
     if (sample.slices && sample.slices.length > 0) {
@@ -698,6 +759,15 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
     setHoverTime(rawTime);
 
+    if (zoneAnchorRef.current !== null) {
+      const zoneAnchor = zoneAnchorRef.current;
+      setZone({
+        startSec: Math.min(zoneAnchor, rawTime),
+        endSec: Math.max(zoneAnchor, rawTime),
+      });
+      return;
+    }
+
     // If currently dragging a slice marker:
     if (draggingSliceIndex !== null && sample.slices) {
       const snappedTime = findZeroCrossing(rawTime);
@@ -741,7 +811,22 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     setActiveSliceHover(hovered || null);
   };
 
+  /** Settle a zone drag: snap its edges, and drop an accidental alt-click. */
+  const finishZoneDrag = () => {
+    if (zoneAnchorRef.current === null) return;
+    zoneAnchorRef.current = null;
+    setZone((current) => {
+      if (!current) return null;
+      if (current.endSec - current.startSec < MIN_ZONE_SEC) return null;
+      return {
+        startSec: findZeroCrossing(current.startSec),
+        endSec: findZeroCrossing(current.endSec),
+      };
+    });
+  };
+
   const handleMouseUp = () => {
+    finishZoneDrag();
     if (draggingSliceIndex !== null) {
       setDraggingSliceIndex(null);
     }
@@ -750,6 +835,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   const handleMouseLeave = () => {
     setHoverTime(null);
     setActiveSliceHover(null);
+    finishZoneDrag();
     if (draggingSliceIndex !== null) {
       setDraggingSliceIndex(null);
     }
@@ -825,6 +911,39 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       console.error('Error extracting slices:', err);
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  const handlePlayZone = () => {
+    if (!sample.audioBuffer || !zone) return;
+    audioEngine.play(sample.audioBuffer, sample.id, {
+      startSec: zone.startSec,
+      endSec: zone.endSec,
+    });
+  };
+
+  /** Copy the zone out as a brand-new library sample, leaving the source untouched. */
+  const handleCopyZoneToNewSample = async () => {
+    if (!sample.audioBuffer || !zone || !onAddExtractedSamples) return;
+    setIsCopyingZone(true);
+    try {
+      const base = sample.name.replace(/\.[^/.]+$/, '');
+      const [cut] = await extractSlicesToWavBlobs(
+        sample.audioBuffer,
+        [{ startSec: zone.startSec, endSec: zone.endSec, label: 'Zone', index: 1 }],
+        base
+      );
+      const startMs = Math.round(zone.startSec * 1000);
+      const endMs = Math.round(zone.endSec * 1000);
+      onAddExtractedSamples([{ ...cut, fileName: `${base}_ZONE_${startMs}-${endMs}ms.wav` }]);
+      setExtractSuccessMsg(`Zone de ${(zone.endSec - zone.startSec).toFixed(2)} s copiée dans un nouveau sample.`);
+      setTimeout(() => setExtractSuccessMsg(null), 3500);
+    } catch (err) {
+      console.error('Erreur copie de la zone', err);
+      setExtractSuccessMsg('Impossible de copier cette zone.');
+      setTimeout(() => setExtractSuccessMsg(null), 3500);
+    } finally {
+      setIsCopyingZone(false);
     }
   };
 
@@ -1059,6 +1178,40 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
         {/* Right: Slicing Actions & Extraction Tools */}
         <div className="flex items-center gap-1.5">
+          {/* Free zone (alt-drag): audition it, or copy it to a new sample */}
+          {zone && (
+            <div className="flex items-center gap-1 border border-[#FFE600]/50 bg-[#FFE600]/10 px-1.5 py-0.5">
+              <span className="text-[9px] font-mono font-bold text-[#FFE600]">
+                ZONE {(zone.endSec - zone.startSec).toFixed(3)}s
+              </span>
+              <button
+                onClick={handlePlayZone}
+                className="p-0.5 text-[#FFE600] hover:bg-[#FFE600]/20 transition"
+                title="Écouter uniquement la zone sélectionnée"
+              >
+                <Play className="w-3 h-3 fill-current" />
+              </button>
+              {onAddExtractedSamples && (
+                <button
+                  onClick={handleCopyZoneToNewSample}
+                  disabled={isCopyingZone}
+                  className="flex items-center gap-1 bg-[#FFE600] px-1.5 py-0.5 text-[9px] font-mono font-bold text-black transition hover:bg-[#FFF176] disabled:opacity-50"
+                  title="Copier la zone dans un nouveau sample, sans toucher au son d'origine"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{isCopyingZone ? 'COPIE...' : 'NOUVEAU SAMPLE'}</span>
+                </button>
+              )}
+              <button
+                onClick={() => setZone(null)}
+                className="p-0.5 text-[#FFE600] hover:bg-[#FFE600]/20 transition"
+                title="Effacer la zone"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {sample.slices && sample.slices.length > 1 && (
             <button
               onClick={handleExtractSlices}
@@ -1284,7 +1437,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
           {/* Hint Overlay */}
           <div className="absolute top-1.5 right-2 bg-[#000000]/80 px-2 py-0.5 border border-[#222232] text-[8px] font-mono text-[#8E8E98] pointer-events-none rounded">
-            CLIC-GLISSER BALISES P1..Pn • DOUBLE-CLIC : DÉCOUPER • CLIC DROIT : SUPPRIMER
+            CLIC-GLISSER BALISES P1..Pn • DOUBLE-CLIC : DÉCOUPER • CLIC DROIT : SUPPRIMER • ALT-GLISSER : ZONE
           </div>
         </div>
 
