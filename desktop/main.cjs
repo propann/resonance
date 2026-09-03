@@ -22,17 +22,15 @@ const CONFIG_PATH = () => path.join(app.getPath('userData'), 'resonance-config.j
  * then persist, wiping libraryRoot / secrets).
  */
 async function readConfig() {
-  try {
-    return JSON.parse(await fs.readFile(CONFIG_PATH(), 'utf8'));
-  } catch (err) {
-    if (err && err.code === 'ENOENT') return {};
+  for (const candidate of [CONFIG_PATH(), CONFIG_PATH() + '.bak']) {
     try {
-      return JSON.parse(await fs.readFile(CONFIG_PATH() + '.bak', 'utf8'));
-    } catch {
-      console.error('[config] unreadable and no usable backup — starting empty', err);
-      return {};
+      return JSON.parse(await fs.readFile(candidate, 'utf8'));
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      // parse error / transient read failure — try the next candidate
     }
   }
+  return {};
 }
 
 // All writes go through one queue so concurrent secret:set / fs:setRoot calls
@@ -45,14 +43,33 @@ function writeConfig(patch) {
       const p = CONFIG_PATH();
       const current = await readConfig();
       const next = JSON.stringify({ ...current, ...patch }, null, 2);
-      // keep a backup of the previous good file, then swap atomically
+      // back up the previous good file, then write via a temp + rename swap
       try {
         await fs.copyFile(p, p + '.bak');
       } catch {
         /* no prior file yet */
       }
-      await fs.writeFile(p + '.tmp', next, 'utf8');
-      await fs.rename(p + '.tmp', p);
+      const tmp = p + '.tmp';
+      await fs.writeFile(tmp, next, 'utf8');
+      // Windows rename can hit EPERM/EBUSY if the target is momentarily open
+      // (a concurrent read). Retry a few times, then fall back to a plain
+      // in-place write so the value is never silently dropped.
+      let renamed = false;
+      for (let attempt = 0; attempt < 5 && !renamed; attempt++) {
+        try {
+          await fs.rename(tmp, p);
+          renamed = true;
+        } catch (err) {
+          if (attempt === 4) {
+            console.error('[config] rename failed, writing in place', err);
+            await fs.writeFile(p, next, 'utf8');
+            await fs.rm(tmp, { force: true }).catch(() => {});
+            renamed = true;
+          } else {
+            await new Promise((r) => setTimeout(r, 40));
+          }
+        }
+      }
     })
     .catch((err) => console.error('[config] write failed', err));
   return configWriteQueue;
