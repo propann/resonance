@@ -18,6 +18,43 @@ describe('drumFamilyFor', () => {
     expect(drumFamilyFor('percussion', 'AZ_Percussion_Conga_High')).toBe('percs');
   });
 
+  // `` treats `_` as a word character, so `hat` never matched
+  // `Hat_Loose.wav` — and `_` is this app's own separator. Every one of these
+  // used to land in percs.
+  it('reads a token the underscore separator sits against', () => {
+    expect(drumFamilyFor(undefined, 'Hat_Loose.wav')).toBe('hats');
+    expect(drumFamilyFor(undefined, 'HH_Pedal.wav')).toBe('hats');
+    expect(drumFamilyFor(undefined, 'CH_Closed_01.wav')).toBe('hats');
+    expect(drumFamilyFor(undefined, 'OH_Open_Long.wav')).toBe('hats');
+    expect(drumFamilyFor(undefined, 'Clap_Wide_Stack.wav')).toBe('claps');
+    expect(drumFamilyFor(undefined, 'Snap_Finger.wav')).toBe('claps');
+    expect(drumFamilyFor(undefined, 'Ride_Bell.wav')).toBe('cymbals');
+    expect(drumFamilyFor(undefined, 'Rim_Click.wav')).toBe('snares');
+    expect(drumFamilyFor(undefined, 'BD_909_Hard.wav')).toBe('kicks');
+    expect(drumFamilyFor(undefined, 'KCK_Sub.wav')).toBe('kicks');
+    expect(drumFamilyFor(undefined, 'SD_Rim_02.wav')).toBe('snares');
+    expect(drumFamilyFor(undefined, 'Perc_Metal_03.wav')).toBe('percs');
+  });
+
+  it('reads a plural and a name run together', () => {
+    expect(drumFamilyFor(undefined, 'Kicks.wav')).toBe('kicks');
+    expect(drumFamilyFor(undefined, 'Hats-04.wav')).toBe('hats');
+    expect(drumFamilyFor(undefined, 'TrapKick.wav')).toBe('kicks');
+    expect(drumFamilyFor(undefined, 'KickDrum808.wav')).toBe('kicks');
+    expect(drumFamilyFor(undefined, 'Claps 02.wav')).toBe('claps');
+  });
+
+  it('does not read a short code out of the middle of a word', () => {
+    // Each of these contains clap / hat / ride / tom / perc as a substring.
+    expect(drumFamilyFor(undefined, 'Thunderclap_FX.wav')).toBe('percs');
+    expect(drumFamilyFor(undefined, 'Hatchback_Foley.wav')).toBe('percs');
+    expect(drumFamilyFor(undefined, 'Ridemore_Lead.wav')).toBe('percs');
+    expect(drumFamilyFor(undefined, 'Tomahawk_Impact.wav')).toBe('percs');
+    expect(drumFamilyFor(undefined, 'Percolator_Texture.wav')).toBe('percs');
+    expect(drumFamilyFor(undefined, 'Chatter_Vox.wav')).toBe('percs');
+    expect(drumFamilyFor(undefined, 'Snarling_Bass.wav')).toBe('percs');
+  });
+
   it('falls back to the type when the name says nothing', () => {
     expect(drumFamilyFor('kick', 'AZ_808_01_Cm')).toBe('kicks');
     expect(drumFamilyFor('snare', '1-004_01')).toBe('snares');

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { FolderItem, SampleType, FilterState, SampleItem, MusicGenre } from '../types/sample';
 import { useUiStore } from '../stores/uiStore';
+import { diskPathForFolder, folderMatcher } from '../services/libraryFolders';
 
 interface SidebarProps {
   width?: number;
@@ -43,29 +44,6 @@ const MUSICAL_KEYS = ['all', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A
 
 // The visual tree predates the on-disk structure. Map its useful category nodes
 // to the canonical folders so their badges always show physical file counts.
-const DISK_PATH_BY_FOLDER_ID: Record<string, string> = {
-  'f-root-oneshots': '01_ONE_SHOTS',
-  'f-os-drums': '01_ONE_SHOTS/01_DRUMS',
-  'f-os-drums-kicks': '01_ONE_SHOTS/01_DRUMS/01_KICKS',
-  'f-os-drums-snares': '01_ONE_SHOTS/01_DRUMS/02_SNARES',
-  'f-os-drums-hats': '01_ONE_SHOTS/01_DRUMS/03_HATS',
-  'f-os-drums-claps': '01_ONE_SHOTS/01_DRUMS/04_CLAPS',
-  'f-os-drums-cymbals': '01_ONE_SHOTS/01_DRUMS/05_CYMBALS',
-  'f-os-drums-percs': '01_ONE_SHOTS/01_DRUMS/06_PERCS',
-  'f-os-bass': '01_ONE_SHOTS/02_BASS_808',
-  'f-os-melodic': '01_ONE_SHOTS/03_MELODIC',
-  'f-os-vocals': '01_ONE_SHOTS/04_VOCALS',
-  'f-os-fx': '01_ONE_SHOTS/05_FX_TEXTURES',
-  'f-root-loops': '02_LOOPS',
-  'f-lp-drums': '02_LOOPS/01_DRUM_LOOPS',
-  'f-lp-melodic': '02_LOOPS/02_MELODIC_LOOPS',
-  'f-lp-vocals': '02_LOOPS/03_VOCAL_LOOPS',
-  'f-lp-atmo': '02_LOOPS/04_TEXTURES',
-  'f-root-multisound': '01_ONE_SHOTS/06_KITS_MULTI',
-  'f-root-hardware': '03_HARDWARE',
-  'f-op1-patches': '03_HARDWARE/OP-1_DRUM_PATCHES',
-};
-
 const SAMPLE_TYPES: { id: SampleType | 'all'; label: string; color: string }[] = [
   { id: 'all', label: 'TOUS LES SONS', color: '#00F0FF' },
   { id: 'kick', label: 'KICKS (BD)', color: '#00F0FF' },
@@ -107,9 +85,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const openModal = useUiStore((state) => state.openModal);
   const [sidebarTab, setSidebarTab] = useState<'folders' | 'types' | 'hardware' | 'keys'>('folders');
-  const diskCountFor = (folder: FolderItem) => {
-    const path = DISK_PATH_BY_FOLDER_ID[folder.id] || folder.path.replace(/^\//, '');
-    return diskFolderCounts[path] || 0;
+  /**
+   * What a folder's badge shows: the samples loaded in memory that the library
+   * filter would list for it, or the count read off the disk, whichever is
+   * higher (the disk is ahead of the manifest right after an import).
+   */
+  const countFor = (folder: FolderItem) => {
+    const inFolder = folderMatcher(folder.id, folders);
+    const loaded = samples.filter(inFolder).length;
+    return Math.max(loaded, diskFolderCounts[diskPathForFolder(folder)] || 0);
   };
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderName, setNewFolderName] = useState<string>('');
@@ -422,12 +406,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const childFolders = getChildFolders(rootFolder.id);
                 const hasChildren = childFolders.length > 0;
 
-                // Total samples in root or its subfolders
-                const totalCount = samples.filter((s) => {
-                  if (s.folderId === rootFolder.id) return true;
-                  if (s.folderPath && s.folderPath.startsWith(rootFolder.path)) return true;
-                  return false;
-                }).length;
+                const totalCount = countFor(rootFolder);
 
                 return (
                   <div key={rootFolder.id} className="space-y-0.5">
@@ -478,7 +457,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             backgroundColor: `${rootFolder.color || '#FFE600'}15`,
                           }}
                         >
-                          {Math.max(totalCount, diskCountFor(rootFolder))}
+                          {totalCount}
                         </span>
                         {!rootFolder.id.startsWith('f-') && (
                           <button
@@ -501,11 +480,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           const subChildren = getChildFolders(subFolder.id);
                           const hasSubChildren = subChildren.length > 0;
 
-                          const subCount = samples.filter((s) => {
-                            if (s.folderId === subFolder.id) return true;
-                            if (s.folderPath && s.folderPath.startsWith(subFolder.path)) return true;
-                            return false;
-                          }).length;
+                          const subCount = countFor(subFolder);
 
                           return (
                             <div key={subFolder.id} className="space-y-0.5">
@@ -554,7 +529,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                       backgroundColor: `${subFolder.color || '#00F0FF'}15`,
                                     }}
                                   >
-                                  {Math.max(subCount, diskCountFor(subFolder))}
+                                  {subCount}
                                   </span>
                                   {!subFolder.id.startsWith('f-') && (
                                     <button
@@ -573,9 +548,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 <div className="pl-3 space-y-0.5 border-l border-[#282838] ml-2">
                                   {subChildren.map((leafFolder) => {
                                     const isLeafSel = filterState.selectedFolderId === leafFolder.id;
-                                    const leafCount = samples.filter(
-                                      (s) => s.folderId === leafFolder.id || s.folderPath?.startsWith(leafFolder.path)
-                                    ).length;
+                                    const leafCount = countFor(leafFolder);
 
                                     return (
                                       <div
@@ -594,7 +567,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                           <span className="text-[10px] truncate">{leafFolder.name}</span>
                                         </button>
                                         <span className="text-[8px] font-pixel text-[#8E8E93] bg-[#14141E] px-1 py-0.2 border border-[#222230]">
-                                          {Math.max(leafCount, diskCountFor(leafFolder))}
+                                          {leafCount}
                                         </span>
                                       </div>
                                     );

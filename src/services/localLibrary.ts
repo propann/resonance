@@ -478,6 +478,27 @@ export async function renameLibraryFile(fromRel: string, toRel: string): Promise
 }
 
 /**
+ * Move a library file into another managed folder, keeping its name unless the
+ * destination already holds one: `Kick_01.wav` landing next to an existing
+ * `Kick_01.wav` becomes `Kick_01_2.wav`. A bare rename overwrites the file
+ * that was already there — on Windows as much as anywhere else — and the
+ * sound it held is gone. Returns the path the file now has.
+ */
+export async function moveLibraryFileInto(
+  fromRel: string,
+  targetDirRel: string,
+  name: string
+): Promise<string> {
+  const fs = desktopFS();
+  const dir = j(targetDirRel);
+  await fs.mkdirp(dir);
+  const finalName = await uniqueFileName(dir, name);
+  const toRel = j(dir, finalName);
+  await fs.rename(j(fromRel), toRel);
+  return toRel;
+}
+
+/**
  * Read the first `bytes` of a library file. Falls back to the whole file when
  * the bridge is too old to slice.
  */

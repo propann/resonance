@@ -128,6 +128,65 @@ chacun leur écouteur Espace en plus de celui de l'app). Enregistrés : onde
 repos seulement). Le rack **ne démarre plus en boucle**. Le bouton PLAY de
 l'en-tête indique en infobulle ce que la barre espace jouerait.
 
+## Session 2026-09-04 — la trieuse
+
+Quatre défauts trouvés en surveillant le tri, du plus grave au plus discret.
+
+### 1. Les règles de tri ne voyaient pas l'underscore
+
+`` compte `_` comme un caractère de mot en JS, donc `hat` ne matchait
+**jamais** `Hat_Loose.wav` — et `_` est justement le séparateur par défaut de
+la convention de nommage de l'app. Sondé sur 38 noms réalistes : la moitié
+tombait dans `06_PERCS`. `Clap_Wide.wav`, `Snap_Finger.wav`, `HH_Pedal.wav`,
+`Ride_Bell.wav`, `Rim_Click.wav`, `BD_909.wav`, `KCK_Sub.wav`, `SD_Rim_02.wav`
+— tous mal rangés. Les fichiers dont le 2ᵉ jeton donnait le type (`AZ_Clap_…`)
+étaient sauvés par le repli sur le type, ce qui masquait la panne.
+
+`fe16406` avait bien remplacé les backspaces littéraux par de vrais ``,
+mais `` est le mauvais outil quand le séparateur est `_`. Remplacé par une
+frontière qui ne compte que les lettres (`token()`), plus une liste de mots
+longs reconnus même collés (`TrapKick`). Le pluriel fait partie du jeton
+(`Claps`, `Hats`). 38/38 corrects, table de non-régression dans
+`proFolderOrganizer.test.ts`.
+
+### 2. Le tri écrasait des sons
+
+`sortDrumFolder` déplaçait par `fs.rename` nu. Un `Kick_01.wav` en vrac qui
+tombe sur un `Kick_01.wav` déjà rangé dans `01_KICKS` **détruisait** ce
+dernier, sans un mot. Le tri passe maintenant par `moveLibraryFileInto()`, qui
+réutilise le `uniqueFileName()` de l'ingestion (`Kick_01_2.wav`) et reporte le
+nom final dans le manifeste. La règle produit est tenue : rien n'est perdu.
+
+### 3. Le badge d'un dossier et sa liste ne parlaient pas de la même chose
+
+La sidebar comptait par chemin, récursivement ; le filtre comparait
+`folderId` en égalité stricte. Comme `classifySampleForLibrary` ne renvoie
+jamais `f-os-drums` pour une batterie (toujours une famille), cliquer sur
+**01_DRUMS affichait une liste vide sous un badge à plusieurs centaines**.
+Et `hydrateManifestSamples` re-devinait le `folderId` depuis le *nom* au lieu
+de le lire depuis le chemin disque : un fichier rangé dans `06_PERCS` mais
+nommé « …kick… » était compté dans PERCS et affiché dans KICKS.
+
+`src/services/libraryFolders.ts` porte désormais l'unique lecture de
+l'arborescence : `folderIdForPath()` (le disque fait foi) et `folderMatcher()`
+(un parent inclut ses enfants), utilisés par le filtre **et** par le badge.
+`DISK_PATH_BY_FOLDER_ID` (copie n°2, dans `Sidebar.tsx`) supprimée, et
+`PRO_STUDIO_FOLDER_DEFINITIONS` + `generateProFolderHierarchy` (copie n°3,
+~290 l, morte, et qui décrivait un *autre* plan : `01_Drums_Percussion/01_Kicks`)
+avec elle.
+
+### 4. Reprise des sons déjà mal rangés
+
+Corriger les règles ne déplace pas ce qui est déjà coincé dans `06_PERCS`.
+`sortDrumFolder` examine maintenant aussi les fichiers **déjà** dans une
+famille, et n'en déplace un que si son nom nomme explicitement une autre
+famille (`drumFamilyFromName`). Un nom qui ne dit rien reste où il est : le
+rangement fait à la main survit. Un dossier de `01_DRUMS` qui n'est pas une
+famille (`_ARCHIVE`) est ignoré.
+
+Tests : 109 → 137 (`drumSorter.test.ts` 9, `libraryFolders.test.ts` 16, +3 sur
+les règles). `tsc` propre, `eslint` 0 erreur, build OK.
+
 ## Pistes ouvertes
 
 - Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.

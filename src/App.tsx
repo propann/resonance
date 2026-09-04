@@ -11,6 +11,7 @@ import { activeAudition } from './stores/transportStore';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortDrumFolder } from './services/drumSorter';
+import { folderIdForPath, folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
@@ -137,7 +138,12 @@ export default function App() {
         key: typeof entry.key === 'string' ? entry.key : undefined,
         type, category, isLoop: category === 'loop', genre: allowedGenres.has(entry.genre as string) ? entry.genre as SampleItem['genre'] : 'Universal / Multi-Genre',
         tags: Array.isArray(entry.tags) ? entry.tags.filter((tag): tag is string => typeof tag === 'string') : [],
-        folderId: classifySampleForLibrary({ type, category, isLoop: category === 'loop', name: fileName, originalFileName: fileName } as SampleItem).folderId,
+        // Where the file sits on disk is the truth. Re-guessing the folder
+        // from the name would file a "...kick..." found in 06_PERCS under
+        // kicks, and the sidebar count would stop matching the list.
+        folderId:
+          folderIdForPath(path) ??
+          classifySampleForLibrary({ type, category, isLoop: category === 'loop', name: fileName, originalFileName: fileName } as SampleItem).folderId,
         folderPath: path, favorite: false, rating: 0,
         spectralCentroid: 0, dynamicRangeDb: 0, peakDb: 0, rmsDb: 0, lufs: 0, loudnessGainDb: 0, zeroCrossingRate: 0,
         slices: [], blobUrl: '', dateAdded: 0, diskPath: `${path.replace(/^\//, '')}/${fileName}`,
@@ -221,15 +227,16 @@ export default function App() {
 
   const filteredSamples = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    // Same test the sidebar counts with: a parent folder shows what is filed
+    // below it, so picking 01_DRUMS lists the kicks, snares and hats.
+    const inSelectedFolder = folderMatcher(filterState.selectedFolderId, folders);
     return samples
       .filter((s) => {
         // Search query, against a per-sample text built once
         if (query && !sampleMatchesQuery(s, query)) return false;
 
         // Folder
-        if (filterState.selectedFolderId && s.folderId !== filterState.selectedFolderId) {
-          return false;
-        }
+        if (!inSelectedFolder(s)) return false;
 
         // Category (One-Shot vs Loop vs Multi-Sound)
         if (filterState.selectedCategory && filterState.selectedCategory !== 'all') {
@@ -303,7 +310,7 @@ export default function App() {
             return (a.dateAdded - b.dateAdded) * dir;
         }
       });
-  }, [samples, filterState, searchQuery]);
+  }, [samples, folders, filterState, searchQuery]);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
@@ -538,16 +545,17 @@ export default function App() {
   };
 
   /**
-   * Second sorting pass on disk: the drums already filed in 01_DRUMS are moved
-   * into their family folder (kicks, snares, hats, claps, cymbals, percs), and
-   * the in-memory library is re-labelled to match.
+   * Second sorting pass on disk: every drum sound lands in its family folder
+   * (kicks, snares, hats, claps, cymbals, percs) — the ones still loose in
+   * 01_DRUMS, and the ones an earlier pass filed under the wrong family. The
+   * in-memory library is re-labelled to match.
    */
   const handleAutoOrganizeLibrary = async () => {
     const { organizedSamples } = autoOrganizeLibrary(samples);
     setSamples(organizedSamples);
     if (!libraryRoot) return;
     try {
-      const { moved, perFamily, failed } = await sortDrumFolder(libraryRoot);
+      const { moved, perFamily, failed, renamed, refiled } = await sortDrumFolder(libraryRoot);
       if (moved === 0) {
         toast.info('Tri à jour : aucun son de batterie à déplacer.');
       } else {
@@ -555,6 +563,12 @@ export default function App() {
           .map(([family, count]) => `${count} ${family}`)
           .join(', ');
         toast.success(`${moved} son(s) rangé(s) par famille (${detail}).`);
+      }
+      if (refiled > 0) {
+        toast.info(`${refiled} son(s) mal rangé(s) ont retrouvé leur famille.`);
+      }
+      if (renamed > 0) {
+        toast.info(`${renamed} son(s) renommé(s) : la famille avait déjà ce nom, rien n'a été écrasé.`);
       }
       if (failed > 0) toast.error(`${failed} fichier(s) n'ont pas pu être déplacés.`);
       await refreshLibrary();
