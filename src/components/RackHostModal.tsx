@@ -76,6 +76,30 @@ const SYNTH_SAMPLE_BASE = {
   zeroCrossingRate: 0,
 };
 
+/**
+ * What the rack plays through. With a sound engine in the chain the carrier is
+ * stretched to at least `SYNTH_AUDITION_SEC`: otherwise a half-second sample
+ * cuts the engine off after half a second, and the synth is inaudible.
+ */
+function buildCarrier(
+  ctx: BaseAudioContext,
+  sampleBuffer: AudioBuffer | undefined,
+  hasSource: boolean
+): AudioBuffer | null {
+  if (!sampleBuffer) {
+    if (!hasSource) return null;
+    return ctx.createBuffer(2, Math.floor(ctx.sampleRate * SYNTH_AUDITION_SEC), ctx.sampleRate);
+  }
+  if (!hasSource || sampleBuffer.duration >= SYNTH_AUDITION_SEC) return sampleBuffer;
+
+  const length = Math.floor(ctx.sampleRate * SYNTH_AUDITION_SEC);
+  const carrier = ctx.createBuffer(sampleBuffer.numberOfChannels, length, sampleBuffer.sampleRate);
+  for (let channel = 0; channel < sampleBuffer.numberOfChannels; channel++) {
+    carrier.getChannelData(channel).set(sampleBuffer.getChannelData(channel));
+  }
+  return carrier;
+}
+
 export const RackHostModal: React.FC<RackHostModalProps> = ({
   isOpen,
   onClose,
@@ -155,9 +179,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     // then just silence of a fixed length, so the synth can be auditioned
     // without loading a sample first.
     const ctx = audioGraph.getContext();
-    const carrier =
-      sample?.audioBuffer ??
-      (hasSourceModule ? ctx.createBuffer(2, Math.floor(ctx.sampleRate * SYNTH_AUDITION_SEC), ctx.sampleRate) : null);
+    const carrier = buildCarrier(ctx, sample?.audioBuffer, hasSourceModule);
     if (!carrier) return;
     stopAudition();
     const src = ctx.createBufferSource();
@@ -174,7 +196,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     playStartRef.current = ctx.currentTime;
     srcRef.current = src;
     setIsPlaying(true);
-  }, [sample, loop, stopAudition]);
+  }, [sample, loop, stopAudition, hasSourceModule]);
 
   /** Render every effect over a reference signal and report what it changes. */
   const handleSelfTest = async () => {
@@ -314,9 +336,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
 
   const handleSaveAsNew = async () => {
     const ctx = audioGraph.getContext();
-    const carrier =
-      sample?.audioBuffer ??
-      (hasSourceModule ? ctx.createBuffer(2, Math.floor(ctx.sampleRate * SYNTH_AUDITION_SEC), ctx.sampleRate) : null);
+    const carrier = buildCarrier(ctx, sample?.audioBuffer, hasSourceModule);
     if (!carrier) return;
     setIsRendering(true);
     try {
