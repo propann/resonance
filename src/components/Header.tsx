@@ -319,18 +319,14 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {(
-          <button onClick={() => openModal('synthRack')} className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#A855F7]/20 hover:bg-[#A855F7]/35 text-[#E9D5FF] border-2 border-[#A855F7]/50 text-[9px] font-pixel pixel-btn" title="Ouvrir le rack de 10 moteurs synth et MIDI">
-            <Wand2 className="w-3 h-3" />
-            <span>SYNTH RACK</span>
-          </button>
-        )}
-        {(
-          <button onClick={() => openModal('advancedRack')} className="hidden xl:flex items-center gap-1 px-2 py-1 bg-[#FFB000]/15 hover:bg-[#FFB000]/30 text-[#FFE08A] border-2 border-[#FFB000]/50 text-[9px] font-pixel pixel-btn" title="Rack d’extensions Dexed et Mutable, chargé à la demande">
-            <Flame className="w-3 h-3" />
-            <span>EXTENSIONS</span>
-          </button>
-        )}
+        {/*
+          The synth rack and the "extensions" rack used to have a button each,
+          on top of the effects rack's. Effects, engines, patches, slicing and
+          the OP-1 kit now live in the workshop column beside the waveform, and
+          the Creator is reached from its Moteurs section — one place per tool.
+          The extensions rack is gone: it never made a sound, its Dexed and
+          Mutable cards being toggles over a WASM bridge that was never built.
+        */}
 
         {/* Smart Ingestion Magic Drop Button */}
         {<button

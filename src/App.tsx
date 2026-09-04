@@ -19,6 +19,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { SampleTable } from './components/SampleTable';
 import { WaveformCanvas } from './components/WaveformCanvas';
+import { AtelierColumn } from './components/AtelierColumn';
 import { TimbreMap } from './components/TimbreMap';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { AutoCuratorModal } from './components/AutoCuratorModal';
@@ -35,7 +36,6 @@ const SmartIngestionModal = lazy(() => import('./components/SmartIngestionModal'
 const LibraryDedupeModal = lazy(() => import('./components/LibraryDedupeModal').then((m) => ({ default: m.LibraryDedupeModal })));
 const PatchesModal = lazy(() => import('./components/PatchesModal').then((m) => ({ default: m.PatchesModal })));
 const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
-const AdvancedEngineRackModal = lazy(() => import('./components/AdvancedEngineRackModal').then((module) => ({ default: module.AdvancedEngineRackModal })));
 const RackHostModal = lazy(() => import('./components/RackHostModal').then((module) => ({ default: module.RackHostModal })));
 
 /**
@@ -88,10 +88,13 @@ export default function App() {
   const {
     sidebarWidth,
     waveformHeight,
+    atelierWidth,
     isResizingSidebar,
     isResizingWaveform,
+    isResizingAtelier,
     startSidebarResize,
     startWaveformResize,
+    startAtelierResize,
   } = useResizablePanels();
 
   // UI shell state (modal windows, workspace view)
@@ -961,7 +964,7 @@ export default function App() {
         </div>
 
         {/* Center Content Pane */}
-        <main className="flex-1 flex flex-col p-2.5 overflow-hidden gap-2 bg-[#060609]">
+        <main className="flex-1 flex flex-col p-2.5 overflow-hidden gap-2 bg-[#060609] min-w-0">
           {activeView === 'library' ? (
             <>
               {/* Top Waveform Visualizer with Compact Transport Bar on Top & Draggable Markers */}
@@ -1028,6 +1031,26 @@ export default function App() {
             />
           )}
         </main>
+
+        {/* Vertical splitter for the workshop column */}
+        <div
+          onMouseDown={startAtelierResize}
+          className={`w-2 hover:w-2.5 bg-[#141420] hover:bg-[#00F0FF] cursor-col-resize flex-shrink-0 transition-colors z-10 flex items-center justify-center group select-none ${
+            isResizingAtelier ? 'bg-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.5)]' : ''
+          }`}
+          title="Glisser pour redimensionner l'atelier"
+        >
+          <div className="w-0.5 h-6 bg-[#33334A] group-hover:bg-black rounded-full" />
+        </div>
+
+        {/* Workshop column: effects, engines, patches, slicing, OP-1 kit */}
+        <aside style={{ width: atelierWidth }} className="flex-shrink-0 overflow-hidden">
+          <AtelierColumn
+            sample={selectedSample}
+            onSaveAsNewSample={handleSaveProcessedAsNew}
+            onOpenSlicer={(s) => setSampleTarget('slicer', s)}
+          />
+        </aside>
       </div>
 
       {/* Smart Ingestion Magic Drop Modal */}
@@ -1158,7 +1181,6 @@ export default function App() {
       <Suspense fallback={modals.synthRack ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
         <LayerSynthRackModal isOpen={modals.synthRack} onClose={() => closeModal('synthRack')} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
       </Suspense>
-      <Suspense fallback={null}><AdvancedEngineRackModal isOpen={modals.advancedRack} onClose={() => closeModal('advancedRack')} libraryRoot={libraryRoot} /></Suspense>
       <Suspense fallback={null}>
         <RackHostModal
           isOpen={modals.rackHost}

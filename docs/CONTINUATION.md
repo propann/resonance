@@ -258,6 +258,51 @@ bac generique, pas un verdict — il cede devant plus precis, donc
 
 Tests : 143 -> 151.
 
+## Session 2026-09-04 (suite) — l'atelier remplace les fenetres
+
+Trois fenetres se recouvraient pour toucher un son : le rack d'effets, le rack
+synth et un rack « extensions ». Deux d'entre elles s'ouvraient depuis
+plusieurs boutons a la fois. Elles sont maintenant **une colonne** a droite de
+l'onde, `src/components/AtelierColumn.tsx`, avec cinq sections repliables :
+EFFETS, MOTEURS, PATCHES, DECOUPE, KIT OP-1.
+
+### Le temps reel etait deja la, prisonnier d'une modale
+
+`RackHostModal` portait la chaine vivante : un changement de structure
+reconstruit, un changement de parametre est applique a chaud sans coupure.
+Cette logique est extraite telle quelle dans `src/rack/useLiveRack.ts`, donc
+n'importe quelle partie de l'interface peut l'heberger. La colonne la garde
+montee en permanence : tourner un bouton s'entend sans ouvrir de fenetre, et
+sans quitter le sample qu'on regarde.
+
+`buildCarrier()` est teste (`useLiveRack.test.ts`) : un kick d'une demi-seconde
+etait un porteur trop court, qui coupait un moteur au bout de 0,5 s et le
+faisait passer pour muet. Il est etire a 4 s des qu'une source est dans la
+chaine.
+
+### Le rack « extensions » etait une coquille vide
+
+`AdvancedEngineRackModal` : 145 lignes de cases a cocher et trois curseurs
+(mix/tone/morph) ecrits dans `localStorage`, **aucune reference a
+`engineBridge`, aucun son**. Les vrais Dexed/Mutable exigent de compiler du
+WASM avec Emscripten, absent de la machine. Supprime sur decision explicite :
+mieux vaut ne rien afficher que d'afficher ce qui ne marche pas.
+
+La section MOTEURS n'expose donc que ce qui sonne : les modules `gen.*` du
+rack (FM 2-op, oscillateurs, bruit, resonateur) et un acces au Creator
+(10 couches Tone.js + MIDI), qui reste une fenetre parce qu'il a son clavier.
+
+### Ce qui a bouge
+
+- `useResizablePanels` gagne `atelierWidth` (220-560 px, persistant). Le
+  delta est inverse : la colonne est a droite, tirer vers la gauche l'elargit.
+- Les boutons SYNTH RACK et EXTENSIONS disparaissent de `Header.tsx`.
+- Le bundle principal passe de 445 a 490 kB : les modules du rack sont
+  desormais charges au demarrage, la colonne etant toujours montee. C'est le
+  prix du temps reel permanent.
+
+Tests : 151 -> 157.
+
 ## Pistes ouvertes
 
 - Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.

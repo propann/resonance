@@ -12,7 +12,6 @@ export type ModalKey =
   | 'dspModal'
   | 'rackHost'
   | 'synthRack'
-  | 'advancedRack'
   | 'shortcuts'
   | 'doc'
   | 'patches'
@@ -32,7 +31,6 @@ const ALL_CLOSED: Record<ModalKey, boolean> = {
   dspModal: false,
   rackHost: false,
   synthRack: false,
-  advancedRack: false,
   shortcuts: false,
   doc: false,
   patches: false,

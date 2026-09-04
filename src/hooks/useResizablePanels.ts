@@ -2,10 +2,15 @@ import { useCallback, useState, type MouseEvent as ReactMouseEvent } from 'react
 
 const SIDEBAR_KEY = 'resonance_sidebar_width_v2';
 const WAVEFORM_KEY = 'resonance_waveform_height_v2';
+const ATELIER_KEY = 'resonance_atelier_width_v1';
 
 const SIDEBAR_DEFAULT = 280;
 const SIDEBAR_MIN = 190;
 const SIDEBAR_MAX = 520;
+
+const ATELIER_DEFAULT = 300;
+const ATELIER_MIN = 220;
+const ATELIER_MAX = 560;
 
 const WAVEFORM_DEFAULT = 175;
 const WAVEFORM_MIN = 100;
@@ -30,14 +35,17 @@ function writeStored(key: string, value: number): void {
 }
 
 /**
- * Owns the two draggable workspace splitters (sidebar width, waveform height),
- * their live-drag flags and their localStorage persistence.
+ * Owns the draggable workspace splitters (sidebar width, waveform height and
+ * the workshop column's width), their live-drag flags and their localStorage
+ * persistence.
  */
 export function useResizablePanels() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStored(SIDEBAR_KEY, SIDEBAR_DEFAULT));
   const [waveformHeight, setWaveformHeight] = useState<number>(() => readStored(WAVEFORM_KEY, WAVEFORM_DEFAULT));
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingWaveform, setIsResizingWaveform] = useState(false);
+  const [atelierWidth, setAtelierWidth] = useState<number>(() => readStored(ATELIER_KEY, ATELIER_DEFAULT));
+  const [isResizingAtelier, setIsResizingAtelier] = useState(false);
 
   const startSidebarResize = useCallback((e: ReactMouseEvent) => {
     e.preventDefault();
@@ -79,12 +87,37 @@ export function useResizablePanels() {
     document.addEventListener('mouseup', handleMouseUp);
   }, [waveformHeight]);
 
+  // The workshop column sits on the right, so dragging its splitter left has
+  // to widen it: the delta is inverted compared with the sidebar's.
+  const startAtelierResize = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    setIsResizingAtelier(true);
+    const startX = e.clientX;
+    const startWidth = atelierWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const next = Math.max(ATELIER_MIN, Math.min(ATELIER_MAX, startWidth - (moveEvent.clientX - startX)));
+      setAtelierWidth(next);
+      writeStored(ATELIER_KEY, next);
+    };
+    const handleMouseUp = () => {
+      setIsResizingAtelier(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [atelierWidth]);
+
   return {
     sidebarWidth,
     waveformHeight,
+    atelierWidth,
     isResizingSidebar,
     isResizingWaveform,
+    isResizingAtelier,
     startSidebarResize,
     startWaveformResize,
+    startAtelierResize,
   };
 }

@@ -95,7 +95,7 @@ async function freeName(dirRel: string, wanted: string): Promise<string> {
 
 const manifest = await loadManifest();
 const byPath = new Map(manifest.map((entry) => [keyOf(entry), entry]));
-console.log(`manifeste : ${manifest.size?.toLocaleString('fr-FR') ?? manifest.length.toLocaleString('fr-FR')} entrées`);
+console.log(`manifeste : ${manifest.length.toLocaleString('fr-FR')} entrées`);
 
 let scanned = 0;
 let inPlace = 0;
