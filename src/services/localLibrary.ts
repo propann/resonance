@@ -493,22 +493,6 @@ export async function readLibraryFileBlob(relPath: string): Promise<Blob> {
   return new Blob([await desktopFS().readFile(j(relPath))]);
 }
 
-/**
- * Replace the manifest with `samples` exactly (unlike `writeLibraryManifest`,
- * which merges). Used when entries have to disappear, e.g. after removing
- * duplicate files.
- */
-export async function replaceLibraryManifest(
-  _root: LibraryRoot,
-  samples: Array<Record<string, unknown>>
-): Promise<void> {
-  await writeJsonFile(MANIFEST_FILE, {
-    generatedAt: new Date().toISOString(),
-    schemaVersion: 1,
-    samples,
-  });
-}
-
 // --- deletion / cleanup -----------------------------------------------------
 
 export async function removeWorkFolderFiles(_root: LibraryRoot, sourcePaths: string[]): Promise<number> {
@@ -606,13 +590,34 @@ async function writeJsonFile(rel: string, value: unknown): Promise<void> {
 }
 
 /**
- * The manifest entries, or null when the file exists but cannot be read. The
+ * The manifest is the library's record: one entry per filed sound. It is kept
+ * as a snapshot (`resonance-library.json`) plus a journal of appended entries
+ * (`.journal.ndjson`).
+ *
+ * Rewriting the snapshot on every ingest batch meant reading, merging and
+ * writing ~86 Mo of JSON dozens of times an hour once the library grew past
+ * 200 000 sounds. Batches now append a few kilobytes to the journal, and the
+ * snapshot is rebuilt only when the journal gets long.
+ */
+const MANIFEST_JOURNAL = '_MANIFEST/resonance-library.journal.ndjson';
+/** Journal entries tolerated before folding them back into the snapshot. */
+const JOURNAL_COMPACT_THRESHOLD = 5000;
+
+const manifestKey = (sample: Record<string, unknown>): string =>
+  `${sample.path || ''}/${sample.fileName || sample.name || ''}`;
+
+/** Loaded index, shared by every reader for the life of the session. */
+let manifestIndex: Map<string, Record<string, unknown>> | null = null;
+let journalEntryCount = 0;
+
+/**
+ * Snapshot entries, or null when the file exists but cannot be read. The
  * difference matters: an empty library and an unreadable manifest look the
  * same to a merge, and treating the second as the first rewrites the file with
- * only the newest batch — which is exactly how a 2 000-entry manifest became a
+ * only the newest batch — which is how a 2 000-entry manifest became a
  * 1 500-entry one while the folder held 110 000 files.
  */
-async function readManifestSamples(): Promise<Array<Record<string, unknown>> | null> {
+async function readSnapshotSamples(): Promise<Array<Record<string, unknown>> | null> {
   const stat = await desktopFS().stat(MANIFEST_FILE);
   if (!stat.exists) return [];
   const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: unknown } | null;
@@ -620,45 +625,97 @@ async function readManifestSamples(): Promise<Array<Record<string, unknown>> | n
   return parsed.samples as Array<Record<string, unknown>>;
 }
 
-const manifestKey = (sample: Record<string, unknown>): string =>
-  `${sample.path || ''}/${sample.fileName || sample.name || ''}`;
+/** Journal lines, skipping anything that no longer parses. */
+async function readJournalSamples(): Promise<Array<Record<string, unknown>>> {
+  const stat = await desktopFS().stat(MANIFEST_JOURNAL);
+  if (!stat.exists) return [];
+  try {
+    const text = new TextDecoder().decode(await desktopFS().readFile(MANIFEST_JOURNAL));
+    return text
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line) as Record<string, unknown>];
+        } catch {
+          return [];
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
+/** Build (once) the in-memory index of every manifest entry. */
+async function loadManifestIndex(): Promise<Map<string, Record<string, unknown>>> {
+  if (manifestIndex) return manifestIndex;
+  const snapshot = await readSnapshotSamples();
+  if (snapshot === null) {
+    throw new Error('Manifeste illisible : la bibliothèque ne peut pas être lue sans risque.');
+  }
+  const journal = await readJournalSamples();
+  journalEntryCount = journal.length;
+  const index = new Map<string, Record<string, unknown>>();
+  for (const entry of snapshot) index.set(manifestKey(entry), entry);
+  for (const entry of journal) index.set(manifestKey(entry), entry);
+  manifestIndex = index;
+  return index;
+}
+
+/** Write the snapshot from the index and drop the journal. */
+async function compactManifest(index: Map<string, Record<string, unknown>>): Promise<void> {
+  await writeJsonFile(MANIFEST_FILE, {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 1,
+    samples: [...index.values()],
+  });
+  await desktopFS().remove(MANIFEST_JOURNAL).catch(() => undefined);
+  journalEntryCount = 0;
+}
 
 /**
- * Merge `samples` into the manifest. Throws rather than write a truncated
- * manifest: callers delete the source files once this resolves, so a silent
- * loss here would lose the record of sounds that are already on disk.
+ * Add or update entries. Appends to the journal — callers delete source files
+ * once this resolves, so it must be durable, but it must not cost a full
+ * rewrite of the library's record.
  */
 export async function writeLibraryManifest(
   _root: LibraryRoot,
   samples: Array<Record<string, unknown>>
 ): Promise<void> {
-  const existing = await readManifestSamples();
-  if (existing === null) {
-    throw new Error('Manifeste illisible : écriture annulée pour ne pas écraser la bibliothèque.');
+  if (samples.length === 0) return;
+  const index = await loadManifestIndex();
+  for (const sample of samples) index.set(manifestKey(sample), sample);
+
+  const lines = `${samples.map((sample) => JSON.stringify(sample)).join('\n')}\n`;
+  const bytes = new TextEncoder().encode(lines);
+  const fs = desktopFS();
+  if (fs.appendFile) {
+    await fs.appendFile(MANIFEST_JOURNAL, bytes);
+    journalEntryCount += samples.length;
+    if (journalEntryCount >= JOURNAL_COMPACT_THRESHOLD) await compactManifest(index);
+  } else {
+    // No append on this bridge: fall back to rewriting the snapshot.
+    await compactManifest(index);
   }
-
-  const merged = new Map<string, Record<string, unknown>>();
-  for (const sample of existing) merged.set(manifestKey(sample), sample);
-  for (const sample of samples) merged.set(manifestKey(sample), sample);
-
-  // Keep the previous file around: a manifest is the library's memory.
-  if (existing.length > 0) {
-    await desktopFS()
-      .readFile(MANIFEST_FILE)
-      .then((buf) => desktopFS().writeFile(`${MANIFEST_FILE}.bak`, buf))
-      .catch(() => undefined);
-  }
-
-  await writeJsonFile(MANIFEST_FILE, {
-    generatedAt: new Date().toISOString(),
-    schemaVersion: 1,
-    samples: [...merged.values()],
-  });
 }
 
 export async function readLibraryManifest(_root: LibraryRoot): Promise<Array<Record<string, unknown>>> {
-  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: unknown } | null;
-  return Array.isArray(parsed?.samples) ? (parsed!.samples as Array<Record<string, unknown>>) : [];
+  return [...(await loadManifestIndex()).values()];
+}
+
+/**
+ * Replace the manifest with `samples` exactly (unlike `writeLibraryManifest`,
+ * which merges). Used when entries have to disappear, e.g. after removing
+ * duplicate files.
+ */
+export async function replaceLibraryManifest(
+  _root: LibraryRoot,
+  samples: Array<Record<string, unknown>>
+): Promise<void> {
+  const index = new Map<string, Record<string, unknown>>();
+  for (const sample of samples) index.set(manifestKey(sample), sample);
+  manifestIndex = index;
+  await compactManifest(index);
 }
 
 /**
@@ -667,13 +724,11 @@ export async function readLibraryManifest(_root: LibraryRoot): Promise<Array<Rec
  * same bytes, and must not land a second time as `..._2`.
  */
 export async function getLibraryContentHashes(_root: LibraryRoot): Promise<Set<string>> {
-  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
-  if (!Array.isArray(parsed?.samples)) return new Set();
-  return new Set(
-    parsed!.samples
-      .map((sample) => sample.contentHash)
-      .filter((hash): hash is string => typeof hash === 'string')
-  );
+  const hashes = new Set<string>();
+  for (const entry of (await loadManifestIndex()).values()) {
+    if (typeof entry.contentHash === 'string') hashes.add(entry.contentHash);
+  }
+  return hashes;
 }
 
 /** SHA-256 of the source bytes, as hex. Identity of the audio on disk. */
@@ -690,13 +745,11 @@ export async function hashFileContent(file: Blob): Promise<string | undefined> {
 }
 
 export async function getProcessedSourceFingerprints(_root: LibraryRoot): Promise<Set<string>> {
-  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
-  if (!Array.isArray(parsed?.samples)) return new Set();
-  return new Set(
-    parsed!.samples
-      .map((sample) => sample.sourceFingerprint)
-      .filter((fp): fp is string => typeof fp === 'string')
-  );
+  const fingerprints = new Set<string>();
+  for (const entry of (await loadManifestIndex()).values()) {
+    if (typeof entry.sourceFingerprint === 'string') fingerprints.add(entry.sourceFingerprint);
+  }
+  return fingerprints;
 }
 
 export async function readStudioSettings(_root: LibraryRoot): Promise<Record<string, unknown>> {

@@ -34,6 +34,8 @@ export interface DesktopFS {
   /** Read `length` bytes from `offset`; cheaper than reading a whole sample. */
   readFilePart?(rel: string, offset: number, length: number): Promise<ArrayBuffer>;
   writeFile(rel: string, data: ArrayBuffer | Uint8Array): Promise<boolean>;
+  /** Append to a file — the manifest journal is written this way. */
+  appendFile?(rel: string, data: ArrayBuffer | Uint8Array): Promise<boolean>;
   mkdirp(rel: string): Promise<boolean>;
   remove(rel: string): Promise<boolean>;
   rename(relFrom: string, relTo: string): Promise<boolean>;

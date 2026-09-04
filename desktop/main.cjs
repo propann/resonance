@@ -212,6 +212,14 @@ ipcMain.handle('fs:writeFile', async (_e, rel, data) => {
   return true;
 });
 
+/** Append bytes to a file, creating it if needed. */
+ipcMain.handle('fs:appendFile', async (_e, rel, data) => {
+  const abs = resolveInRoot(rel);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.appendFile(abs, Buffer.from(data));
+  return true;
+});
+
 ipcMain.handle('fs:mkdirp', async (_e, rel) => {
   await fs.mkdir(resolveInRoot(rel), { recursive: true });
   return true;

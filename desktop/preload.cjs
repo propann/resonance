@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('resonanceFS', {
   readFile: (rel) => ipcRenderer.invoke('fs:readFile', rel),
   readFilePart: (rel, offset, length) => ipcRenderer.invoke('fs:readFilePart', rel, offset, length),
   writeFile: (rel, data) => ipcRenderer.invoke('fs:writeFile', rel, data),
+  appendFile: (rel, data) => ipcRenderer.invoke('fs:appendFile', rel, data),
   mkdirp: (rel) => ipcRenderer.invoke('fs:mkdirp', rel),
   remove: (rel) => ipcRenderer.invoke('fs:remove', rel),
   rename: (relFrom, relTo) => ipcRenderer.invoke('fs:rename', relFrom, relTo),

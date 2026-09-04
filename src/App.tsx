@@ -8,6 +8,8 @@ import { useUiStore } from './stores/uiStore';
 import { useLibraryStore } from './stores/libraryStore';
 import { useSampleTargetStore, openSampleModal } from './stores/sampleTargetStore';
 import { activeAudition } from './stores/transportStore';
+import { useDebouncedValue } from './hooks/useDebouncedValue';
+import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortDrumFolder } from './services/drumSorter';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
@@ -214,22 +216,15 @@ export default function App() {
   // The library intentionally starts empty: users import their own source material.
 
   // Filtered and Sorted Samples list
+  // The typed query drives the input; the filter waits for it to settle.
+  const searchQuery = useDebouncedValue(filterState.searchQuery, 200);
+
   const filteredSamples = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return samples
       .filter((s) => {
-        // Search query
-        if (filterState.searchQuery.trim()) {
-          const q = filterState.searchQuery.toLowerCase();
-          const matchesName = s.name.toLowerCase().includes(q);
-          const matchesType = s.type.toLowerCase().includes(q);
-          const matchesKey = s.key?.toLowerCase().includes(q);
-          const matchesTag = s.tags.some((t) => t.toLowerCase().includes(q));
-          const matchesBpm = s.bpm && s.bpm.toString().includes(q);
-          const matchesGenre = s.genre?.toLowerCase().includes(q);
-          if (!matchesName && !matchesType && !matchesKey && !matchesTag && !matchesBpm && !matchesGenre) {
-            return false;
-          }
-        }
+        // Search query, against a per-sample text built once
+        if (query && !sampleMatchesQuery(s, query)) return false;
 
         // Folder
         if (filterState.selectedFolderId && s.folderId !== filterState.selectedFolderId) {
@@ -308,7 +303,7 @@ export default function App() {
             return (a.dateAdded - b.dateAdded) * dir;
         }
       });
-  }, [samples, filterState]);
+  }, [samples, filterState, searchQuery]);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
