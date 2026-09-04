@@ -11,6 +11,8 @@ import { registerBuiltinModules } from '../rack/modules';
 import { RackModulePanel } from '../rack/RackModulePanel';
 import { RACK_TEMPLATES } from '../rack/templates';
 import { useAudition } from '../stores/transportStore';
+import { toast } from '../stores/toastStore';
+import { testAllModules, type ModuleTestResult } from '../rack/selfTest';
 import { useUiStore } from '../stores/uiStore';
 import { useRackStore } from '../stores/rackStore';
 import type { ParamValues, RackState } from '../rack/types';
@@ -76,6 +78,8 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   // Off by default: nothing in the app starts looping on its own.
   const [loop, setLoop] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
+  const [selfTest, setSelfTest] = useState<ModuleTestResult[] | null>(null);
+  const [testProgress, setTestProgress] = useState<string | null>(null);
   const [jsonText, setJsonText] = useState('');
 
   // Waveform-editor state
@@ -128,6 +132,26 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
     srcRef.current = src;
     setIsPlaying(true);
   }, [sample, loop, stopAudition]);
+
+  /** Render every effect over a reference signal and report what it changes. */
+  const handleSelfTest = async () => {
+    setSelfTest(null);
+    setTestProgress('…');
+    try {
+      const results = await testAllModules((done, total, label) =>
+        setTestProgress(`${done}/${total} ${label}`)
+      );
+      setSelfTest(results);
+      const broken = results.filter((r) => !r.ok);
+      if (broken.length === 0) toast.success(`${results.length} effets testés : tous répondent.`);
+      else toast.error(`${broken.length} effet(s) à revoir sur ${results.length}.`);
+    } catch (error) {
+      console.error('Test des effets impossible', error);
+      toast.error('Le banc de test des effets a échoué.');
+    } finally {
+      setTestProgress(null);
+    }
+  };
 
   // Space auditions the rack while this window is open.
   useAudition(
@@ -413,7 +437,9 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
                 de l'entrée vers la sortie.
               </div>
             ) : (
-              <div className="space-y-2">
+              // Two cards per row on a wide window: a six-module chain used to
+              // run off the bottom of the screen.
+              <div className="grid gap-1.5 lg:grid-cols-2 2xl:grid-cols-3">
                 {rack.modules.map((m) => {
                   const def = listModuleDefs().find((d) => d.type === m.type);
                   if (!def) return null;
@@ -432,6 +458,47 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
                 })}
               </div>
             )}
+
+            {/* Effect bench: renders every module over a reference signal */}
+            <details className="mt-4 rounded border border-[#202034] bg-[#0A0A16] p-3 text-[11px]">
+              <summary className="cursor-pointer text-[#8E8E98]">
+                Banc de test des effets{selfTest ? ` — ${selfTest.filter((r) => r.ok).length}/${selfTest.length} OK` : ''}
+              </summary>
+              <div className="mt-2 space-y-2">
+                <button
+                  onClick={() => void handleSelfTest()}
+                  disabled={testProgress !== null}
+                  className="rounded border border-[#00F0FF]/50 bg-[#00F0FF]/10 px-3 py-1.5 font-mono text-[10px] font-bold text-[#00F0FF] transition hover:bg-[#00F0FF]/25 disabled:opacity-40"
+                  title="Rend un signal étalon à travers chaque effet et mesure ce qu'il change"
+                >
+                  {testProgress ? `Test ${testProgress}` : 'Tester tous les effets'}
+                </button>
+                {selfTest && (
+                  <ul className="max-h-56 space-y-0.5 overflow-y-auto font-mono text-[10px]">
+                    {selfTest.map((result) => (
+                      <li key={result.type} className="flex items-center gap-2">
+                        <span
+                          className={
+                            result.status === 'ok'
+                              ? 'text-[#34D399]'
+                              : result.status === 'transparent'
+                                ? 'text-[#FBBF24]'
+                                : 'text-[#EF4444]'
+                          }
+                        >
+                          {result.status === 'ok' ? '●' : result.status === 'transparent' ? '○' : '✕'}
+                        </span>
+                        <span className="w-28 truncate text-[#EDEDEE]">{result.label}</span>
+                        <span className="w-20 text-[#8E8E98]">
+                          {Number.isFinite(result.changeDb) ? `${result.changeDb.toFixed(1)} dB` : '—'}
+                        </span>
+                        <span className="truncate text-[#8E8E98]">{result.note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
 
             <details className="mt-4 rounded border border-[#202034] bg-[#0A0A16] p-3 text-[11px]">
               <summary className="cursor-pointer text-[#8E8E98]">Template JSON</summary>

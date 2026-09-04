@@ -21,10 +21,10 @@ export const reverbModule: RackModuleDef = {
   label: 'Reverb',
   family: 'Space',
   params: [
-    { key: 'size', label: 'Size', type: 'float', min: 0.1, max: 5, step: 0.1, unit: 's', default: 1.8 },
+    { key: 'size', label: 'Size', type: 'float', min: 0.1, max: 5, step: 0.1, unit: 's', default: 2.2 },
     { key: 'preDelay', label: 'Pre-delay', type: 'float', min: 0, max: 0.2, step: 0.005, unit: 's', default: 0.01 },
     { key: 'damp', label: 'Damp', type: 'float', min: 0, max: 1, step: 0.01, default: 0.4 },
-    { key: 'mix', label: 'Mix', type: 'float', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { key: 'mix', label: 'Mix', type: 'float', min: 0, max: 1, step: 0.01, default: 0.45 },
   ],
   createNode(ctx: BaseAudioContext, params: ParamValues): RackNode {
     const input = ctx.createGain();

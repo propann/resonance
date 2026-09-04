@@ -105,6 +105,11 @@ export class Rack {
     return this.live.some((m) => m.id === id);
   }
 
+  /** How many modules are actually live — a module that failed to build is not. */
+  get moduleCount(): number {
+    return this.live.length;
+  }
+
   dispose(): void {
     this.teardown();
     try {

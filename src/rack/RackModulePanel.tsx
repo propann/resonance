@@ -52,8 +52,8 @@ const ParamRow: React.FC<ParamRowProps> = ({ spec, value, onChange }) => {
 
   const num = typeof value === 'number' ? value : Number(value);
   return (
-    <label className="flex items-center gap-2 text-[11px] text-[#A9A9B8]">
-      <span className="w-16">{spec.label}</span>
+    <label className="flex items-center gap-1.5 text-[10px] leading-tight text-[#A9A9B8]">
+      <span className="w-14 truncate">{spec.label}</span>
       <input
         type="range"
         min={spec.min}
@@ -61,9 +61,9 @@ const ParamRow: React.FC<ParamRowProps> = ({ spec, value, onChange }) => {
         step={spec.step ?? (spec.type === 'int' ? 1 : 'any')}
         value={num}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1"
+        className="h-3 flex-1"
       />
-      <span className="w-14 text-right tabular-nums">
+      <span className="w-12 text-right tabular-nums">
         {spec.type === 'int' ? num : num.toFixed(2)}
         {spec.unit ? ` ${spec.unit}` : ''}
       </span>
@@ -86,33 +86,33 @@ export const RackModulePanel: React.FC<RackModulePanelProps> = ({
 }) => {
   return (
     <section
-      className={`rounded-lg border p-3 ${
+      className={`rounded border p-1.5 ${
         enabled ? 'border-[#00F0FF]/50 bg-[#00F0FF]/5' : 'border-[#242432] bg-[#0D0E14]'
       }`}
     >
-      <header className="mb-2 flex items-center justify-between gap-2">
-        <label className="flex items-center gap-2 text-xs font-bold">
-          <input type="checkbox" checked={enabled} onChange={onToggle} />
-          {def.label}
-          <span className="text-[10px] font-normal text-[#00F0FF]">{def.family}</span>
+      <header className="mb-1 flex items-center justify-between gap-1.5">
+        <label className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold">
+          <input type="checkbox" checked={enabled} onChange={onToggle} className="h-3 w-3" />
+          <span className="truncate">{def.label}</span>
+          <span className="text-[9px] font-normal text-[#00F0FF]">{def.family}</span>
         </label>
-        <div className="flex items-center gap-1 text-[10px]">
-          <button onClick={() => onMove(-1)} className="px-1.5 py-0.5 border border-[#343449] rounded" title="Monter">
+        <div className="flex items-center gap-0.5 text-[9px]">
+          <button onClick={() => onMove(-1)} className="rounded border border-[#343449] px-1 leading-none" title="Monter">
             ↑
           </button>
-          <button onClick={() => onMove(1)} className="px-1.5 py-0.5 border border-[#343449] rounded" title="Descendre">
+          <button onClick={() => onMove(1)} className="rounded border border-[#343449] px-1 leading-none" title="Descendre">
             ↓
           </button>
           <button
             onClick={onRemove}
-            className="px-1.5 py-0.5 border border-[#5A2A2A] text-[#EF6B6B] rounded"
+            className="rounded border border-[#5A2A2A] px-1 leading-none text-[#EF6B6B]"
             title="Retirer"
           >
             ✕
           </button>
         </div>
       </header>
-      <div className="space-y-1.5">
+      <div className="space-y-0.5">
         {def.params.map((spec) => (
           <ParamRow
             key={spec.key}

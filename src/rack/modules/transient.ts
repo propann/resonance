@@ -9,8 +9,8 @@ export const transientModule: RackModuleDef = {
   label: 'Transient',
   family: 'Dynamics',
   params: [
-    { key: 'attack', label: 'Attack', type: 'float', min: -20, max: 20, step: 0.5, unit: 'dB', default: 0 },
-    { key: 'sustain', label: 'Sustain', type: 'float', min: -20, max: 20, step: 0.5, unit: 'dB', default: 0 },
+    { key: 'attack', label: 'Attack', type: 'float', min: -20, max: 20, step: 0.5, unit: 'dB', default: 4 },
+    { key: 'sustain', label: 'Sustain', type: 'float', min: -20, max: 20, step: 0.5, unit: 'dB', default: -2 },
     { key: 'speed', label: 'Speed', type: 'float', min: 1, max: 200, step: 1, unit: 'ms', default: 30 },
   ],
   async createNode(ctx: BaseAudioContext, params: ParamValues): Promise<RackNode> {

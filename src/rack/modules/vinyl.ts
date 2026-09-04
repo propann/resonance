@@ -9,11 +9,11 @@ export const vinylModule: RackModuleDef = {
   label: 'Vinyl / Tape',
   family: 'Lo-Fi',
   params: [
-    { key: 'wow', label: 'Wow', type: 'float', min: 0, max: 1, step: 0.01, default: 0.3 },
-    { key: 'flutter', label: 'Flutter', type: 'float', min: 0, max: 1, step: 0.01, default: 0.3 },
-    { key: 'crackle', label: 'Crackle', type: 'float', min: 0, max: 1, step: 0.01, default: 0.2 },
-    { key: 'age', label: 'Age', type: 'float', min: 0, max: 1, step: 0.01, default: 0.4 },
-    { key: 'mix', label: 'Mix', type: 'float', min: 0, max: 1, step: 0.01, default: 0.7 },
+    { key: 'wow', label: 'Wow', type: 'float', min: 0, max: 1, step: 0.01, default: 0.45 },
+    { key: 'flutter', label: 'Flutter', type: 'float', min: 0, max: 1, step: 0.01, default: 0.4 },
+    { key: 'crackle', label: 'Crackle', type: 'float', min: 0, max: 1, step: 0.01, default: 0.4 },
+    { key: 'age', label: 'Age', type: 'float', min: 0, max: 1, step: 0.01, default: 0.55 },
+    { key: 'mix', label: 'Mix', type: 'float', min: 0, max: 1, step: 0.01, default: 0.85 },
   ],
   async createNode(ctx: BaseAudioContext, params: ParamValues): Promise<RackNode> {
     await ensureWorklet(ctx, WORKLET_URL);

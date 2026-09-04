@@ -9,7 +9,7 @@ export const pitchModule: RackModuleDef = {
   label: 'Pitch Shift',
   family: 'Pitch',
   params: [
-    { key: 'semitones', label: 'Semitones', type: 'int', min: -12, max: 12, step: 1, default: 0 },
+    { key: 'semitones', label: 'Semitones', type: 'int', min: -12, max: 12, step: 1, default: -5 },
     { key: 'mix', label: 'Mix', type: 'float', min: 0, max: 1, step: 0.01, default: 1 },
   ],
   async createNode(ctx: BaseAudioContext, params: ParamValues): Promise<RackNode> {
