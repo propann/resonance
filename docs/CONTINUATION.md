@@ -187,6 +187,34 @@ famille (`_ARCHIVE`) est ignoré.
 Tests : 109 → 137 (`drumSorter.test.ts` 9, `libraryFolders.test.ts` 16, +3 sur
 les règles). `tsc` propre, `eslint` 0 erreur, build OK.
 
+### 5. La détection du type lisait les mots-clés en sous-chaîne
+
+L'étage au-dessus du rangement — celui qui décide *quel type* est un son, donc
+vers quel dossier il part — testait les mots-clés avec des `includes()` nus.
+Même classe de bug, un cran plus haut, et plus visible :
+
+| Fichier | Type détecté |
+|---|---|
+| `Whatever_Vox.wav`, `That_Sound.wav`, `Chat_Ambience.wav` | `hihat` (« hat ») |
+| `Override_Lead.wav`, `Bride_Choir.wav` | `cymbal` (« ride ») |
+| `Sharp_Stab.wav`, `Harp_Gliss.wav`, `Warped_Texture.wav` | `lead` (« arp ») |
+| `Monkey_Scream.wav`, `Keyboard_Take.wav` | `lead` (« key ») |
+| `Launchpad_Rec.wav` | `pad` |
+
+Et l'inverse : `BD-909.wav`, `SD-02.wav`, `HH-01.wav` n'étaient pas reconnus du
+tout, les règles exigeant `bd_`, `sd_`, `hh_` — un tiret ou un chiffre ne
+comptait pas comme séparateur. Ces fichiers partaient en analyse DSP à
+l'aveugle. Cet étage court-circuitait aussi le correctif n°1 : `Hatchback`
+typé `hihat` ici atterrissait dans HATS quoi qu'en dise la règle de famille.
+
+Les deux étages partagent maintenant `src/services/nameTokens.ts`
+(`token()` / `word()` / `rule()`), et l'étage mots-clés est une table ordonnée
+au lieu d'une cascade de `if`. Un nom qui ne nomme rien tombe en analyse
+acoustique — c'est la bonne réponse, meilleure qu'une certitude fausse.
+Table de non-régression : `audioAnalyzer.test.ts`.
+
+Tests : 137 → 143.
+
 ## Pistes ouvertes
 
 - Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.

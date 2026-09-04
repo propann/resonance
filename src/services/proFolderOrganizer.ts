@@ -1,4 +1,5 @@
 import { SampleItem, SampleType, SampleCategory } from '../types/sample';
+import { rule, token, word } from './nameTokens';
 
 /** The drum families that get their own folder under 01_DRUMS. */
 export type DrumFamily = 'kicks' | 'snares' | 'hats' | 'claps' | 'cymbals' | 'percs';
@@ -21,27 +22,6 @@ export const DRUM_FAMILY_IDS: Record<DrumFamily, string> = {
   cymbals: 'f-os-drums-cymbals',
   percs: 'f-os-drums-percs',
 };
-
-/**
- * A token boundary that understands sample names.
- *
- * `` counts `_` as a word character, so `hat` never matched
- * `Hat_Loose.wav` — and `_` is exactly what this app's naming convention
- * separates with, which sent `Clap_Wide.wav`, `HH_Pedal.wav` and `Ride_Bell.wav`
- * straight to the percs bucket. Here only letters count as "inside a word", so
- * `_`, `-`, `.`, digits and both ends of the name close a token. A plural `s`
- * belongs to the token, so `Claps`, `Kicks` and `Hats` read the same as their
- * singular.
- */
-const token = (...words: string[]): string => `(?<![a-z])(?:${words.join('|')})s?(?![a-z])`;
-
-/**
- * Words long enough to be safe inside a run-together name: `TrapKick`,
- * `KickDrum` and `808Kick` all have to read as kicks.
- */
-const word = (...words: string[]): string => `(?:${words.join('|')})`;
-
-const rule = (...alternatives: string[]): RegExp => new RegExp(alternatives.join('|'), 'i');
 
 // Read in order: the name is more specific than the detected type ("rimshot"
 // is a snare, "open hat" a hat), so it decides first. Short abbreviations go

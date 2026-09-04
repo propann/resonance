@@ -1,4 +1,5 @@
 import { MusicGenre, SampleCategory, SampleType, SliceRegion, SampleItem } from '../types/sample';
+import { rule, token, word } from './nameTokens';
 
 // Note names
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -664,6 +665,62 @@ export function extractAcousticFeatures(buffer: AudioBuffer): {
 /**
  * Comprehensive Sample Classification (Acoustic + Harmonic + Temporal + Genre)
  */
+/** What a keyword match settles: the type, its tags and how the call is explained. */
+type KeywordVerdict = { type: SampleType; tags: string[]; acousticConfidence: number; acousticDetails: string };
+
+/**
+ * Names that state the sound outright. `word(...)` is for terms long enough to
+ * be safe inside a run-together name (`TrapKick`); `token(...)` is for short
+ * codes that must stand alone, separated by `_`, `-`, `.`, a space, a digit or
+ * the end of the name.
+ */
+const KEYWORD_RULES: Array<[RegExp, KeywordVerdict]> = [
+  [
+    rule(word('kick', 'bassdrum', 'bass.?drum'), token('bd', 'kik', 'kck')),
+    { type: 'kick', tags: ['punch', 'low-end', 'drum', 'one-shot'], acousticConfidence: 0.98, acousticDetails: 'Keyword: Kick Drum' },
+  ],
+  [
+    rule(word('808', 'subbass', 'sub.?bass')),
+    { type: '808', tags: ['sub', 'trap', 'bass', 'saturated'], acousticConfidence: 0.98, acousticDetails: 'Keyword: 808 Sub' },
+  ],
+  [
+    rule(word('snare', 'rimshot', 'rim.?shot', 'sidestick', 'side.?stick'), token('sd', 'snr', 'rim')),
+    { type: 'snare', tags: ['drum', 'crack', 'one-shot'], acousticConfidence: 0.98, acousticDetails: 'Keyword: Snare Drum' },
+  ],
+  [
+    rule(word('hihat', 'hi.?hat', 'shaker', 'tambourine', 'tambour'), token('hh', 'hat')),
+    { type: 'hihat', tags: ['high', 'top', 'metallic', 'crisp'], acousticConfidence: 0.98, acousticDetails: 'Keyword: Hi-Hat / Shaker' },
+  ],
+  [
+    rule(word('handclap', 'hand.?clap', 'fingersnap', 'finger.?snap'), token('clap', 'clp', 'snap')),
+    { type: 'clap', tags: ['layered', 'percussion', 'stereo'], acousticConfidence: 0.98, acousticDetails: 'Keyword: Handclap' },
+  ],
+  [
+    rule(word('cymbal', 'crash', 'splash', 'china'), token('ride', 'cym')),
+    { type: 'cymbal', tags: ['bright', 'splash', 'acoustic'], acousticConfidence: 0.98, acousticDetails: 'Keyword: Cymbal / Crash' },
+  ],
+  [
+    rule(word('vocal', 'acapella', 'choir', 'chant'), token('vox', 'vcl')),
+    { type: 'vocal', tags: ['voice', 'melodic', 'fx'], acousticConfidence: 0.95, acousticDetails: 'Keyword: Vocal' },
+  ],
+  [
+    rule(word('loop', 'breakbeat', 'groove', 'toploop', 'top.?loop'), token('break', 'bpm')),
+    { type: 'loop', tags: ['groove', 'rhythm', 'tempo-synced'], acousticConfidence: 0.96, acousticDetails: 'Keyword: Loop / Break' },
+  ],
+  [
+    rule(word('lead', 'synth', 'pluck', 'arpeggio', 'keyboard'), token('arp', 'key')),
+    { type: 'lead', tags: ['melodic', 'tonal', 'synth'], acousticConfidence: 0.95, acousticDetails: 'Keyword: Synth Lead' },
+  ],
+  [
+    rule(word('drone', 'ambient', 'atmos', 'texture'), token('pad')),
+    { type: 'pad', tags: ['atmospheric', 'sustained', 'lush'], acousticConfidence: 0.95, acousticDetails: 'Keyword: Pad / Drone' },
+  ],
+  [
+    rule(word('riser', 'sweep', 'downlifter', 'transition', 'impact'), token('fx', 'sfx')),
+    { type: 'fx', tags: ['transition', 'texture', 'cinema'], acousticConfidence: 0.95, acousticDetails: 'Keyword: Sound FX' },
+  ],
+];
+
 export function classifySample(
   buffer: AudioBuffer,
   fileName: string,
@@ -675,39 +732,16 @@ export function classifySample(
   const centroid = metrics.spectralCentroid;
   const zcr = metrics.zeroCrossingRate;
 
-  // 1. Explicit Keyword Override (Highest Priority if clear convention)
-  if (lowerName.includes('kick') || lowerName.includes('bd_') || lowerName.includes('bassdrum') || lowerName.includes('kik')) {
-    return { type: 'kick', tags: ['punch', 'low-end', 'drum', 'one-shot'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Kick Drum' };
-  }
-  if (lowerName.includes('808') || lowerName.includes('sub_bass') || lowerName.includes('subbass')) {
-    return { type: '808', tags: ['sub', 'trap', 'bass', 'saturated'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: 808 Sub' };
-  }
-  if (lowerName.includes('snare') || lowerName.includes('sd_') || lowerName.includes('snr')) {
-    return { type: 'snare', tags: ['drum', 'crack', 'one-shot'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Snare Drum' };
-  }
-  if (lowerName.includes('hihat') || lowerName.includes('hh_') || lowerName.includes('hat') || lowerName.includes('shaker') || lowerName.includes('tambourine')) {
-    return { type: 'hihat', tags: ['high', 'top', 'metallic', 'crisp'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Hi-Hat / Shaker' };
-  }
-  if (lowerName.includes('clap') || lowerName.includes('clp')) {
-    return { type: 'clap', tags: ['layered', 'percussion', 'stereo'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Handclap' };
-  }
-  if (lowerName.includes('cymbal') || lowerName.includes('crash') || lowerName.includes('ride') || lowerName.includes('splash') || lowerName.includes('china')) {
-    return { type: 'cymbal', tags: ['bright', 'splash', 'acoustic'], isMultiSound: false, acousticConfidence: 0.98, acousticDetails: 'Keyword: Cymbal / Crash' };
-  }
-  if (lowerName.includes('vocal') || lowerName.includes('vox') || lowerName.includes('acapella') || lowerName.includes('chant') || lowerName.includes('choir')) {
-    return { type: 'vocal', tags: ['voice', 'melodic', 'fx'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Vocal' };
-  }
-  if (lowerName.includes('loop') || lowerName.includes('break') || lowerName.includes('groove') || lowerName.includes('bpm_') || lowerName.includes('toploop')) {
-    return { type: 'loop', tags: ['groove', 'rhythm', 'tempo-synced'], isMultiSound: false, acousticConfidence: 0.96, acousticDetails: 'Keyword: Loop / Break' };
-  }
-  if (lowerName.includes('lead') || lowerName.includes('synth') || lowerName.includes('pluck') || lowerName.includes('arp') || lowerName.includes('key')) {
-    return { type: 'lead', tags: ['melodic', 'tonal', 'synth'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Synth Lead' };
-  }
-  if (lowerName.includes('pad') || lowerName.includes('drone') || lowerName.includes('ambient') || lowerName.includes('atmos') || lowerName.includes('texture')) {
-    return { type: 'pad', tags: ['atmospheric', 'sustained', 'lush'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Pad / Drone' };
-  }
-  if (lowerName.includes('fx') || lowerName.includes('riser') || lowerName.includes('sweep') || lowerName.includes('impact') || lowerName.includes('downlifter') || lowerName.includes('transition')) {
-    return { type: 'fx', tags: ['transition', 'texture', 'cinema'], isMultiSound: false, acousticConfidence: 0.95, acousticDetails: 'Keyword: Sound FX' };
+  // 1. Explicit keyword override, when the name states what the sound is.
+  //
+  // Read in order, first match wins. Short codes go through `token` so they
+  // have to stand on their own: a bare `includes('hat')` used to read a hi-hat
+  // out of `Whatever_Vox.wav`, a ride out of `Override_Lead.wav` and an arp
+  // out of `Sharp_Stab.wav`. A name that names nothing falls through to the
+  // acoustic analysis below, which is the right answer — better than a
+  // confident wrong one.
+  for (const [pattern, verdict] of KEYWORD_RULES) {
+    if (pattern.test(lowerName)) return { ...verdict, isMultiSound: false };
   }
 
   // 2. Multi-Sound Hit Strip Check (e.g. OP-1 Drum kits or multi-transient recording)
