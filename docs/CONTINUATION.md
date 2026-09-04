@@ -265,6 +265,15 @@ Tests : 143 -> 151.
 - **Perf restante** : bundle principal 429 kB — `AutoCuratorModal` (~1,2 kl) reste chargé d'office parce que le transfert de fond vit dedans ; extraire ce pipeline en service le sortirait du chunk de démarrage.
 - `WaveformCanvas` (~1,8 kl), `Op1KitBuilderModal` / `AutoCuratorModal` (>1 kLOC) à découper.
 - Test réel OP-1 : figer `reverse: 19968`, `playmode 20480`, `drum_version: 2`.
+- **Paralléliser l'analyse d'ingestion.** Mesuré le 2026-09-04 sur `D:\Son` :
+  64 fichiers par ~75 s, soit **~51 fichiers/min**. Chaque source est décodée,
+  analysée (BPM, tonalité, transitoires, timbre), normalisée puis ré-encodée,
+  le tout sur le seul thread du rendu — d'où la cadence. Des Web Workers
+  diviseraient le temps par 4 à 8. **Volontairement remis à plus tard** :
+  priorité à un tri qui range juste (voir la règle produit ci-dessous), la
+  vitesse ensuite. Rien n'est bloqué en attendant, la réception se vide toute
+  seule lot par lot ; l'ingestion se met en pause pendant une écoute, donc
+  elle avance plus vite si on laisse l'app tranquille.
 
 ## Règle produit
 
