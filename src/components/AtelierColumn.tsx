@@ -27,6 +27,7 @@ import {
   Trash2,
   Keyboard,
   Piano,
+  Eraser,
 } from 'lucide-react';
 import { SampleItem } from '../types/sample';
 import { listModuleDefs } from '../rack/registry';
@@ -49,6 +50,8 @@ import { audioBufferToWavBlob } from '../services/audioConverter';
 import { calculateAudioMetrics } from '../services/audioAnalyzer';
 import { usePlayableEngine } from '../hooks/usePlayableEngine';
 import { testAllModules, type ModuleTestResult } from '../rack/selfTest';
+import { useNoteDrivers } from '../hooks/useNoteDrivers';
+import { STEP_COUNT, type ArpMode } from '../services/noteDrivers';
 
 registerBuiltinModules();
 
@@ -159,9 +162,15 @@ const LeafRow: React.FC<{ label: string; title?: string; onClick: () => void }> 
 interface AtelierColumnProps {
   sample: SampleItem | null;
   onSaveAsNewSample: (sample: SampleItem) => void;
+  /** Empty the edit window, to build an engine sound on a clean wave. */
+  onClearSample: () => void;
 }
 
-export const AtelierColumn: React.FC<AtelierColumnProps> = ({ sample, onSaveAsNewSample }) => {
+export const AtelierColumn: React.FC<AtelierColumnProps> = ({
+  sample,
+  onSaveAsNewSample,
+  onClearSample,
+}) => {
   const rack = useRackStore((s) => s.rack);
   const addModule = useRackStore((s) => s.addModule);
   const removeModule = useRackStore((s) => s.removeModule);
@@ -202,6 +211,9 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({ sample, onSaveAsNe
   // The engines are playable while their folder is open. Closed, they release
   // the keyboard, so typing a sample name stays typing.
   const player = usePlayableEngine(open.engines);
+
+  // What plays the engines when your hands are elsewhere.
+  const drivers = useNoteDrivers(player.heldNotes, (player.octave + 1) * 12);
 
   const [selfTest, setSelfTest] = useState<ModuleTestResult[] | null>(null);
   const [testProgress, setTestProgress] = useState<string | null>(null);
@@ -302,8 +314,18 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({ sample, onSaveAsNe
     <div className="flex h-full w-full flex-col overflow-hidden border-l-2 border-[#1E1E28] bg-[#0A0A0F]">
       <div className="flex items-center justify-between border-b-2 border-[#1E1E28] bg-[#101016] px-2 py-1.5">
         <span className="font-pixel text-[10px] tracking-wider text-[#00F0FF]">ATELIER</span>
-        <span className="font-pixel text-[8px] text-[#77778A]">
-          {sample ? sample.name.slice(0, 18) : 'aucun sample'}
+        <span className="flex items-center gap-1">
+          <span className="font-pixel text-[8px] text-[#77778A]">
+            {sample ? sample.name.slice(0, 14) : 'onde vide'}
+          </span>
+          <button
+            onClick={onClearSample}
+            disabled={!sample}
+            title="Vider l'onde pour y poser un son de moteur"
+            className="border border-[#2A2934] px-1 py-0.5 text-[#77778A] transition hover:border-[#EF4444] hover:text-[#EF4444] disabled:opacity-25"
+          >
+            <Eraser className="h-2.5 w-2.5" />
+          </button>
         </span>
       </div>
 
@@ -465,25 +487,122 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({ sample, onSaveAsNe
           </div>
         )}
 
-        {/* --------------------------------------------- ARPÉGIATEUR / SÉQUENCEUR */}
-        {(['arp', 'seq'] as const).map((id) => (
-          <React.Fragment key={id}>
-            <FolderRow
-              label={CATEGORIES.find((c) => c.id === id)!.label}
-              color={colorOf(id)}
-              open={open[id]}
-              count={0}
-              onToggle={() => toggle(id)}
-            />
-            {open[id] && (
-              <div className="ml-2 border-l border-[#22222E] pl-2">
-                <p className="px-1 py-1 text-[9px] leading-snug text-[#77778A]">
-                  Pas encore construit. Le dossier est là pour dire où ça ira.
-                </p>
-              </div>
-            )}
-          </React.Fragment>
-        ))}
+        {/* ------------------------------------------------------ ARPÉGIATEUR */}
+        <FolderRow
+          label="ARPÉGIATEUR"
+          color={colorOf('arp')}
+          open={open.arp}
+          onToggle={() => toggle('arp')}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              drivers.setArpOn(!drivers.arpOn);
+            }}
+            title="L'arpégiateur joue les notes tenues au clavier"
+            className={`border px-1.5 py-0.5 font-pixel text-[8px] ${
+              drivers.arpOn
+                ? 'border-[#FFE600] bg-[#FFE600]/20 text-[#FFE600]'
+                : 'border-[#2A2934] text-[#77778A] hover:border-[#3A3A4A]'
+            }`}
+          >
+            {drivers.arpOn ? 'ON' : 'OFF'}
+          </button>
+        </FolderRow>
+        {open.arp && (
+          <div className="ml-2 space-y-1 border-l border-[#22222E] p-1 pl-2">
+            <p className="text-[9px] leading-snug text-[#77778A]">
+              Tiens des notes au clavier : elles sont jouées l'une après l'autre.
+            </p>
+            <div className="flex flex-wrap gap-0.5">
+              {(['up', 'down', 'updown', 'random', 'chord'] as ArpMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => drivers.setArpMode(mode)}
+                  className={`border px-1.5 py-0.5 text-[9px] ${
+                    drivers.arpMode === mode
+                      ? 'border-[#FFE600] bg-[#FFE600]/20 text-[#FFE600]'
+                      : 'border-[#2A2934] text-[#A5A5B5] hover:border-[#3A3A4A]'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-1 text-[9px] text-[#A5A5B5]">
+              Octaves
+              <input
+                type="range"
+                min={1}
+                max={4}
+                step={1}
+                value={drivers.arpOctaves}
+                onChange={(e) => drivers.setArpOctaves(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="w-3 text-right font-mono">{drivers.arpOctaves}</span>
+            </label>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------- SÉQUENCEUR */}
+        <FolderRow
+          label="SÉQUENCEUR"
+          color={colorOf('seq')}
+          open={open.seq}
+          count={drivers.pattern.filter((s) => s.on).length}
+          onToggle={() => toggle('seq')}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              drivers.setSeqOn(!drivers.seqOn);
+            }}
+            title="Joue le motif en boucle"
+            className={`border px-1.5 py-0.5 font-pixel text-[8px] ${
+              drivers.seqOn
+                ? 'border-[#FF7A00] bg-[#FF7A00]/20 text-[#FF7A00]'
+                : 'border-[#2A2934] text-[#77778A] hover:border-[#3A3A4A]'
+            }`}
+          >
+            {drivers.seqOn ? 'ON' : 'OFF'}
+          </button>
+        </FolderRow>
+        {open.seq && (
+          <div className="ml-2 space-y-1 border-l border-[#22222E] p-1 pl-2">
+            <div className="grid grid-cols-8 gap-0.5">
+              {drivers.pattern.slice(0, STEP_COUNT).map((step, i) => (
+                <button
+                  key={i}
+                  onClick={() => drivers.toggleStep(i)}
+                  title={`Pas ${i + 1}`}
+                  className={`h-5 border text-[8px] ${
+                    drivers.currentStep === i
+                      ? 'border-[#FFE600] bg-[#FFE600] text-black'
+                      : step.on
+                        ? 'border-[#FF7A00] bg-[#FF7A00]/40 text-[#FFD0A0]'
+                        : 'border-[#22222E] bg-[#0E0E14] text-[#44444F]'
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-1 text-[9px] text-[#A5A5B5]">
+              Tempo
+              <input
+                type="range"
+                min={40}
+                max={220}
+                step={1}
+                value={drivers.bpm}
+                onChange={(e) => drivers.setBpm(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="w-7 text-right font-mono">{drivers.bpm}</span>
+            </label>
+          </div>
+        )}
       </div>
 
       {/* ------------------------------------------------------------ CHAÎNE */}

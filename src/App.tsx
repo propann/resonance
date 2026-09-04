@@ -1042,6 +1042,7 @@ export default function App() {
           <AtelierColumn
             sample={selectedSample}
             onSaveAsNewSample={handleSaveProcessedAsNew}
+            onClearSample={() => setSelectedSampleId(null)}
             onOpenSlicer={(s) => setSampleTarget('slicer', s)}
           />
         </aside>
