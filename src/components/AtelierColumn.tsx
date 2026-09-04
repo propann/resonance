@@ -52,7 +52,8 @@ import { usePlayableEngine } from '../hooks/usePlayableEngine';
 import { testAllModules, type ModuleTestResult } from '../rack/selfTest';
 import { useNoteDrivers } from '../hooks/useNoteDrivers';
 import { STEP_COUNT, type ArpMode } from '../services/noteDrivers';
-import { loadEngineBridge, type EngineBridge } from '../services/engineBridge';
+import type { NativeEngineId } from '../services/engineBridge';
+import { NativeEngineFolder } from './NativeEngineFolder';
 
 registerBuiltinModules();
 
@@ -74,6 +75,15 @@ const CATEGORIES: Category[] = [
   { id: 'patches', label: 'PATCHES', color: '#10B981' },
   { id: 'arp', label: 'ARPÉGIATEUR', color: '#FFE600' },
   { id: 'seq', label: 'SÉQUENCEUR', color: '#FF7A00' },
+];
+
+/**
+ * Firmware compiled to WebAssembly, fetched on demand. Adding one is a line
+ * here plus its bridge under public/engines — see tools/build-engine.sh.
+ */
+const NATIVE_ENGINES: Array<{ id: NativeEngineId; label: string }> = [
+  { id: 'mutable-plaits', label: 'Plaits (Mutable)' },
+  { id: 'mutable-rings', label: 'Rings (Mutable)' },
 ];
 
 const OPEN_KEY = 'resonance-atelier-tree-v2';
@@ -216,63 +226,31 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   // What plays the engines when your hands are elsewhere.
   const drivers = useNoteDrivers(player.heldNotes, (player.octave + 1) * 12);
 
-  // Plaits is compiled firmware, loaded on demand rather than bundled.
-  const [plaits, setPlaits] = useState<EngineBridge | null>(null);
-  const [plaitsOpen, setPlaitsOpen] = useState(false);
-  const [plaitsBusy, setPlaitsBusy] = useState(false);
-
-  const openPlaits = useCallback(async () => {
-    setPlaitsOpen((was) => !was);
-    if (plaits) return;
-    try {
-      setPlaitsBusy(true);
-      setPlaits(await loadEngineBridge('mutable-plaits'));
-    } catch (error) {
-      console.error('Plaits indisponible', error);
-      toast.error("Plaits n'est pas compilé pour cette version (tools/build-plaits.sh).");
-    } finally {
-      setPlaitsBusy(false);
-    }
-  }, [plaits]);
-
-  /** Render two seconds of one Plaits model, at the keyboard's octave, onto the wave. */
-  const playPlaitsModel = useCallback(
-    async (index: number) => {
-      if (!plaits) return;
-      const note = (player.octave + 1) * 12;
-      setPlaitsBusy(true);
-      try {
-        plaits.setParameter('engine', index);
-        plaits.noteOn(note, 110);
-        const rendered = await plaits.render(2, 48000);
-        plaits.noteOff(note);
-        const blob = audioBufferToWavBlob(rendered, { bitDepth: 24, normalize: false });
-        const metrics = calculateAudioMetrics(rendered);
-        const label = (plaits.models?.[index] ?? `modele-${index}`).replace(
-          /[^\p{L}\p{N}]+/gu,
-          '_'
-        );
-        onSaveAsNewSample({
-          ...SYNTH_SAMPLE_BASE,
-          id: `plaits-${index}-${Date.now().toString(36)}`,
-          name: `PLAITS_${label}`,
-          originalFileName: `PLAITS_${label}.wav`,
-          audioBuffer: rendered,
-          blobUrl: URL.createObjectURL(blob),
-          size: blob.size,
-          duration: rendered.duration,
-          sampleRate: rendered.sampleRate,
-          channels: rendered.numberOfChannels,
-          ...metrics,
-        } as SampleItem);
-      } catch (error) {
-        console.error('Rendu Plaits impossible', error);
-        toast.error('Le rendu du moteur a échoué.');
-      } finally {
-        setPlaitsBusy(false);
-      }
+  /**
+   * A model rendered by one of the compiled engines becomes a sample on the
+   * wave, named after the engine and the model so it can be found again.
+   */
+  const handleEngineRendered = useCallback(
+    (engineId: NativeEngineId, modelName: string, rendered: AudioBuffer) => {
+      const blob = audioBufferToWavBlob(rendered, { bitDepth: 24, normalize: false });
+      const metrics = calculateAudioMetrics(rendered);
+      const prefix = engineId.replace('mutable-', '').toUpperCase();
+      const label = modelName.replace(/[^\p{L}\p{N}]+/gu, '_');
+      onSaveAsNewSample({
+        ...SYNTH_SAMPLE_BASE,
+        id: `${engineId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        name: `${prefix}_${label}`,
+        originalFileName: `${prefix}_${label}.wav`,
+        audioBuffer: rendered,
+        blobUrl: URL.createObjectURL(blob),
+        size: blob.size,
+        duration: rendered.duration,
+        sampleRate: rendered.sampleRate,
+        channels: rendered.numberOfChannels,
+        ...metrics,
+      } as SampleItem);
     },
-    [plaits, player.octave, onSaveAsNewSample]
+    [onSaveAsNewSample]
   );
 
   const [selfTest, setSelfTest] = useState<ModuleTestResult[] | null>(null);
@@ -439,34 +417,20 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
               onClick={() => openModal('synthRack')}
             />
 
-            {/* Plaits: Mutable Instruments' own firmware, compiled to WASM. */}
-            <button
-              onClick={() => void openPlaits()}
-              title="Mutable Instruments Plaits — 16 modèles"
-              className="flex w-full items-center gap-1.5 border border-[#A855F7]/30 bg-[#12101A] px-2 py-0.5 text-left text-[#E9D5FF] transition hover:border-[#A855F7] pixel-btn"
-            >
-              {plaitsOpen ? (
-                <ChevronDown className="h-2.5 w-2.5 shrink-0 text-[#A855F7]" />
-              ) : (
-                <ChevronRight className="h-2.5 w-2.5 shrink-0 text-[#8E8E93]" />
-              )}
-              <span className="truncate text-[10px]">Plaits (Mutable)</span>
-              <span className="ml-auto font-pixel text-[8px] text-[#77778A]">
-                {plaitsBusy ? '…' : plaits ? String(plaits.models?.length ?? 0) : '↓'}
-              </span>
-            </button>
-            {plaitsOpen && plaits && (
-              <div className="ml-2 space-y-0.5 border-l border-[#2A2438] pl-2">
-                {(plaits.models ?? []).map((name, index) => (
-                  <LeafRow
-                    key={name}
-                    label={name}
-                    title="Rendre 2 s de ce modèle sur l'onde"
-                    onClick={() => void playPlaitsModel(index)}
-                  />
-                ))}
-              </div>
-            )}
+            {/*
+              Compiled firmware, not part of the bundle: Mutable Instruments'
+              own code built by tools/build-engine.sh and fetched the first
+              time its folder is opened.
+            */}
+            {NATIVE_ENGINES.map((engine) => (
+              <NativeEngineFolder
+                key={engine.id}
+                id={engine.id}
+                label={engine.label}
+                note={(player.octave + 1) * 12}
+                onRendered={handleEngineRendered}
+              />
+            ))}
           </div>
         )}
 

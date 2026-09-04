@@ -100,6 +100,27 @@ RMS et passages a zero tous distincts).
 passe par `new Function('url', 'return import(url)')`, opaque au bundler.
 Aucune CSP declaree dans l'app, donc c'est sur.
 
+### Rings suit, et la recette se generalise
+
+`tools/build-plaits.sh` est devenu `tools/build-engine.sh <moteur>` : memes
+trois contournements, un `case` par moteur pour ses sources et ses exports.
+**Rings a compile du premier coup** (95 Ko) — 6 resonateurs, verifies au
+navigateur, signatures distinctes et coherentes : « Corde » decroit vite
+(RMS 0,023), « Corde + reverberation » traine avec 1578 passages a zero.
+
+Rings est un resonateur : sur le module c'est une entree audio qui l'excite,
+mais il embarque son propre exciteur (`internal_exciter`), et c'est celui-la
+qu'une note joue ici. Il compte sa hauteur en demi-tons au-dessus de sa
+tonique, pas en note MIDI — d'ou le -24 dans son pont.
+
+`NativeEngineFolder.tsx` porte le dossier generique (chargement paresseux,
+liste des modeles, rendu sur l'onde) ; ajouter un moteur est desormais **une
+ligne** dans `NATIVE_ENGINES` plus son pont sous `public/engines/`.
+
+Candidats suivants dans `vendor/mutable-eurorack` : Clouds (granulaire — mais
+il traite un flux entrant, le contrat n'a pas encore de notion d'entree),
+Elements, Braids.
+
 ### Dexed
 
 Toujours pas fait : JUCE, autrement plus lourd que Plaits. Le contrat
