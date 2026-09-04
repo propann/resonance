@@ -381,13 +381,13 @@ export const DRUM_FAMILY_IDS: Record<DrumFamily, string> = {
 // Read in order: the name is more specific than the detected type ("rimshot"
 // is a snare, "open hat" a hat), so it decides first.
 const DRUM_NAME_RULES: Array<[RegExp, DrumFamily]> = [
-  [/(kick|kck|bd)|kick|bassdrum|grosse.?caisse|808.?kick/i, 'kicks'],
-  [/snare|snr|sd|caisse.?claire|rimshot|rim|sidestick/i, 'snares'],
-  [/hi.?hat|hihat|hh|hat|closed.?h|open.?h|pedal.?h/i, 'hats'],
-  [/hand.?clap|clap|snap|finger/i, 'claps'],
-  [/crash|ride|splash|china|cymbal|cym|gong/i, 'cymbals'],
+  [/kick|\bkck\b|\bbd\b|bassdrum|grosse.?caisse/i, 'kicks'],
+  [/snare|\bsnr\b|\bsd\b|caisse.?claire|rimshot|\brim\b|sidestick/i, 'snares'],
+  [/hi.?hat|hihat|\bhh\b|\bhat\b|closed.?h|open.?h|pedal.?h/i, 'hats'],
+  [/hand.?clap|\bclap\b|\bsnap\b|finger.?snap/i, 'claps'],
+  [/crash|\bride\b|splash|china|cymbal|\bcym\b|\bgong\b/i, 'cymbals'],
   [
-    /tom|floor.?tom|conga|bongo|djembe|darbuka|tabla|shaker|tambour|tambourine|cowbell|clave|woodblock|block|cabasa|guiro|triangle|agogo|timbale|perc/i,
+    /\btom\b|floor.?tom|conga|bongo|djembe|darbuka|tabla|shaker|tambour|cowbell|clave|woodblock|cabasa|guiro|triangle|agogo|timbale|perc/i,
     'percs',
   ],
 ];
