@@ -20,6 +20,9 @@ interface MidiAccessLike {
   inputs: { values: () => IterableIterator<MidiInputLike> };
 }
 
+/** Which keyboard plays the engines. Only one is bound at a time. */
+export type PlayInput = 'pc' | 'midi';
+
 export interface PlayableEngine {
   /** MIDI notes currently held, from either keyboard. */
   heldNotes: Set<number>;
@@ -30,6 +33,8 @@ export interface PlayableEngine {
   release: (note: number) => void;
   /** What to tell the user about their controller. */
   midiStatus: string;
+  input: PlayInput;
+  setInput: (input: PlayInput) => void;
 }
 
 /**
@@ -39,6 +44,9 @@ export interface PlayableEngine {
  * keep working normally with the engines folded away.
  */
 export function usePlayableEngine(active: boolean): PlayableEngine {
+  // One keyboard at a time: a controller plugged in should not double every
+  // note with the typing keys, and vice versa.
+  const [input, setInput] = useState<PlayInput>('pc');
   const [heldNotes, setHeldNotes] = useState<Set<number>>(new Set());
   const [octave, setOctaveState] = useState(DEFAULT_OCTAVE);
   const [midiStatus, setMidiStatus] = useState('MIDI non connecté');
@@ -71,7 +79,7 @@ export function usePlayableEngine(active: boolean): PlayableEngine {
 
   // --- the typing keyboard -------------------------------------------------
   useEffect(() => {
-    if (!active) return;
+    if (!active || input !== 'pc') return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!shouldPlay(event)) return;
@@ -104,12 +112,13 @@ export function usePlayableEngine(active: boolean): PlayableEngine {
       window.removeEventListener('blur', onBlur);
       onBlur();
     };
-  }, [active, octave, press, release]);
+  }, [active, input, octave, press, release]);
 
   // --- the MIDI controller -------------------------------------------------
   useEffect(() => {
-    if (!active || !('requestMIDIAccess' in navigator)) {
-      if (active) setMidiStatus('MIDI indisponible dans cet environnement');
+    if (!active || input !== 'midi') return;
+    if (!('requestMIDIAccess' in navigator)) {
+      setMidiStatus('MIDI indisponible dans cet environnement');
       return;
     }
     let access: MidiAccessLike | undefined;
@@ -146,7 +155,7 @@ export function usePlayableEngine(active: boolean): PlayableEngine {
       cancelled = true;
       if (access) for (const input of access.inputs.values()) input.onmidimessage = null;
     };
-  }, [active, press, release]);
+  }, [active, input, press, release]);
 
   // Everything stops when the section folds away or the app moves on.
   useEffect(() => {
@@ -156,5 +165,12 @@ export function usePlayableEngine(active: boolean): PlayableEngine {
     setHeldNotes(new Set());
   }, [active]);
 
-  return { heldNotes, octave, setOctave, press, release, midiStatus };
+  // Swapping keyboards mid-chord would otherwise leave those notes sounding.
+  useEffect(() => {
+    synthRackEngine.allNotesOff();
+    keyNotesRef.current.clear();
+    setHeldNotes(new Set());
+  }, [input]);
+
+  return { heldNotes, octave, setOctave, press, release, midiStatus, input, setInput };
 }
