@@ -113,9 +113,9 @@ describe('Rack.updateModuleParams reaches the live node', () => {
 
   it('a slider change (partial param) patches the live gain node in place', async () => {
     const { ctx, gains } = trackingCtx();
-    const rack = new Rack(ctx); // ctx.createGain() x2 → rack.input, rack.output
-    await rack.setState(state({ gain: 0 })); // + 1 more for the fx.gain module
-    const moduleNode = gains[2]; // input, output, then the module
+    const rack = new Rack(ctx); // rack.input, rack.output and the source sum
+    await rack.setState(state({ gain: 0 })); // then one more for the fx.gain module
+    const moduleNode = gains[gains.length - 1]; // the module is built last
     expect(moduleNode.gain.value).toBeCloseTo(1, 5); // 0 dB
 
     rack.updateModuleParams('g1', { gain: 6 }); // simulate a slider drag

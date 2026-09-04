@@ -37,6 +37,9 @@ describe('built-in rack modules', () => {
         'fx.subbass',
         'fx.transient',
         'fx.vinyl',
+        'gen.fm',
+        'gen.noise',
+        'gen.osc',
       ].sort()
     );
   });

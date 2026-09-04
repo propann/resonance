@@ -10,7 +10,10 @@ import { dcRemoveModule } from './dcRemove';
 import { delayModule } from './delay';
 import { exciterModule } from './exciter';
 import { filterModule } from './filter';
+import { fmVoiceModule } from './fmVoice';
 import { formantModule } from './formant';
+import { noiseSourceModule } from './noiseSource';
+import { oscillatorModule } from './oscillator';
 import { freqShiftModule } from './freqShift';
 import { gainModule } from './gain';
 import { phaserModule } from './phaser';
@@ -31,6 +34,10 @@ export function registerBuiltinModules(): void {
   if (registered) return;
   registered = true;
   for (const def of [
+    // Sources first: they head a chain, and the rack sums them with the sample.
+    oscillatorModule,
+    fmVoiceModule,
+    noiseSourceModule,
     filterModule,
     acidModule,
     combResonatorModule,

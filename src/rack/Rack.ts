@@ -47,6 +47,8 @@ interface LiveModule {
 export class Rack {
   readonly input: GainNode;
   readonly output: GainNode;
+  /** Where the rack's input and every source module meet before the inserts. */
+  private readonly sum: GainNode;
   private readonly ctx: BaseAudioContext;
   private live: LiveModule[] = [];
 
@@ -54,7 +56,9 @@ export class Rack {
     this.ctx = ctx;
     this.input = ctx.createGain();
     this.output = ctx.createGain();
-    this.input.connect(this.output);
+    this.sum = ctx.createGain();
+    this.input.connect(this.sum);
+    this.sum.connect(this.output);
   }
 
   /** Tear down the current chain and build the one described by `state`. */
@@ -76,15 +80,25 @@ export class Rack {
       }
     }
 
-    // Rewire: input -> m1 -> m2 -> ... -> output
+    // Rewire. Sources (input === null) are summed together with the rack's own
+    // input — that is what lets a sound engine be layered over a sample rather
+    // than replacing it — and the inserts chain from that sum to the output.
     try {
       this.input.disconnect();
     } catch {
       // nothing connected yet
     }
-    let cursor: AudioNode = this.input;
+    this.sum.disconnect();
+
+    this.input.connect(this.sum);
     for (const m of built) {
-      if (m.node.input) cursor.connect(m.node.input);
+      if (!m.node.input) m.node.output.connect(this.sum);
+    }
+
+    let cursor: AudioNode = this.sum;
+    for (const m of built) {
+      if (!m.node.input) continue;
+      cursor.connect(m.node.input);
       cursor = m.node.output;
     }
     cursor.connect(this.output);

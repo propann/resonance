@@ -48,6 +48,34 @@ function structureKey(state: RackState): string {
   return state.modules.map((m) => `${m.id}:${m.type}:${m.enabled ? 1 : 0}`).join('|');
 }
 
+/** How long a synth-only chain plays and bounces for. */
+const SYNTH_AUDITION_SEC = 4;
+
+/** Stand-in sample fields when a chain generates its sound from scratch. */
+const SYNTH_SAMPLE_BASE = {
+  format: 'wav' as const,
+  type: 'other' as const,
+  category: 'one-shot' as const,
+  isLoop: false,
+  genre: 'Universal / Multi-Genre' as const,
+  tags: ['moteur', 'synthese'],
+  folderId: 'f-os-fx',
+  folderPath: '/01_ONE_SHOTS/05_FX_TEXTURES',
+  favorite: false,
+  rating: 0,
+  bitDepth: 24,
+  channels: 2,
+  slices: [],
+  dateAdded: 0,
+  spectralCentroid: 0,
+  dynamicRangeDb: 0,
+  peakDb: 0,
+  rmsDb: 0,
+  lufs: 0,
+  loudnessGainDb: 0,
+  zeroCrossingRate: 0,
+};
+
 export const RackHostModal: React.FC<RackHostModalProps> = ({
   isOpen,
   onClose,
@@ -78,6 +106,14 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   // Off by default: nothing in the app starts looping on its own.
   const [loop, setLoop] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
+  /** True when the chain makes its own sound and needs no sample. */
+  const hasSourceModule = useMemo(() => {
+    const defs = listModuleDefs();
+    return rack.modules.some(
+      (m) => m.enabled && defs.find((d) => d.type === m.type)?.kind === 'source'
+    );
+  }, [rack.modules]);
+
   const [selfTest, setSelfTest] = useState<ModuleTestResult[] | null>(null);
   const [testProgress, setTestProgress] = useState<string | null>(null);
   const [jsonText, setJsonText] = useState('');
@@ -114,11 +150,18 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
 
   const startAudition = useCallback(() => {
     const r = rackRef.current;
-    if (!r || !sample?.audioBuffer) return;
-    stopAudition();
+    if (!r) return;
+    // A chain that carries a sound engine plays on its own: the carrier is
+    // then just silence of a fixed length, so the synth can be auditioned
+    // without loading a sample first.
     const ctx = audioGraph.getContext();
+    const carrier =
+      sample?.audioBuffer ??
+      (hasSourceModule ? ctx.createBuffer(2, Math.floor(ctx.sampleRate * SYNTH_AUDITION_SEC), ctx.sampleRate) : null);
+    if (!carrier) return;
+    stopAudition();
     const src = ctx.createBufferSource();
-    src.buffer = sample.audioBuffer;
+    src.buffer = carrier;
     src.loop = loop;
     src.connect(r.input);
     src.onended = () => {
@@ -270,19 +313,24 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
   const togglePlay = () => (isPlaying ? stopAudition() : startAudition());
 
   const handleSaveAsNew = async () => {
-    if (!sample?.audioBuffer) return;
+    const ctx = audioGraph.getContext();
+    const carrier =
+      sample?.audioBuffer ??
+      (hasSourceModule ? ctx.createBuffer(2, Math.floor(ctx.sampleRate * SYNTH_AUDITION_SEC), ctx.sampleRate) : null);
+    if (!carrier) return;
     setIsRendering(true);
     try {
       const hasDelay = rack.modules.some((m) => m.enabled && m.type === 'fx.delay');
-      const full = await renderRackOffline(rack, sample.audioBuffer, hasDelay ? 2 : 0);
+      const full = await renderRackOffline(rack, carrier, hasDelay ? 2 : 0);
       const rendered = sliceRegion(full, region);
       const blob = audioBufferToWavBlob(rendered, { bitDepth: 24, normalize: false });
       const metrics = calculateAudioMetrics(rendered);
+      const baseName = sample ? sample.name.replace(/\.[^/.]+$/, '') : 'Moteur';
       onSaveAsNewSample({
-        ...sample,
+        ...(sample ?? SYNTH_SAMPLE_BASE),
         id: `rack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-        name: `${sample.name.replace(/\.[^/.]+$/, '')}_RACK`,
-        originalFileName: sample.originalFileName || sample.name,
+        name: `${baseName}_RACK`,
+        originalFileName: sample?.originalFileName || `${baseName}.wav`,
         audioBuffer: rendered,
         blobUrl: URL.createObjectURL(blob),
         size: blob.size,
@@ -329,7 +377,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
         <>
           <button
             onClick={togglePlay}
-            disabled={!sample?.audioBuffer}
+            disabled={!sample?.audioBuffer && !hasSourceModule}
             className={`flex items-center gap-1.5 rounded px-4 py-1.5 font-mono text-xs font-bold disabled:opacity-40 ${
               isPlaying ? 'bg-[#EF4444] text-white' : 'bg-[#00F0FF] text-black'
             }`}
@@ -356,7 +404,7 @@ export const RackHostModal: React.FC<RackHostModalProps> = ({
           </button>
           <button
             onClick={() => void handleSaveAsNew()}
-            disabled={!sample?.audioBuffer || isRendering}
+            disabled={(!sample?.audioBuffer && !hasSourceModule) || isRendering}
             className="flex items-center gap-1.5 rounded bg-[#10B981] px-3 py-1.5 font-mono text-xs font-bold text-black disabled:opacity-40"
           >
             <Save className="h-3.5 w-3.5" />
