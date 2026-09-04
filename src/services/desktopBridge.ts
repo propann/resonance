@@ -26,7 +26,10 @@ export interface DesktopFS {
   /** Re-adopt a previously chosen root by absolute path. */
   setRoot(absPath: string): Promise<string | null>;
   stat(rel: string): Promise<FsStat>;
-  readDir(rel: string): Promise<FsEntry[]>;
+  /** `stats: false` returns names only — far cheaper on huge folders. */
+  readDir(rel: string, options?: { stats?: boolean }): Promise<FsEntry[]>;
+  /** True when the folder holds nothing; reads a single entry. */
+  isDirEmpty?(rel: string): Promise<boolean>;
   readFile(rel: string): Promise<ArrayBuffer>;
   writeFile(rel: string, data: ArrayBuffer | Uint8Array): Promise<boolean>;
   mkdirp(rel: string): Promise<boolean>;

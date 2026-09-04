@@ -172,20 +172,53 @@ export function watchWorkFolder(onChange: () => void): () => void {
 
 // --- writing --------------------------------------------------------------------
 
+/**
+ * Names already taken in a destination folder, so a free name is found in
+ * memory instead of one `stat` per candidate. Probing `name_2`, `name_3`, …
+ * over IPC cost hundreds of round-trips per file once a folder held many
+ * variants of the same generated name — it was the ingest's real bottleneck.
+ */
+const takenNamesByDir = new Map<string, Set<string>>();
+
+/** Drop the cached listings; call it when a batch of writes starts. */
+export function resetDirectoryNameCache(): void {
+  takenNamesByDir.clear();
+}
+
+async function takenNames(dirRel: string): Promise<Set<string>> {
+  const cached = takenNamesByDir.get(dirRel);
+  if (cached) return cached;
+  // Names only: the destination folders hold hundreds of samples, and their
+  // sizes are of no use here.
+  const entries = await desktopFS().readDir(dirRel, { stats: false }).catch(() => []);
+  const names = new Set(entries.map((entry) => entry.name.toLowerCase()));
+  takenNamesByDir.set(dirRel, names);
+  return names;
+}
+
 async function uniqueFileName(dirRel: string, desiredName: string): Promise<string> {
   const fs = desktopFS();
   const clean = cleanFileName(desiredName);
   const dot = clean.lastIndexOf('.');
   const stem = dot > 0 ? clean.slice(0, dot) : clean;
   const ext = dot > 0 ? clean.slice(dot) : '';
+
+  const taken = await takenNames(dirRel);
   let candidate = clean;
   let index = 2;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const stat = await fs.stat(j(dirRel, candidate));
-    if (!stat.exists) return candidate;
+  while (taken.has(candidate.toLowerCase())) {
     candidate = `${stem}_${index++}${ext}`;
   }
+
+  // The listing can be stale (a file added behind our back): confirm the one
+  // name we settled on, and only then walk forward. Overwriting a file the
+  // user just dropped is exactly what must never happen.
+  while ((await fs.stat(j(dirRel, candidate))).exists) {
+    taken.add(candidate.toLowerCase());
+    candidate = `${stem}_${index++}${ext}`;
+  }
+  taken.add(candidate.toLowerCase());
+  return candidate;
 }
 
 /** Ensures a managed subfolder exists and returns its relative path. */
@@ -193,6 +226,39 @@ export async function getDirectoryForPath(_root: LibraryRoot, relPath: string): 
   const rel = j(relPath);
   await desktopFS().mkdirp(rel);
   return rel;
+}
+
+/**
+ * Claim a free name in `dirRel` without writing anything. Lets a batch decide
+ * every destination name first (cheap, sequential) and then write the files in
+ * parallel without two of them racing for the same name.
+ */
+export async function reserveUniqueFileName(dirRel: string, fileName: string): Promise<string> {
+  return uniqueFileName(dirRel, fileName);
+}
+
+/** Write one blob to an already-reserved path. */
+export async function writeFileAt(relPath: string, contents: Blob): Promise<void> {
+  await desktopFS().writeFile(j(relPath), await contents.arrayBuffer());
+}
+
+/**
+ * Run `task` over `items` with at most `limit` in flight. Disk writes spend
+ * their time waiting (IPC, the OS, the antivirus), so overlapping them is what
+ * makes a batch land in seconds instead of minutes.
+ */
+export async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (let index = next++; index < items.length; index = next++) {
+      await task(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
 }
 
 export async function writeUniqueFile(dirRel: string, fileName: string, contents: Blob): Promise<string> {
@@ -239,7 +305,9 @@ export async function scanWorkFolderAudioEntries(
 
   const visit = async (rel: string): Promise<void> => {
     if (out.length >= limit) return;
-    const entries = await fs.readDir(rel || '.');
+    // Names only: a drop folder can hold tens of thousands of files, and one
+    // stat per entry there costs more than the whole rest of the scan.
+    const entries = await fs.readDir(rel || '.', { stats: false });
     for (const entry of entries) {
       if (out.length >= limit) {
         truncated = true;
@@ -247,12 +315,7 @@ export async function scanWorkFolderAudioEntries(
       }
       const childRel = j(rel, entry.name);
       if (entry.isFile && AUDIO_FILE.test(entry.name)) {
-        out.push({
-          sourcePath: childRel,
-          name: entry.name,
-          size: entry.size,
-          mtimeMs: entry.mtimeMs,
-        });
+        out.push({ sourcePath: childRel, name: entry.name, size: 0, mtimeMs: 0 });
       } else if (entry.isDir) {
         if (!rel && MANAGED_TOP_LEVEL_FOLDERS.has(entry.name) && entry.name !== '00_RECEPTION') continue;
         await visit(childRel);
@@ -261,6 +324,18 @@ export async function scanWorkFolderAudioEntries(
   };
 
   await visit('');
+
+  // Size and mtime make the entry key, so they are read for the handful of
+  // entries that survive the limit — not for the whole backlog.
+  await Promise.all(
+    out.map(async (entry) => {
+      const stat = await fs.stat(entry.sourcePath).catch(() => null);
+      if (stat) {
+        entry.size = stat.size;
+        entry.mtimeMs = stat.mtimeMs;
+      }
+    })
+  );
   return { entries: out, truncated };
 }
 
@@ -282,17 +357,30 @@ export const workFolderEntryKey = (entry: {
  * Read the bytes of already-listed entries. Call it on the entries you are
  * about to hand to curation, never on a whole folder listing.
  */
+/** Disk reads in flight at once: enough to keep the IPC bridge busy. */
+const READ_CONCURRENCY = 8;
+
 export async function readWorkFolderAudioFiles(
   entries: WorkFolderAudioEntry[]
 ): Promise<WorkFolderAudioFile[]> {
-  const out: WorkFolderAudioFile[] = [];
-  for (const entry of entries) {
-    const buf = await desktopFS().readFile(entry.sourcePath);
-    out.push({
-      file: new File([buf], entry.name, { lastModified: entry.mtimeMs }),
-      sourcePath: entry.sourcePath,
-    });
-  }
+  const fs = desktopFS();
+  const out: WorkFolderAudioFile[] = new Array(entries.length);
+  let next = 0;
+
+  const worker = async (): Promise<void> => {
+    for (let index = next++; index < entries.length; index = next++) {
+      const entry = entries[index];
+      const buf = await fs.readFile(entry.sourcePath);
+      out[index] = {
+        file: new File([buf], entry.name, { lastModified: entry.mtimeMs }),
+        sourcePath: entry.sourcePath,
+      };
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(READ_CONCURRENCY, entries.length) }, () => worker())
+  );
   return out;
 }
 
@@ -401,11 +489,15 @@ export async function removeWorkFolderFiles(_root: LibraryRoot, sourcePaths: str
     } catch {
       continue;
     }
-    // prune now-empty, non-managed parent folders
+    // Prune now-empty, non-managed parent folders. Emptiness is asked for
+    // directly: listing the parent meant walking every sibling file, which on
+    // a 40 000-file drop folder made each deletion take seconds.
     let parent = dirName(rel);
     while (parent && !MANAGED_TOP_LEVEL_FOLDERS.has(parent.split('/')[0])) {
-      const entries = await fs.readDir(parent).catch(() => []);
-      if (entries.length > 0) break;
+      const empty = fs.isDirEmpty
+        ? await fs.isDirEmpty(parent).catch(() => false)
+        : (await fs.readDir(parent, { stats: false }).catch(() => [{ name: '' }])).length === 0;
+      if (!empty) break;
       await fs.remove(parent).catch(() => undefined);
       parent = dirName(parent);
     }

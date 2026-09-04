@@ -144,14 +144,18 @@ ipcMain.handle('fs:stat', async (_e, rel) => {
   }
 });
 
-ipcMain.handle('fs:readDir', async (_e, rel) => {
+// `stats: false` skips the per-file stat. Listing a folder of 40 000 samples
+// costs one stat per entry otherwise, which is what made the reception scan
+// and the empty-folder cleanup crawl.
+ipcMain.handle('fs:readDir', async (_e, rel, options) => {
   const dir = resolveInRoot(rel);
+  const withStats = !options || options.stats !== false;
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const out = [];
   for (const entry of entries) {
     let size = 0;
     let mtimeMs = 0;
-    if (entry.isFile()) {
+    if (withStats && entry.isFile()) {
       try {
         const st = await fs.stat(path.join(dir, entry.name));
         size = st.size;
@@ -163,6 +167,21 @@ ipcMain.handle('fs:readDir', async (_e, rel) => {
     out.push({ name: entry.name, isDir: entry.isDirectory(), isFile: entry.isFile(), size, mtimeMs });
   }
   return out;
+});
+
+/** Cheap emptiness test: reads one entry instead of the whole directory. */
+ipcMain.handle('fs:isDirEmpty', async (_e, rel) => {
+  let dir;
+  try {
+    dir = await fsSync.promises.opendir(resolveInRoot(rel));
+  } catch {
+    return false;
+  }
+  try {
+    return (await dir.read()) === null;
+  } finally {
+    await dir.close().catch(() => undefined);
+  }
 });
 
 ipcMain.handle('fs:readFile', async (_e, rel) => {
@@ -205,9 +224,16 @@ ipcMain.handle('fs:watchStart', async () => {
     return false;
   }
   let timer = null;
+  // Watch only where the user drops sounds: the root and the first level of
+  // 00_RECEPTION. Watching the whole tree meant watching every sample in the
+  // library plus every file of a drop folder — on a 110 000-file folder that
+  // pinned the main process (1 000 s of CPU, ~900 Mo) and starved every fs
+  // call the ingestion needed. Anything deeper is picked up by the periodic
+  // scan instead.
   watcher = chokidar.watch(currentRoot, {
     ignoreInitial: true,
-    depth: 8,
+    depth: 1,
+    ignored: (target) => /[\\/](01_ONE_SHOTS|02_LOOPS|03_HARDWARE|_MANIFEST)([\\/]|$)/.test(target),
     awaitWriteFinish: { stabilityThreshold: 400, pollInterval: 100 },
   });
   const ping = () => {

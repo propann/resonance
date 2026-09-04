@@ -70,6 +70,10 @@ import {
   getProcessedSourceFingerprints,
   hashFileContent,
   removeWorkFolderFiles,
+  reserveUniqueFileName,
+  resetDirectoryNameCache,
+  runWithConcurrency,
+  writeFileAt,
   type WorkFolderAudioFile,
   type DirectoryHandle,
 } from '../services/localLibrary';
@@ -127,6 +131,13 @@ interface AutoCuratorModalProps {
   onApplyCuration: (curatedSamples: SampleItem[]) => void;
   onOpenGitHubSync?: () => void;
 }
+
+/** Files decoded ahead of the analysis cursor. */
+const DECODE_AHEAD = 6;
+/** Destination files written at once. */
+const WRITE_CONCURRENCY = 6;
+/** Minimum gap between queue repaints while a batch is being analysed. */
+const PAINT_INTERVAL_MS = 200;
 
 export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   isOpen,
@@ -329,11 +340,51 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     }
   };
 
+  /** Decode one source; AIFF may carry an OP-1 patch. */
+  const decodeItem = async (item: CuratorItem): Promise<{ buffer: AudioBuffer; isOp1Patch: boolean }> => {
+    if (item.audioBuffer) return { buffer: item.audioBuffer, isOp1Patch: false };
+    if (!item.file) throw new Error('Impossible de décoder le flux audio');
+    if (/\.aif{1,2}$/i.test(item.file.name)) {
+      const parsed = await parseOp1AiffPatch(item.file);
+      return { buffer: parsed.audioBuffer, isOp1Patch: Boolean(parsed.rawJson) };
+    }
+    const buffer = await audioEngine.decodeAudioData(await item.file.arrayBuffer());
+    return { buffer, isOp1Patch: false };
+  };
+
   // DSP Study & Processing Pipeline
   const processQueue = async (queue: CuratorItem[]) => {
     setIsProcessing(true);
     onProcessingChange?.(true);
     const updatedQueue = [...queue];
+
+    // Decoding happens off the main thread, so keep a few files decoding ahead
+    // of the analysis instead of decoding one, analysing it, decoding the next.
+    const decoding = new Map<string, Promise<{ buffer: AudioBuffer; isOp1Patch: boolean }>>();
+    const scheduleDecode = (index: number) => {
+      const target = updatedQueue[index];
+      if (!target || decoding.has(target.id) || target.status === 'error') return;
+      const pending = decodeItem(target);
+      pending.catch(() => undefined); // awaited later; this only avoids a noisy rejection
+      decoding.set(target.id, pending);
+    };
+    for (let i = 0; i < DECODE_AHEAD; i++) scheduleDecode(i);
+
+    // Cheap timings: a stalled or slow ingest is otherwise invisible.
+    const batchStart = performance.now();
+    let decodeMs = 0;
+    let analyseMs = 0;
+    let encodeMs = 0;
+
+    // Repainting a 64-item queue three times per file costs more than the
+    // analysis itself; paint on a timer instead.
+    let lastPaint = 0;
+    const paint = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastPaint < PAINT_INTERVAL_MS) return;
+      lastPaint = now;
+      setItems([...updatedQueue]);
+    };
 
     for (let i = 0; i < updatedQueue.length; i++) {
       const item = updatedQueue[i];
@@ -341,23 +392,17 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
       item.status = 'analyzing';
       item.progress = 20;
-      setItems([...updatedQueue]);
+      paint();
 
       try {
-        let buffer = item.audioBuffer;
-        let isOp1Patch = false;
-        if (!buffer && item.file) {
-          item.progress = 40;
-          setItems([...updatedQueue]);
-          if (/\.aif{1,2}$/i.test(item.file.name)) {
-            const parsed = await parseOp1AiffPatch(item.file);
-            buffer = parsed.audioBuffer;
-            isOp1Patch = Boolean(parsed.rawJson);
-          } else {
-            const arrayBuffer = await item.file.arrayBuffer();
-            buffer = await audioEngine.decodeAudioData(arrayBuffer);
-          }
-        }
+        scheduleDecode(i + DECODE_AHEAD);
+        const decodeStart = performance.now();
+        const decoded = await (decoding.get(item.id) ?? decodeItem(item));
+        decoding.delete(item.id);
+        decodeMs += performance.now() - decodeStart;
+        const analyseStart = performance.now();
+        const buffer = decoded.buffer;
+        const isOp1Patch = decoded.isOp1Patch;
 
         if (!buffer) {
           throw new Error('Impossible de décoder le flux audio');
@@ -368,7 +413,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         item.sampleRate = buffer.sampleRate;
         item.channels = buffer.numberOfChannels;
         item.progress = 60;
-        setItems([...updatedQueue]);
+        paint();
 
         // 1. DSP Metrics & LUFS
         const metrics = calculateAudioMetrics(buffer);
@@ -474,7 +519,10 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
           ? { folderPath: '/03_HARDWARE/OP-1_DRUM_PATCHES', folderId: 'f-op1-patches', category: 'multi-sound' as const }
           : classifySampleForLibrary(dummySample);
 
+        analyseMs += performance.now() - analyseStart;
+
         // 10. Generate Final Standardized WAV Blob
+        const encodeStart = performance.now();
         const wavBlob = audioBufferToWavBlob(buffer, {
           bitDepth: targetBitDepth,
           normalize: true,
@@ -483,6 +531,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
           trimSilence,
         });
 
+        encodeMs += performance.now() - encodeStart;
         const blobUrl = URL.createObjectURL(wavBlob);
 
         const finalSampleItem: SampleItem = {
@@ -522,9 +571,17 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         item.errorMessage = err instanceof Error ? err.message : 'Erreur analyse DSP';
       }
 
-      setItems([...updatedQueue]);
+      paint();
     }
 
+    paint(true);
+    const done = updatedQueue.filter((it) => it.status === 'ready').length;
+    const totalMs = performance.now() - batchStart;
+    console.info(
+      `[curator] ${done} son(s) analysés en ${(totalMs / 1000).toFixed(1)} s ` +
+        `(${Math.round(totalMs / Math.max(1, done))} ms/son — décodage ${Math.round(decodeMs)} ms, ` +
+        `analyse ${Math.round(analyseMs)} ms, encodage ${Math.round(encodeMs)} ms)`
+    );
     setIsProcessing(false);
     onProcessingChange?.(false);
     onQueueResult?.({
@@ -596,7 +653,15 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
   const handleExportToFolder = async () => {
     const readyItems = items.filter((it) => it.status === 'ready' && it.sampleItem?.blobUrl);
-    if (readyItems.length === 0) return;
+    if (readyItems.length === 0) {
+      console.info(
+        `[curator] transfert ignoré : aucun son prêt (file de ${items.length}, ` +
+          `${items.filter((it) => it.status === 'ready').length} analysés, ` +
+          `${items.filter((it) => it.status === 'error').length} en erreur)`
+      );
+      return;
+    }
+    console.info(`[curator] transfert de ${readyItems.length} son(s) démarré`);
 
     if (!supportsLocalLibrary()) {
       setNotification('Cette fonction nécessite Chrome ou Edge sur ordinateur. Utilisez sinon Pack ZIP.');
@@ -613,8 +678,28 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       const processedFingerprints = await getProcessedSourceFingerprints(exportRoot);
       const knownContentHashes = await getLibraryContentHashes(exportRoot);
       const transferredSourceFiles: string[] = [];
+      const pendingManifest: Array<Record<string, unknown>> = [];
+      const pendingWrites: Array<{ relPath: string; blob: Blob }> = [];
       let duplicatesSkipped = 0;
+      const transferStart = performance.now();
+      // Destination listings are cached for the batch; start from fresh ones.
+      resetDirectoryNameCache();
+      let hashMs = 0;
+      let writeMs = 0;
+      let blobMs = 0;
+      let done = 0;
+      let lastTick = performance.now();
       for (const item of readyItems) {
+        // Progress heartbeat: a transfer that crawls is otherwise a black box.
+        if (performance.now() - lastTick > 5000) {
+          lastTick = performance.now();
+          console.info(
+            `[curator] transfert ${done}/${readyItems.length} — ` +
+              `${((performance.now() - transferStart) / 1000).toFixed(1)} s ` +
+              `(hachage ${Math.round(hashMs)} ms, blob ${Math.round(blobMs)} ms, écriture ${Math.round(writeMs)} ms)`
+          );
+        }
+        done++;
         const sourceFingerprint = item.sourcePath && item.file
           ? `${item.sourcePath}:${item.file.size}:${item.file.lastModified}`
           : undefined;
@@ -624,7 +709,9 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         }
         // Same bytes as something already filed: drop the source instead of
         // writing a second copy under a "_2" name.
+        const hashStart = performance.now();
         const contentHash = item.file ? await hashFileContent(item.file) : undefined;
+        hashMs += performance.now() - hashStart;
         if (contentHash && knownContentHashes.has(contentHash)) {
           duplicatesSkipped++;
           if (item.sourcePath) transferredSourceFiles.push(item.sourcePath);
@@ -632,12 +719,17 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         }
         const targetDirectory = await getDirectoryForPath(exportRoot, item.targetFolderPath);
 
+        const blobStart = performance.now();
         const sourceBlob = item.isOp1Patch && item.file
           ? item.file
           : await fetch(item.sampleItem!.blobUrl).then((response) => response.blob());
+        blobMs += performance.now() - blobStart;
         const extension = item.isOp1Patch ? '.aif' : '.wav';
         const filename = `${item.sampleItem!.name.replace(/\.(wav|aif|aiff)$/i, '')}${extension}`;
-        const writtenFileName = await writeUniqueFile(targetDirectory, filename, sourceBlob);
+        // Name claimed now, bytes written later: the writes go out in parallel
+        // once every destination is decided.
+        const writtenFileName = await reserveUniqueFileName(targetDirectory, filename);
+        pendingWrites.push({ relPath: `${targetDirectory}/${writtenFileName}`, blob: sourceBlob });
         const manifestItem: Record<string, unknown> = {
           name: item.sampleItem!.name,
           fileName: writtenFileName,
@@ -655,13 +747,24 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
           sourceFingerprint,
           contentHash,
         };
-        // Commit each item immediately. If a later file fails, the next pass skips
-        // already written files instead of creating suffixed duplicates.
-        await writeLibraryManifest(exportRoot, [manifestItem]);
+        // Collected, then committed once for the whole batch: rewriting the
+        // full manifest per file made every batch slower as the library grew.
+        pendingManifest.push(manifestItem);
         if (sourceFingerprint) processedFingerprints.add(sourceFingerprint);
         if (contentHash) knownContentHashes.add(contentHash);
         if (item.sourcePath) transferredSourceFiles.push(item.sourcePath);
       }
+      // Writes overlap: one file at a time spent its life waiting on the disk.
+      const writeStart = performance.now();
+      await runWithConcurrency(pendingWrites, WRITE_CONCURRENCY, async (write) => {
+        await writeFileAt(write.relPath, write.blob);
+      });
+      writeMs = performance.now() - writeStart;
+
+      // The sources only go once their destination *and* the manifest are on
+      // disk — that order is the guarantee the working folder never loses a
+      // sound.
+      if (pendingManifest.length > 0) await writeLibraryManifest(exportRoot, pendingManifest);
       const removedCount = await removeWorkFolderFiles(exportRoot, transferredSourceFiles);
       onLibraryChanged?.();
 
@@ -671,6 +774,10 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       }
 
       const written = readyItems.length - duplicatesSkipped;
+      console.info(
+        `[curator] transfert de ${written} son(s) en ${((performance.now() - transferStart) / 1000).toFixed(1)} s ` +
+          `(hachage ${Math.round(hashMs)} ms, blob ${Math.round(blobMs)} ms, écriture ${Math.round(writeMs)} ms)`
+      );
       setNotification(
         `${written} son(s) rangé(s), ${removedCount} source(s) retirée(s) de la réception` +
           (duplicatesSkipped > 0 ? `, ${duplicatesSkipped} doublon(s) déjà en bibliothèque ignoré(s).` : '.')
@@ -687,7 +794,10 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     const readyItems = items.filter((item) => item.status === 'ready' && item.sampleItem);
     if (readyItems.length === 0) return;
     const signature = readyItems.map((item) => item.id).join('|');
-    if (autoTransferredSignature.current === signature) return;
+    if (autoTransferredSignature.current === signature) {
+      console.info('[curator] lot déjà transféré, en attente de nouveaux sons');
+      return;
+    }
     autoTransferredSignature.current = signature;
     void handleExportToFolder();
   }, [autoTransfer, isOpen, isProcessing, items, libraryRoot]);

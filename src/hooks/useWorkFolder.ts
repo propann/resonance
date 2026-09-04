@@ -19,17 +19,19 @@ import {
 
 export type WorkFolderStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-// chokidar drives the scan; this is only a slow safety net for missed events.
-const RECEPTION_FALLBACK_INTERVAL_MS = 30000;
+// chokidar only watches the top of the drop folder now, so this timer is what
+// picks up files dropped deeper in. The scan is bounded and reads no bytes,
+// so it can run often.
+const RECEPTION_FALLBACK_INTERVAL_MS = 8000;
 /**
  * How many source files go to curation at once. Each one is decoded, analysed,
  * normalised and rewritten, so the queue is worked in batches: a drop folder
  * holding tens of thousands of files must still make progress file by file,
  * and each batch removes its sources before the next one is picked up.
  */
-const RECEPTION_BATCH_SIZE = 24;
+const RECEPTION_BATCH_SIZE = 64;
 /** How deep a scan looks to fill a batch. Bounded: the backlog can be huge. */
-const RECEPTION_SCAN_WINDOW = 240;
+const RECEPTION_SCAN_WINDOW = 400;
 
 export interface UseWorkFolderOptions {
   /** The curator modal is open — pause the background reception scan. */

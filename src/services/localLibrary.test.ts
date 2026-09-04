@@ -11,10 +11,20 @@ import {
 function fakeRoot(tree: Record<string, FsEntry[]>) {
   const readDir = vi.fn(async (rel: string) => tree[rel] ?? []);
   const readFile = vi.fn(async (rel: string) => new TextEncoder().encode(rel).buffer);
+  // The walk lists names only and stats the entries it keeps, so the fake
+  // bridge has to answer both.
+  const stat = vi.fn(async (rel: string) => {
+    const name = rel.split('/').pop();
+    for (const entries of Object.values(tree)) {
+      const hit = entries.find((entry) => entry.name === name && entry.isFile);
+      if (hit) return { exists: true, isDir: false, isFile: true, size: hit.size, mtimeMs: hit.mtimeMs };
+    }
+    return { exists: false, isDir: false, isFile: false, size: 0, mtimeMs: 0 };
+  });
   (globalThis as { window?: unknown }).window = {
-    resonanceFS: { readDir, readFile, mkdirp: vi.fn(async () => true) },
+    resonanceFS: { readDir, readFile, stat, mkdirp: vi.fn(async () => true) },
   };
-  return { readDir, readFile };
+  return { readDir, readFile, stat };
 }
 
 const file = (name: string, size = 10, mtimeMs = 1): FsEntry => ({
