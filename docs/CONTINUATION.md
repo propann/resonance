@@ -59,6 +59,52 @@ analyse (type, BPM, clé, LUFS) → **renommage** (convention Splice-Pro
 ajout au `_MANIFEST` → **suppression de la source** dans `00_RECEPTION`.
 `sourceFingerprint` empêche la ré-ingestion.
 
+## Phase 6 — DEBLOQUEE le 2026-09-04 : Plaits tourne en WASM
+
+Emscripten 3.1.40 installe (`choco install emscripten`, emsdk dans
+`%LOCALAPPDATA%\emsdk`). **Plaits compile et sonne** : 16 modeles Mutable
+Instruments reels, verifies dans le navigateur (7 modeles sondes, signatures
+RMS et passages a zero tous distincts).
+
+### Trois obstacles, trois corrections
+
+1. **`stmlib` etait un sous-module git vide.** La bibliotheque DSP partagee
+   dont Plaits depend entierement n'avait jamais ete initialisee : meme avec
+   emcc, rien n'aurait compile. `git clone https://github.com/pichenettes/stmlib.git
+   vendor/mutable-eurorack/stmlib`.
+2. **Assembleur ARM Cortex-M4** (`ssat`, `usat`, `vsqrt.f32`) dans
+   `stmlib/dsp/dsp.h`. Upstream garde la version portable derriere `#ifdef TEST` :
+   il suffit de `-DTEST`.
+3. **`plaits/user_data.h` appelle `printf` sans inclure `<cstdio>`** dans sa
+   branche TEST (bug amont). Corrige par `-include cstdio`, sans toucher aux
+   sources vendorees.
+
+### Ce qui a ete ecrit
+
+- `tools/engines/plaits_bridge.cc` — surface C minimale autour de
+  `plaits::Voice`. Seule la synthese est prise ; drivers, bootloader, UI et
+  settings pilotent le STM32 et sont exclus.
+- `tools/build-plaits.sh` — la compilation reelle (`Build-NativeEngines.ps1`
+  n'etait qu'un squelette qui verifiait la chaine d'outils puis s'arretait).
+  emcc ecrit sur stderr, ce que PowerShell transforme en erreur : d'ou la
+  version bash.
+- `public/engines/mutable-plaits/plaits.js` — 293 Ko, wasm embarque
+  (`SINGLE_FILE`), charge a la demande.
+- `public/engines/mutable-plaits/bridge.js` — implemente le contrat
+  `EngineBridge` qui existait deja depuis des semaines sans implementation.
+
+### Le piege Vite
+
+`import(/* @vite-ignore */ url)` ne suffit pas : Vite reconnait un chemin de
+`public/` et refuse (« should not be imported from source code »). L'import
+passe par `new Function('url', 'return import(url)')`, opaque au bundler.
+Aucune CSP declaree dans l'app, donc c'est sur.
+
+### Dexed
+
+Toujours pas fait : JUCE, autrement plus lourd que Plaits. Le contrat
+l'accepte deja (`NativeEngineId`), la place est prete.
+
 ## Blocage restant — Phase 6 (moteurs natifs)
 
 Compiler Plaits / Rings / Clouds / Dexed en `AudioWorklet` + WASM.
