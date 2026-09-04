@@ -12,7 +12,6 @@ import {
   Volume2,
   Activity,
   Sliders,
-  Github,
   FolderTree,
   Flame,
   Play,

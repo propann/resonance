@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { toast } from '../stores/toastStore';
-import { Sparkles, Sliders, FolderTree, CheckCircle2, Download, Github, ArrowRight } from 'lucide-react';
+import { Sparkles, Sliders, FolderTree, CheckCircle2, Download, ArrowRight } from 'lucide-react';
 import { Modal } from './Modal';
 import { SampleItem } from '../types/sample';
 import {
@@ -19,7 +19,6 @@ interface BatchNamingModalProps {
   samples: SampleItem[];
   selectedSampleIds?: string[];
   onApplyRename: (updatedSamples: SampleItem[]) => void;
-  onOpenGitHubSync?: () => void;
 }
 
 export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
@@ -28,7 +27,6 @@ export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
   samples,
   selectedSampleIds,
   onApplyRename,
-  onOpenGitHubSync,
 }) => {
   const [config, setConfig] = useState<NamingConventionConfig>({
     ...DEFAULT_NAMING_CONFIG,
@@ -114,16 +112,6 @@ export const BatchNamingModal: React.FC<BatchNamingModalProps> = ({
             Exporter ZIP
           </button>
 
-          {onOpenGitHubSync && (
-            <button
-              onClick={onOpenGitHubSync}
-              className="px-3 py-1.5 rounded-lg bg-[#24292e] hover:bg-[#2f363d] border border-[#444d56] text-white text-xs font-mono font-medium flex items-center gap-1.5 transition-all shadow-sm"
-              title="Pousser les samples normalisés vers le dépôt Git propann/az-sample"
-            >
-              <Github className="w-3.5 h-3.5 text-white" />
-              <span className="hidden sm:inline">Pousser sur Git</span>
-            </button>
-          )}
         </>
       }
     >

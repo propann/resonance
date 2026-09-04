@@ -24,7 +24,6 @@ import {
   ArrowLeftRight,
   Trash2,
   Plus,
-  Github,
   CheckCircle2,
   FileCode2,
 } from 'lucide-react';
@@ -60,7 +59,6 @@ interface Op1KitBuilderModalProps {
   availableSamples: SampleItem[];
   currentSelectedSample?: SampleItem | null;
   onImportNewSamples?: (samples: SampleItem[]) => void;
-  onOpenGitHubSync?: () => void;
 }
 
 // Computer keyboard mappings to 24 OP-1 keys
@@ -93,7 +91,6 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   availableSamples,
   currentSelectedSample,
   onImportNewSamples,
-  onOpenGitHubSync,
 }) => {
   const [kitName, setKitName] = useState<string>('Resonance_OP1_Kit');
   const [slices, setSlices] = useState<Op1DrumSlice[]>([]);
@@ -703,16 +700,6 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
               </button>
             </div>
 
-            {onOpenGitHubSync && (
-              <button
-                onClick={onOpenGitHubSync}
-                className="px-3 py-1.5 rounded-lg bg-[#24292e] hover:bg-[#2f363d] border border-[#444d56] text-white text-xs font-mono font-medium flex items-center gap-1.5 transition-all shadow-sm ml-1"
-                title="Synchroniser vers le dépôt Git propann/az-sample"
-              >
-                <Github className="w-3.5 h-3.5 text-white" />
-                <span className="hidden sm:inline">propann/az-sample</span>
-              </button>
-            )}
         </>
       }
     >

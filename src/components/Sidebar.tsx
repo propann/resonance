@@ -633,19 +633,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               )}
 
-              {(
-                <button
-                  id="open-github-sync-sidebar-btn"
-                  onClick={() => openModal('gitHubSync')}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-white bg-[#181820] hover:bg-[#22222E] border-2 border-[#2F2F3D] pixel-btn"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">🐙</span>
-                    <span className="font-pixel text-[10px]">SYNC GITHUB</span>
-                  </div>
-                  <span className="text-[8px] font-pixel bg-[#00F0FF]/20 text-[#00F0FF] px-1">az-sample</span>
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -792,7 +779,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <BookOpen className="w-3.5 h-3.5 text-[#00F0FF] group-hover:scale-110 transition" />
               <div>
                 <div className="text-[9px] font-pixel text-white">GUIDE & CONVENTIONS</div>
-                <div className="text-[8px] font-mono text-gray-400">Norme propann/az-sample</div>
+                <div className="text-[8px] font-mono text-gray-400">Convention de nommage</div>
               </div>
             </div>
             <span className="text-[8px] font-pixel text-[#00F0FF] px-1.5 py-0.5 bg-[#00F0FF]/15 border border-[#00F0FF]/30 rounded">

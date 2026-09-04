@@ -32,8 +32,6 @@ import {
 } from '../services/audioAnalyzer';
 import { audioBufferToWavBlob, exportEp133ProjectPack, triggerFileDownload } from '../services/audioConverter';
 import { batchGenerateOp1Kits } from '../services/op1PatchEncoder';
-import { buildRepositoryZip, DEFAULT_GITHUB_CONFIG } from '../services/gitHubSync';
-import { Github } from 'lucide-react';
 
 interface IngestionItem {
   file: File;
@@ -264,19 +262,6 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
     triggerFileDownload(zipBlob, `Resonance_OP1_OG_Kits_${Date.now().toString(36)}.zip`);
   };
 
-  const handleExportDirectGitHub = async () => {
-    const readySamples = items
-      .filter((it) => it.status === 'done' && it.sampleItem)
-      .map((it) => it.sampleItem!);
-
-    if (readySamples.length === 0) return;
-
-    const zipBlob = await buildRepositoryZip(readySamples, {
-      ...DEFAULT_GITHUB_CONFIG,
-      normalizeLufs: autoLoudnessLevel,
-    });
-    triggerFileDownload(zipBlob, `az-sample-repo-bundle_${Date.now().toString(36)}.zip`);
-  };
 
   const completedCount = items.filter((i) => i.status === 'done').length;
 
@@ -556,14 +541,6 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
               <Zap className="w-3.5 h-3.5 text-[#FF7A00]" /> Kits OP-1 (.AIF)
             </button>
 
-            <button
-              disabled={completedCount === 0}
-              onClick={handleExportDirectGitHub}
-              className="px-3.5 py-2 rounded-lg bg-[#24292e] border border-[#444d56] text-white hover:bg-[#2f363d] disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm"
-              title="Exporter tout le pack formaté pour le dépôt Git propann/az-sample (README, Manifest, Kits, Samples)"
-            >
-              <Github className="w-3.5 h-3.5 text-white" /> Pack az-sample (Git)
-            </button>
 
             <button
               disabled={completedCount === 0}

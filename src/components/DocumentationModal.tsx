@@ -6,7 +6,6 @@ import {
   FolderTree,
   Activity,
   Cpu,
-  Github,
   Keyboard,
   CheckCircle2,
   Copy,
@@ -23,16 +22,14 @@ interface DocumentationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenAutoCurator?: () => void;
-  onOpenGitHubSync?: () => void;
 }
 
-type TabType = 'overview' | 'naming' | 'folders' | 'dsp' | 'hardware' | 'git' | 'shortcuts';
+type TabType = 'overview' | 'naming' | 'folders' | 'dsp' | 'hardware' | 'shortcuts';
 
 export const DocumentationModal: React.FC<DocumentationModalProps> = ({
   isOpen,
   onClose,
   onOpenAutoCurator,
-  onOpenGitHubSync,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -49,7 +46,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
     { id: 'folders', label: '7 Dossiers Épurés', icon: <FolderTree className="w-3.5 h-3.5" /> },
     { id: 'dsp', label: 'Normes DSP & LUFS', icon: <Activity className="w-3.5 h-3.5" /> },
     { id: 'hardware', label: 'OP-1 & EP-133 Kits', icon: <Cpu className="w-3.5 h-3.5" /> },
-    { id: 'git', label: 'GitHub az-sample', icon: <Github className="w-3.5 h-3.5" /> },
     { id: 'shortcuts', label: 'Raccourcis Clavier', icon: <Keyboard className="w-3.5 h-3.5" /> },
   ];
 
@@ -61,7 +57,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
       accent="#00F0FF"
       icon={<BookOpen className="h-5 w-5" />}
       title="Documentation officielle & conventions studio"
-      subtitle="Nommage, architecture 7 dossiers, laboratoire DSP et sync propann/az-sample"
+      subtitle="Nommage, architecture 7 dossiers, laboratoire DSP et conventions matériel"
       bodyClassName="flex flex-col overflow-hidden"
     >
         {/* Tab Navigation */}
@@ -113,18 +109,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                       LANCER LE CURATEUR
-                    </button>
-                  )}
-                  {onOpenGitHubSync && (
-                    <button
-                      onClick={() => {
-                        onClose();
-                        onOpenGitHubSync();
-                      }}
-                      className="px-3 py-1.5 bg-[#A855F7] text-white font-pixel text-[10px] font-bold rounded hover:bg-[#A855F7]/80 transition flex items-center gap-1.5 shadow"
-                    >
-                      <Github className="w-3.5 h-3.5" />
-                      GIT SYNC
                     </button>
                   )}
                 </div>
@@ -193,12 +177,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                       title: '7 Dossiers',
                       desc: 'Rangement immédiat sans arborescence tentaculaire.',
                       color: 'border-emerald-500/40 text-emerald-400',
-                    },
-                    {
-                      step: '5',
-                      title: 'Push GitHub',
-                      desc: 'Synchronisation directe en 1 clic vers propann/az-sample.',
-                      color: 'border-amber-500/40 text-amber-400',
                     },
                   ].map((item) => (
                     <div
@@ -478,83 +456,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
             </div>
           )}
 
-          {/* TAB 6: GIT SYNC */}
-          {activeTab === 'git' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-pixel text-sm text-[#00F0FF] mb-1">SYNCHRONISATION GITHUB (propann/az-sample)</h3>
-                <p className="text-xs text-gray-400 font-mono">
-                  Deux modes d'interaction : push direct sans quitter le navigateur ou commandes terminal.
-                </p>
-              </div>
-
-              {/* Repo Link */}
-              <div className="bg-[#121824] border border-purple-500/40 p-4 rounded-lg flex items-center justify-between">
-                <div>
-                  <div className="font-pixel text-xs text-white">DÉPÔT GITHUB OFFICIEL</div>
-                  <a
-                    href="https://github.com/propann/az-sample"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-mono text-[#00F0FF] hover:underline flex items-center gap-1 mt-0.5"
-                  >
-                    https://github.com/propann/az-sample.git
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-                {onOpenGitHubSync && (
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onOpenGitHubSync();
-                    }}
-                    className="px-3 py-1.5 bg-[#A855F7] text-white font-pixel text-[10px] font-bold rounded hover:bg-[#A855F7]/80 transition flex items-center gap-1.5"
-                  >
-                    <Github className="w-3.5 h-3.5" />
-                    OUVRIR LE MODULE DE SYNC
-                  </button>
-                )}
-              </div>
-
-              {/* Terminal CLI instructions */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-pixel text-gray-300 flex items-center gap-1.5">
-                    <Terminal className="w-4 h-4 text-emerald-400" />
-                    COMMANDES CLI RAPIDES
-                  </span>
-                  <button
-                    onClick={() =>
-                      handleCopy(
-                        'git clone https://github.com/propann/az-sample.git\ncd az-sample\ngit lfs install\ngit add .\ngit commit -m "feat(samples): sync studio library"\ngit push origin main',
-                        'clicommands'
-                      )
-                    }
-                    className="flex items-center gap-1 text-[10px] font-mono text-[#00F0FF] hover:underline"
-                  >
-                    {copiedCode === 'clicommands' ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    {copiedCode === 'clicommands' ? 'Copié !' : 'Copier'}
-                  </button>
-                </div>
-                <pre className="bg-black/90 p-3 rounded font-mono text-xs text-emerald-400 border border-gray-800 overflow-x-auto leading-relaxed">
-{`# 1. Cloner le dépôt officiel
-git clone https://github.com/propann/az-sample.git
-cd az-sample
-
-# 2. Configurer Git LFS pour les fichiers audio binaires
-git lfs install
-git lfs track "*.wav" "*.aif"
-
-# 3. Synchroniser les nouveaux sons et kits
-git add .
-git commit -m "feat(samples): sync studio library & OP-1 kits"
-git push origin main`}
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 7: SHORTCUTS */}
+          {/* TAB 6: SHORTCUTS */}
           {activeTab === 'shortcuts' && (
             <div className="space-y-6">
               <div>
@@ -572,7 +474,6 @@ git push origin main`}
                   { key: 'Ctrl + Shift + O', action: 'Importer un dossier complet récursivement' },
                   { key: 'Ctrl + K', action: 'Ouvrir le Studio Auto-Curateur & Rangement DSP' },
                   { key: 'Ctrl + S', action: 'Ouvrir le Découpeur de Transitoires (Slicer)' },
-                  { key: 'Ctrl + G', action: 'Ouvrir le Hub de Synchronisation GitHub' },
                   { key: '1 à 8', action: 'Déclencher les tranches dans le Slicer' },
                   { key: '+ / -', action: 'Transposer le pitch (-12 à +12 demi-tons)' },
                   { key: 'F', action: 'Ajouter / Retirer des favoris' },

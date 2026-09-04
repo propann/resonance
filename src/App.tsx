@@ -23,7 +23,6 @@ const AutoSlicerModal = lazy(() => import('./components/AutoSlicerModal').then((
 const BatchConverterModal = lazy(() => import('./components/BatchConverterModal').then((m) => ({ default: m.BatchConverterModal })));
 const BatchNamingModal = lazy(() => import('./components/BatchNamingModal').then((m) => ({ default: m.BatchNamingModal })));
 const DocumentationModal = lazy(() => import('./components/DocumentationModal').then((m) => ({ default: m.DocumentationModal })));
-const GitHubSyncModal = lazy(() => import('./components/GitHubSyncModal').then((m) => ({ default: m.GitHubSyncModal })));
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then((m) => ({ default: m.KeyboardShortcutsModal })));
 const LoudnessStandardModal = lazy(() => import('./components/LoudnessStandardModal').then((m) => ({ default: m.LoudnessStandardModal })));
 const MarketBenchmarkModal = lazy(() => import('./components/MarketBenchmarkModal').then((m) => ({ default: m.MarketBenchmarkModal })));
@@ -1074,7 +1073,6 @@ export default function App() {
             setSamples((prev) => [...newS, ...prev]);
             if (newS.length > 0) setSelectedSampleId(newS[0].id);
           }}
-          onOpenGitHubSync={() => openModal('gitHubSync')}
         />
       </LazyModal>
 
@@ -1088,15 +1086,6 @@ export default function App() {
         }}
       />
 
-      {/* GitHub Hub (propann/az-sample) Modal */}
-      <LazyModal open={modals.gitHubSync}>
-        <GitHubSyncModal
-          isOpen={modals.gitHubSync}
-          onClose={() => closeModal('gitHubSync')}
-          samples={samples}
-        />
-      </LazyModal>
-
       {/* Professional Batch Naming & Organization Modal */}
       <LazyModal open={modals.batchNaming}>
         <BatchNamingModal
@@ -1105,7 +1094,6 @@ export default function App() {
           samples={samples}
           selectedSampleIds={selectedSampleIds}
           onApplyRename={handleApplyBatchRename}
-          onOpenGitHubSync={() => openModal('gitHubSync')}
         />
       </LazyModal>
 
@@ -1173,10 +1161,6 @@ export default function App() {
           onOpenAutoCurator={() => {
             closeModal('doc');
             openModal('autoCurator');
-          }}
-          onOpenGitHubSync={() => {
-            closeModal('doc');
-            openModal('gitHubSync');
           }}
         />
       </LazyModal>

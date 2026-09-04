@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '../stores/toastStore';
+import { audioEngine } from '../services/audioEngine';
 import {
   adoptLibraryRoot,
   chooseLibraryRoot,
@@ -227,6 +228,10 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
 
     const scanReception = async () => {
       if (scanInFlightRef.current) return;
+      // The user comes first: while a sound is playing, the ingestion waits.
+      // Its analysis holds the main thread in bursts, which is heard as
+      // stutter and felt as a dead transport.
+      if (audioEngine.getState().isPlaying) return;
       scanInFlightRef.current = true;
       try {
         // Metadata only, and bounded: this runs on every watch event and on a
@@ -254,7 +259,8 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
         optionsRef.current.onReceptionFilesReady(freshFiles, false);
       } catch (error) {
         console.error('Surveillance de réception indisponible', error);
-        setWorkFolderStatus('error');
+        // Only a real access failure means the folder is unusable.
+        setWorkFolderStatus((current) => (current === 'connected' ? current : 'error'));
       } finally {
         scanInFlightRef.current = false;
       }

@@ -303,27 +303,31 @@ export async function scanWorkFolderAudioEntries(
   const out: WorkFolderAudioEntry[] = [];
   let truncated = false;
 
-  const visit = async (rel: string): Promise<void> => {
-    if (out.length >= limit) return;
+  // Breadth-first, on purpose: what the user just dropped at the top of the
+  // folder is ingested before the depths of a sub-folder holding 40 000 files.
+  // Depth-first meant a big "A_TRIER" swallowed every batch while the files in
+  // plain sight never moved.
+  const queue: string[] = [''];
+  while (queue.length > 0 && out.length < limit) {
+    const rel = queue.shift()!;
     // Names only: a drop folder can hold tens of thousands of files, and one
     // stat per entry there costs more than the whole rest of the scan.
-    const entries = await fs.readDir(rel || '.', { stats: false });
+    const entries = await fs.readDir(rel || '.', { stats: false }).catch(() => []);
     for (const entry of entries) {
-      if (out.length >= limit) {
-        truncated = true;
-        return;
-      }
       const childRel = j(rel, entry.name);
       if (entry.isFile && AUDIO_FILE.test(entry.name)) {
+        if (out.length >= limit) {
+          truncated = true;
+          break;
+        }
         out.push({ sourcePath: childRel, name: entry.name, size: 0, mtimeMs: 0 });
       } else if (entry.isDir) {
         if (!rel && MANAGED_TOP_LEVEL_FOLDERS.has(entry.name) && entry.name !== '00_RECEPTION') continue;
-        await visit(childRel);
+        queue.push(childRel);
       }
     }
-  };
-
-  await visit('');
+  }
+  if (queue.length > 0) truncated = true;
 
   // Size and mtime make the entry key, so they are read for the handful of
   // entries that survive the limit — not for the whole backlog.
@@ -370,18 +374,23 @@ export async function readWorkFolderAudioFiles(
   const worker = async (): Promise<void> => {
     for (let index = next++; index < entries.length; index = next++) {
       const entry = entries[index];
-      const buf = await fs.readFile(entry.sourcePath);
-      out[index] = {
-        file: new File([buf], entry.name, { lastModified: entry.mtimeMs }),
-        sourcePath: entry.sourcePath,
-      };
+      try {
+        const buf = await fs.readFile(entry.sourcePath);
+        out[index] = {
+          file: new File([buf], entry.name, { lastModified: entry.mtimeMs }),
+          sourcePath: entry.sourcePath,
+        };
+      } catch {
+        // The listing is a snapshot: a file can be gone by the time we read it
+        // (a previous batch just filed it). Skip it, never fail the batch.
+      }
     }
   };
 
   await Promise.all(
     Array.from({ length: Math.min(READ_CONCURRENCY, entries.length) }, () => worker())
   );
-  return out;
+  return out.filter(Boolean);
 }
 
 export async function readLibraryAudioFile(_root: LibraryRoot, relativePath: string): Promise<File> {

@@ -5,7 +5,6 @@ import {
   Upload,
   FolderUp,
   Download,
-  Github,
   Scissors,
   Sparkles,
   Sliders,
@@ -334,19 +333,6 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               {(
                 <>
                   <div className="h-px bg-[#1E1E2C] my-1" />
-                  <button
-                    onClick={() => {
-                      openModal('gitHubSync');
-                      closeMenus();
-                    }}
-                    className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Github className="w-3.5 h-3.5" />
-                      <span>Synchronisation GitHub...</span>
-                    </div>
-                    <span className="text-[8px] text-[#00F0FF]">az-sample</span>
-                  </button>
                 </>
               )}
             </div>
@@ -831,7 +817,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
               <div className="px-2 py-1 text-[8px] text-[#8E8E98]">
                 Resonance Pro Studio v2.4 Master
                 <br />
-                Norme officielle : propann/az-sample
+                Convention de nommage & arborescence
               </div>
             </div>
           )}

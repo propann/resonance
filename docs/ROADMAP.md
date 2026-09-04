@@ -23,7 +23,7 @@
 - [x] Moteurs Tone.js : synth, FM, AM, membrane, metal, pluck et noise.
 - [x] Banque repliable et glisser-deposer depuis la bibliotheque.
 - [x] Second rack a la demande avec 10 familles : Dexed, Mutable, Surge, chiptune, granular et sampler.
-- [x] Builder OP-1, export EP-133, synchronisation GitHub et package Git-ready.
+- [x] Builder OP-1, export EP-133. (La synchronisation GitHub des sons a été retirée le 2026-09-04 : les sons restent sur la machine, dans le dossier de travail.)
 
 ## Ecarts connus
 

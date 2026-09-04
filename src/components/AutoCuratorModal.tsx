@@ -129,7 +129,6 @@ interface AutoCuratorModalProps {
   onQueueResult?: (result: { ready: number; errors: number }) => void;
   autoTransfer?: boolean;
   onApplyCuration: (curatedSamples: SampleItem[]) => void;
-  onOpenGitHubSync?: () => void;
 }
 
 /** Files decoded ahead of the analysis cursor. */
@@ -155,7 +154,6 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   onQueueResult,
   autoTransfer = false,
   onApplyCuration,
-  onOpenGitHubSync,
 }) => {
   const [sourceMode, setSourceMode] = useState<'upload' | 'library'>('upload');
   const [items, setItems] = useState<CuratorItem[]>([]);
@@ -572,6 +570,10 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       }
 
       paint();
+      // Hand the main thread back between files. Each one is a few hundred ms
+      // of solid DSP; without this the window froze for the whole batch and
+      // the space bar, the play button and the table all went dead.
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
     paint(true);
@@ -842,16 +844,6 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
               <span>Exporter dans un dossier</span>
             </button>
 
-            {onOpenGitHubSync && (
-              <button
-                disabled={readyCount === 0}
-                onClick={onOpenGitHubSync}
-                className="px-3 py-1.5 rounded-lg bg-[#24292e] hover:bg-[#2f363d] border border-[#444d56] text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-40"
-                title="Pousser vers le dépôt Git propann/az-sample"
-              >
-                <span>🐙 Pousser Git</span>
-              </button>
-            )}
 
             <button
               onClick={handleCommitCuration}

@@ -98,6 +98,17 @@ describe('readWorkFolderAudioFiles', () => {
 });
 
 describe('scanWorkFolderAudioEntries', () => {
+  it('takes the files in plain sight before diving into a sub-folder', async () => {
+    fakeRoot({
+      '.': [dir('00_RECEPTION')],
+      // A_TRIER sorts first, and used to swallow every batch.
+      '00_RECEPTION': [dir('A_TRIER'), file('drop1.wav'), file('drop2.wav')],
+      '00_RECEPTION/A_TRIER': [file('deep1.wav'), file('deep2.wav')],
+    });
+    const { entries } = await scanWorkFolderAudioEntries(undefined, 3);
+    expect(entries.slice(0, 2).map((e) => e.name)).toEqual(['drop1.wav', 'drop2.wav']);
+  });
+
   it('stops at the limit and says so, instead of walking a huge backlog', async () => {
     const many = Array.from({ length: 50 }, (_, i) => file(`s${i}.wav`));
     fakeRoot({ '.': [dir('00_RECEPTION')], '00_RECEPTION': many });

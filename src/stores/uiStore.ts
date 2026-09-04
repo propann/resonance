@@ -8,7 +8,6 @@ export type ModalKey =
   | 'autoCurator'
   | 'benchmark'
   | 'op1Studio'
-  | 'gitHubSync'
   | 'batchNaming'
   | 'dspModal'
   | 'rackHost'
@@ -29,7 +28,6 @@ const ALL_CLOSED: Record<ModalKey, boolean> = {
   autoCurator: false,
   benchmark: false,
   op1Studio: false,
-  gitHubSync: false,
   batchNaming: false,
   dspModal: false,
   rackHost: false,
