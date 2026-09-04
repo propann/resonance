@@ -10,7 +10,6 @@ export type ModalKey =
   | 'op1Studio'
   | 'batchNaming'
   | 'dspModal'
-  | 'rackHost'
   | 'synthRack'
   | 'shortcuts'
   | 'doc'
@@ -29,7 +28,6 @@ const ALL_CLOSED: Record<ModalKey, boolean> = {
   op1Studio: false,
   batchNaming: false,
   dspModal: false,
-  rackHost: false,
   synthRack: false,
   shortcuts: false,
   doc: false,

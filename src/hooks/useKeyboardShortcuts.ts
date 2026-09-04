@@ -14,7 +14,6 @@ export interface KeyboardShortcutHandlers {
   /** Ctrl/Cmd + I */
   onReactivateWorkFolder: () => void;
   /** Ctrl/Cmd + E — caller decides what "selected" means */
-  onOpenFxRackForSelected: () => void;
   /** F1 */
   onOpenDocumentation: () => void;
   /** F2 */
@@ -82,9 +81,6 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers): void {
       } else if (e.code === 'KeyI' && mod) {
         e.preventDefault();
         h.onReactivateWorkFolder();
-      } else if (e.code === 'KeyE' && mod) {
-        e.preventDefault();
-        h.onOpenFxRackForSelected();
       } else if (e.code === 'F1') {
         e.preventDefault();
         h.onOpenDocumentation();

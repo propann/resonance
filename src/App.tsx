@@ -36,7 +36,6 @@ const SmartIngestionModal = lazy(() => import('./components/SmartIngestionModal'
 const LibraryDedupeModal = lazy(() => import('./components/LibraryDedupeModal').then((m) => ({ default: m.LibraryDedupeModal })));
 const PatchesModal = lazy(() => import('./components/PatchesModal').then((m) => ({ default: m.PatchesModal })));
 const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
-const RackHostModal = lazy(() => import('./components/RackHostModal').then((module) => ({ default: module.RackHostModal })));
 
 /**
  * Mounts a lazily-loaded modal only while it is open, so its chunk is fetched
@@ -107,7 +106,6 @@ export default function App() {
 
   // Which sample the sample-scoped modals act on (rack / dsp / loudness / slicer).
   const slicerSample = useSampleTargetStore((s) => s.slicer);
-  const sampleForRack = useSampleTargetStore((s) => s.rack);
   const sampleForDsp = useSampleTargetStore((s) => s.dsp);
   const sampleForLoudness = useSampleTargetStore((s) => s.loudness);
   const setSampleTarget = useSampleTargetStore((s) => s.setTarget);
@@ -360,10 +358,10 @@ export default function App() {
     void refreshPatches();
   }, [refreshPatches]);
 
+  // A loaded patch lands straight in the workshop column's chain: there is no
+  // window left to open.
   const handleLoadPatch = useCallback(
-    async (patchId: string) => {
-      if (await applyPatch(patchId)) openSampleModal('rack', undefined);
-    },
+    (patchId: string) => void applyPatch(patchId),
     [applyPatch]
   );
 
@@ -438,7 +436,6 @@ export default function App() {
     onToggleLoop: () => audioEngine.toggleLoop(),
     onOpenBatchNaming: () => openModal('batchNaming'),
     onReactivateWorkFolder: () => void reactivateWorkFolder(),
-    onOpenFxRackForSelected: () => handleOpenFxRack(),
     onOpenDocumentation: () => openModal('doc'),
     onToggleView: toggleView,
     onOpenDspForSelected: () => handleOpenDspAnalyzer(),
@@ -718,7 +715,6 @@ export default function App() {
 
   // Thin wrappers over the store opener, kept for the internal callers
   // (keyboard shortcuts, LayerSynth "open effects", etc.).
-  const handleOpenFxRack = (targetSample?: SampleItem) => openSampleModal('rack', targetSample);
   const handleOpenLoudnessStandard = (targetSample?: SampleItem) =>
     openSampleModal('loudness', targetSample);
   const handleOpenDspAnalyzer = (targetSample?: SampleItem) => openSampleModal('dsp', targetSample);
@@ -895,7 +891,6 @@ export default function App() {
         isBackgroundProcessing={isCuratorProcessing}
         libraryName={libraryName}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
-        onOpenFxRack={() => handleOpenFxRack()}
         onOpenLoudnessStandard={() => handleOpenLoudnessStandard()}
         onOpenEp133Export={handleExportEp133Pack}
         onSelectAll={() => handleSelectAllSamples(true)}
@@ -921,7 +916,6 @@ export default function App() {
         incomingIsPartial={incomingIsPartial}
         failedIncomingCount={failedIncomingCount}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
-        onOpenFxRack={() => handleOpenFxRack()}
         onOpenAutoSlicer={() => handleOpenSlicer()}
         onAutoOrganizeLibrary={() => void handleAutoOrganizeLibrary()}
         isPlaying={isPlaying}
@@ -1166,51 +1160,6 @@ export default function App() {
       </LazyModal>
 
       {/* Studio DSP Audio Analysis Modal */}
-      <LazyModal open={modals.dspModal}>
-        <AudioAnalysisModal
-          isOpen={modals.dspModal}
-          onClose={() => {
-            closeModal('dspModal');
-            setSampleTarget('dsp', null);
-          }}
-          sample={liveSample(sampleForDsp) || selectedSample}
-          onUpdateSample={handleUpdateSampleFromDsp}
-        />
-      </LazyModal>
-
-      <Suspense fallback={modals.synthRack ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 text-xs text-[#00F0FF]">Chargement du Creator Studio…</div> : null}>
-        <LayerSynthRackModal isOpen={modals.synthRack} onClose={() => closeModal('synthRack')} libraryRoot={libraryRoot} onCreateSample={handleCreateSynthSample} librarySamples={samples} onSelectLibrarySample={setSelectedSampleId} onOpenEffects={(sample) => { setSelectedSampleId(sample.id); handleOpenFxRack(sample); }} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <RackHostModal
-          isOpen={modals.rackHost}
-          onClose={() => {
-            closeModal('rackHost');
-            setSampleTarget('rack', null);
-          }}
-          sample={liveSample(sampleForRack) || selectedSample}
-          onSaveAsNewSample={handleSaveProcessedAsNew}
-        />
-      </Suspense>
-
-      {/* International Loudness Standard Modal (ITU-R BS.1770-4 / EBU R128) */}
-      <LazyModal open={modals.loudnessModal}>
-        <LoudnessStandardModal
-          isOpen={modals.loudnessModal}
-          onClose={() => {
-            closeModal('loudnessModal');
-            setSampleTarget('loudness', null);
-          }}
-          sample={liveSample(sampleForLoudness) || selectedSample}
-          allSelectedSamples={
-            selectedSampleIds.length > 0
-              ? samples.filter((s) => selectedSampleIds.includes(s.id))
-              : filteredSamples
-          }
-          onApplyNormalization={handleApplyLoudnessNormalization}
-          onBatchApplyNormalization={handleBatchApplyLoudnessNormalization}
-        />
-      </LazyModal>
 
       {/* Keyboard Shortcuts Modal */}
       <LazyModal open={modals.shortcuts}>
@@ -1245,10 +1194,7 @@ export default function App() {
         <PatchesModal
           isOpen={modals.patches}
           onClose={() => closeModal('patches')}
-          onOpenRack={() => {
-            closeModal('patches');
-            openSampleModal('rack', undefined);
-          }}
+          onOpenRack={() => closeModal('patches')}
         />
       </LazyModal>
 

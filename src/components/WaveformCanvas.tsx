@@ -1612,17 +1612,6 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
             </button>
           )}
 
-          {(
-            <button
-              id="open-fx-rack-waveform-btn"
-              onClick={() => openSampleModal('rack', sample)}
-              className="flex items-center gap-1 px-2.5 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#00F0FF] border border-[#00F0FF]/40 text-[9px] font-mono font-bold transition shadow-sm"
-              title="Ouvrir le Studio Rack d'Effets DSP & Sound Design (Sub-Bass, Stutter, Delay, Reverb, Saturation, etc.)"
-            >
-              <Flame className="w-3 h-3 text-[#00F0FF]" />
-              <span>RACK D'EFFETS DSP</span>
-            </button>
-          )}
 
           {/* Guide Popup Button */}
           <button

@@ -37,8 +37,6 @@ interface HeaderProps {
   incomingIsPartial?: boolean;
   failedIncomingCount?: number;
   onOpenDspAnalyzer?: () => void;
-  onOpenFxRack?: () => void;
-  onOpenAutoSlicer?: () => void;
   onAutoOrganizeLibrary?: () => void;
   isPlaying?: boolean;
   onTogglePlayPause?: () => void;
@@ -61,8 +59,6 @@ export const Header: React.FC<HeaderProps> = ({
   incomingIsPartial = false,
   failedIncomingCount = 0,
   onOpenDspAnalyzer,
-  onOpenFxRack,
-  onOpenAutoSlicer,
   onAutoOrganizeLibrary,
   isPlaying = false,
   onTogglePlayPause,
@@ -294,40 +290,11 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Auto-Slicer Direct Button */}
-        {onOpenAutoSlicer && (
-          <button
-            id="open-slicer-header-btn"
-            onClick={onOpenAutoSlicer}
-            className="flex items-center gap-1 px-2 py-1 bg-[#10B981]/15 hover:bg-[#10B981]/30 text-[#10B981] border-2 border-[#10B981]/40 text-[9px] font-pixel pixel-btn"
-            title="Découpe Automatique & Transitoires (Touche S)"
-          >
-            <Scissors className="w-3 h-3 text-[#10B981]" />
-            <span className="hidden md:inline font-bold">SLICER [S]</span>
-          </button>
-        )}
-
-        {/* Studio DSP Effects Rack Button */}
-        {onOpenFxRack && (
-          <button
-            id="open-fx-rack-header-btn"
-            onClick={onOpenFxRack}
-            className="flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border-2 border-[#00F0FF]/40 text-[9px] font-pixel pixel-btn"
-            title="Rack d'Effets DSP & Sound Design (Ctrl+E)"
-          >
-            <Flame className="w-3 h-3 text-[#00F0FF]" />
-            <span className="hidden md:inline font-bold">RACK FX [E]</span>
-          </button>
-        )}
-
         {/*
-          The synth rack and the "extensions" rack used to have a button each,
-          on top of the effects rack's. Effects, engines, patches, slicing and
-          the OP-1 kit now live in the workshop column beside the waveform, and
-          the Creator is reached from its Moteurs section — one place per tool.
-          The extensions rack is gone: it never made a sound, its Dexed and
-          Mutable cards being toggles over a WASM bridge that was never built.
+          Slicing moved to AUDIO / DSP in the application menu: it is a tool
+          over one sample, not something that makes sound, and it had a button
+          here as well as an entry there. The S shortcut still opens it.
         */}
-
         {/* Smart Ingestion Magic Drop Button */}
         {<button
           id="open-smart-ingest-btn"

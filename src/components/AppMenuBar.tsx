@@ -45,7 +45,7 @@ export interface AppMenuBarProps {
   libraryName?: string | null;
   onImportOp1Patch?: () => void;
   onOpenDspAnalyzer: () => void;
-  onOpenFxRack?: () => void;
+  onOpenAutoSlicer?: () => void;
   onOpenLoudnessStandard?: () => void;
   onOpenEp133Export: () => void;
   onSelectAll?: () => void;
@@ -75,7 +75,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   libraryName,
   onImportOp1Patch,
   onOpenDspAnalyzer,
-  onOpenFxRack,
+  onOpenAutoSlicer,
   onOpenLoudnessStandard,
   onOpenEp133Export,
   onSelectAll,
@@ -574,19 +574,19 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                 </div>
                 <span className="text-[8px] opacity-60">Ctrl+I</span>
               </button>}
-              {onOpenFxRack && (
+              {onOpenAutoSlicer && (
                 <button
                   onClick={() => {
-                    onOpenFxRack();
+                    onOpenAutoSlicer();
                     closeMenus();
                   }}
                   className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
                 >
                   <div className="flex items-center gap-2">
-                    <Flame className="w-3.5 h-3.5 text-[#00F0FF]" />
-                    <span>Rack Modulaire (Effets & Sound Design)...</span>
+                    <Scissors className="w-3.5 h-3.5 text-[#FF7A00]" />
+                    <span>Découpe par transitoires...</span>
                   </div>
-                  <span className="text-[8px] text-[#00F0FF] font-bold">Ctrl+E</span>
+                  <span className="text-[8px] opacity-60">S</span>
                 </button>
               )}
               <button

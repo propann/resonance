@@ -2,13 +2,17 @@
  * The workshop column: everything that used to be a window over the app, now
  * a column beside it.
  *
- * Three separate windows — the effects rack, the synth rack and an "extensions"
- * rack — covered the waveform and the library whenever you wanted to touch a
- * sound, and two of them could be reached from more than one button. They are
- * one column now: effects, engines, patches, slicing and the OP-1 kit, each a
- * section you fold away. The rack it drives is the live one, so a knob moved
- * here is heard on the next block, without leaving the sample you are looking
- * at.
+ * Windows used to cover the waveform and the library whenever you wanted to
+ * touch a sound — an effects rack, a synth rack, an "extensions" rack — and
+ * several buttons led to the same one. The column holds all of it now, and
+ * only it: what makes sound and what changes it. Slicing and the OP-1 kit are
+ * tools over a sample rather than instruments, so they went to the application
+ * menu.
+ *
+ * The rack it drives is the live one, mounted for as long as the app runs, so
+ * a knob moved here is heard on the next block without leaving the sample you
+ * are looking at — and the engines are played from the typing keyboard or a
+ * MIDI controller rather than merely auditioned.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Play, Square, Repeat, Save, RotateCcw, Trash2 } from 'lucide-react';
@@ -31,17 +35,28 @@ import {
 } from '../services/rackPatches';
 import { audioBufferToWavBlob } from '../services/audioConverter';
 import { calculateAudioMetrics } from '../services/audioAnalyzer';
+import { usePlayableEngine } from '../hooks/usePlayableEngine';
+import {
+  isSharpKey,
+  noteForKey,
+  noteName,
+  PLAYABLE_KEYS,
+} from '../services/playableKeys';
+import { testAllModules, type ModuleTestResult } from '../rack/selfTest';
 
 registerBuiltinModules();
 
-type SectionId = 'effects' | 'engines' | 'patches' | 'slicer' | 'op1';
+/**
+ * The column holds what makes or changes sound, and nothing else. Slicing and
+ * the OP-1 kit are tools over a sample rather than instruments, so they live
+ * in the application menu where that kind of thing belongs.
+ */
+type SectionId = 'effects' | 'engines' | 'patches';
 
 const SECTION_LABELS: Record<SectionId, string> = {
   effects: 'EFFETS',
   engines: 'MOTEURS',
   patches: 'PATCHES',
-  slicer: 'DÉCOUPE',
-  op1: 'KIT OP-1',
 };
 
 const OPEN_KEY = 'resonance-atelier-open-v1';
@@ -107,13 +122,11 @@ const Section: React.FC<SectionProps> = ({ id, open, onToggle, badge, children }
 interface AtelierColumnProps {
   sample: SampleItem | null;
   onSaveAsNewSample: (sample: SampleItem) => void;
-  onOpenSlicer: (sample: SampleItem) => void;
 }
 
 export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   sample,
   onSaveAsNewSample,
-  onOpenSlicer,
 }) => {
   const rack = useRackStore((s) => s.rack);
   const addModule = useRackStore((s) => s.addModule);
@@ -134,7 +147,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
     } catch {
       /* first run */
     }
-    return { effects: true, engines: false, patches: false, slicer: false, op1: false };
+    return { effects: true, engines: false, patches: false };
   });
   useEffect(() => {
     try {
@@ -152,6 +165,13 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   const live = useLiveRack(sample?.audioBuffer, true);
   const [isRendering, setIsRendering] = useState(false);
 
+  // The engines are playable while their section is open. Folded away they
+  // release the keyboard, so typing a sample name stays typing.
+  const player = usePlayableEngine(open.engines);
+
+  const [selfTest, setSelfTest] = useState<ModuleTestResult[] | null>(null);
+  const [testProgress, setTestProgress] = useState<string | null>(null);
+
   // The space bar drives the rack while its section is open; folded away, it
   // goes back to auditioning the library selection.
   useAudition('Rack (atelier)', live.toggle, open.effects && !live.isSilent);
@@ -162,6 +182,16 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   const effectFamilies = useMemo(
     () => [...new Set(effectDefs.map((d) => d.family))],
     [effectDefs]
+  );
+
+  // Left to right by pitch, so the strip reads like a keyboard rather than
+  // like the two rows of the typing keyboard it is bound to.
+  const orderedKeys = useMemo(
+    () =>
+      [...PLAYABLE_KEYS].sort(
+        (a, b) => (noteForKey(a, 0) ?? 0) - (noteForKey(b, 0) ?? 0)
+      ),
+    []
   );
 
   const [patches, setPatches] = useState<RackPatch[]>([]);
@@ -184,6 +214,26 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
     } catch (error) {
       console.error('Enregistrement du patch impossible', error);
       toast.error("Impossible d'enregistrer le patch.");
+    }
+  };
+
+  /** Render every effect over a reference signal and report what it changes. */
+  const handleSelfTest = async () => {
+    setSelfTest(null);
+    setTestProgress('…');
+    try {
+      const results = await testAllModules((done, total, label) =>
+        setTestProgress(`${done}/${total} ${label}`)
+      );
+      setSelfTest(results);
+      const broken = results.filter((r) => !r.ok);
+      if (broken.length === 0) toast.success(`${results.length} effets testés : tous répondent.`);
+      else toast.error(`${broken.length} effet(s) à revoir sur ${results.length}.`);
+    } catch (error) {
+      console.error('Test des effets impossible', error);
+      toast.error('Le banc de test des effets a échoué.');
+    } finally {
+      setTestProgress(null);
     }
   };
 
@@ -350,6 +400,34 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
               ))}
             </div>
           </details>
+
+          {/* The effect bench came from the window this column replaced. */}
+          <details className="mt-1">
+            <summary className="cursor-pointer font-pixel text-[8px] uppercase tracking-widest text-[#77778A]">
+              Banc de test{selfTest ? ` — ${selfTest.filter((r) => r.ok).length}/${selfTest.length} OK` : ''}
+            </summary>
+            <div className="mt-1 space-y-1">
+              <button
+                onClick={() => void handleSelfTest()}
+                disabled={testProgress !== null}
+                title="Rend un signal étalon à travers chaque effet et mesure ce qu'il change"
+                className="w-full rounded border border-[#00F0FF]/50 bg-[#00F0FF]/10 px-2 py-1 font-mono text-[9px] font-bold text-[#00F0FF] hover:bg-[#00F0FF]/25 disabled:opacity-40"
+              >
+                {testProgress ?? 'TESTER TOUS LES EFFETS'}
+              </button>
+              {selfTest && (
+                <div className="max-h-32 space-y-px overflow-y-auto">
+                  {selfTest
+                    .filter((r) => !r.ok)
+                    .map((r) => (
+                      <div key={r.type} className="text-[9px] text-[#EF4444]">
+                        {r.label} — sans effet mesurable
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </details>
         </Section>
 
         {/* --------------------------------------------------------- MOTEURS */}
@@ -375,12 +453,72 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
               </button>
             ))}
           </div>
+
+          {/* The instrument: playable from the typing keyboard and from MIDI. */}
+          <div className="mt-2 rounded border border-[#A855F7]/30 bg-[#0E0B14] p-1.5">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="font-pixel text-[8px] uppercase tracking-widest text-[#A855F7]">
+                Clavier
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={() => player.setOctave(player.octave - 1)}
+                  title="Octave en dessous"
+                  className="rounded border border-[#2A2934] px-1 text-[10px] leading-none text-[#A9A9B8] hover:border-[#A855F7]"
+                >
+                  −
+                </button>
+                <span className="font-mono text-[9px] text-[#E9D5FF]">C{player.octave}</span>
+                <button
+                  onClick={() => player.setOctave(player.octave + 1)}
+                  title="Octave au-dessus"
+                  className="rounded border border-[#2A2934] px-1 text-[10px] leading-none text-[#A9A9B8] hover:border-[#A855F7]"
+                >
+                  +
+                </button>
+              </span>
+            </div>
+
+            <div className="flex gap-px">
+              {orderedKeys.map((code) => {
+                const note = noteForKey(code, player.octave);
+                if (note === undefined) return null;
+                const held = player.heldNotes.has(note);
+                const sharp = isSharpKey(code);
+                return (
+                  <button
+                    key={code}
+                    onMouseDown={() => player.press(note)}
+                    onMouseUp={() => player.release(note)}
+                    onMouseLeave={() => held && player.release(note)}
+                    title={noteName(note)}
+                    className={`h-8 flex-1 rounded-b text-[7px] leading-none transition-colors ${
+                      held
+                        ? 'bg-[#A855F7] text-black'
+                        : sharp
+                          ? 'bg-[#1A1A22] text-[#77778A] hover:bg-[#2A2A38]'
+                          : 'bg-[#D8D8DE] text-[#33333F] hover:bg-white'
+                    }`}
+                  >
+                    {noteName(note)}
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="mt-1 text-[8px] leading-snug text-[#55556A]">
+              Joue avec les touches du clavier (rang QSDFGHJ pour les blanches, la rangée du
+              dessus pour les noires) ou un clavier MIDI branché.
+            </p>
+            <p className="text-[8px] text-[#55556A]">{player.midiStatus}</p>
+          </div>
+
           <button
             onClick={() => openModal('synthRack')}
             className="mt-2 w-full rounded border border-[#A855F7]/50 bg-[#A855F7]/15 px-2 py-1.5 font-pixel text-[9px] text-[#E9D5FF] hover:bg-[#A855F7]/30"
-            title="Le Creator : 10 couches, ADSR, clavier et MIDI"
+            title="Le Creator : 10 couches, ADSR et enveloppes"
           >
-            CREATOR — 10 COUCHES + MIDI
+            CREATOR — RÉGLER LES 10 COUCHES
           </button>
         </Section>
 
@@ -437,33 +575,6 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
           )}
         </Section>
 
-        {/* --------------------------------------------------------- DÉCOUPE */}
-        <Section id="slicer" open={open.slicer} onToggle={toggleSection}>
-          <p className="mb-1.5 text-[9px] leading-snug text-[#77778A]">
-            Détection des transitoires, calage sur les passages à zéro, export des tranches.
-          </p>
-          <button
-            onClick={() => sample && onOpenSlicer(sample)}
-            disabled={!sample}
-            className="w-full rounded border border-[#FF7A00]/50 bg-[#FF7A00]/15 px-2 py-1.5 font-pixel text-[9px] text-[#FFD0A0] hover:bg-[#FF7A00]/30 disabled:opacity-30"
-            title={sample ? 'Découper ce sample' : 'Choisis un sample'}
-          >
-            DÉCOUPER CE SAMPLE
-          </button>
-        </Section>
-
-        {/* --------------------------------------------------------- KIT OP-1 */}
-        <Section id="op1" open={open.op1} onToggle={toggleSection}>
-          <p className="mb-1.5 text-[9px] leading-snug text-[#77778A]">
-            Assembler plusieurs sons en un patch de batterie OP-1, 24 emplacements.
-          </p>
-          <button
-            onClick={() => openModal('op1Studio')}
-            className="w-full rounded border border-[#FF7A00]/50 bg-[#FF7A00]/15 px-2 py-1.5 font-pixel text-[9px] text-[#FFD0A0] hover:bg-[#FF7A00]/30"
-          >
-            OUVRIR LE STUDIO OP-1
-          </button>
-        </Section>
       </div>
     </div>
   );

@@ -212,18 +212,6 @@ export const SampleRow = React.memo(function SampleRow({
         )}
 
         {/* DSP FX Rack & Pitch Transposer Button */}
-        {(
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              openSampleModal('rack', sample);
-            }}
-            className="p-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/30 text-[#00F0FF] border border-[#00F0FF]/40 pixel-btn"
-            title="Rack FX, Transposition de Note & DSP"
-          >
-            <Flame className="w-2.5 h-2.5" />
-          </button>
-        )}
 
         {/* DSP Audio Analysis Button */}
         {(

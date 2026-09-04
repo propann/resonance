@@ -9,10 +9,9 @@ import { toast } from './toastStore';
  * from a table row, the waveform toolbar, a menu, or a keyboard shortcut, so the
  * "which sample" answer lives in a store rather than being drilled from App.
  */
-export type SampleTargetKind = 'rack' | 'dsp' | 'loudness' | 'slicer';
+export type SampleTargetKind = 'dsp' | 'loudness' | 'slicer';
 
 interface SampleTargetStore {
-  rack: SampleItem | null;
   dsp: SampleItem | null;
   loudness: SampleItem | null;
   slicer: SampleItem | null;
@@ -20,15 +19,15 @@ interface SampleTargetStore {
 }
 
 export const useSampleTargetStore = create<SampleTargetStore>((set) => ({
-  rack: null,
   dsp: null,
   loudness: null,
   slicer: null,
   setTarget: (kind, sample) => set({ [kind]: sample } as Pick<SampleTargetStore, SampleTargetKind>),
 }));
 
+// The effects rack no longer has a modal: it lives in the workshop column,
+// always mounted, working on whatever sample is selected.
 const MODAL_FOR = {
-  rack: 'rackHost',
   dsp: 'dspModal',
   loudness: 'loudnessModal',
 } as const;
