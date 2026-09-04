@@ -356,6 +356,67 @@ export function generateProFolderHierarchy(samples: SampleItem[]): FolderItem[] 
   });
 }
 
+/** The drum families that get their own folder under 01_DRUMS. */
+export type DrumFamily = 'kicks' | 'snares' | 'hats' | 'claps' | 'cymbals' | 'percs';
+
+export const DRUM_FAMILY_FOLDERS: Record<DrumFamily, string> = {
+  kicks: '01_KICKS',
+  snares: '02_SNARES',
+  hats: '03_HATS',
+  claps: '04_CLAPS',
+  cymbals: '05_CYMBALS',
+  percs: '06_PERCS',
+};
+
+/** Folder ids used by the sidebar tree, one per drum family. */
+export const DRUM_FAMILY_IDS: Record<DrumFamily, string> = {
+  kicks: 'f-os-drums-kicks',
+  snares: 'f-os-drums-snares',
+  hats: 'f-os-drums-hats',
+  claps: 'f-os-drums-claps',
+  cymbals: 'f-os-drums-cymbals',
+  percs: 'f-os-drums-percs',
+};
+
+// Read in order: the name is more specific than the detected type ("rimshot"
+// is a snare, "open hat" a hat), so it decides first.
+const DRUM_NAME_RULES: Array<[RegExp, DrumFamily]> = [
+  [/(kick|kck|bd)|kick|bassdrum|grosse.?caisse|808.?kick/i, 'kicks'],
+  [/snare|snr|sd|caisse.?claire|rimshot|rim|sidestick/i, 'snares'],
+  [/hi.?hat|hihat|hh|hat|closed.?h|open.?h|pedal.?h/i, 'hats'],
+  [/hand.?clap|clap|snap|finger/i, 'claps'],
+  [/crash|ride|splash|china|cymbal|cym|gong/i, 'cymbals'],
+  [
+    /tom|floor.?tom|conga|bongo|djembe|darbuka|tabla|shaker|tambour|tambourine|cowbell|clave|woodblock|block|cabasa|guiro|triangle|agogo|timbale|perc/i,
+    'percs',
+  ],
+];
+
+const DRUM_TYPE_FAMILY: Partial<Record<SampleType, DrumFamily>> = {
+  kick: 'kicks',
+  snare: 'snares',
+  hihat: 'hats',
+  clap: 'claps',
+  cymbal: 'cymbals',
+  percussion: 'percs',
+};
+
+/**
+ * Which drum folder a one-shot belongs in. Everything percussive that is not
+ * clearly a kick, snare, hat, clap or cymbal lands in percs — the bucket is
+ * deliberate, not a failure.
+ */
+export function drumFamilyFor(type: SampleType | undefined, name: string): DrumFamily {
+  for (const [pattern, family] of DRUM_NAME_RULES) {
+    if (pattern.test(name)) return family;
+  }
+  return (type && DRUM_TYPE_FAMILY[type]) || 'percs';
+}
+
+/** Full library path of a drum family, e.g. `/01_ONE_SHOTS/01_DRUMS/01_KICKS`. */
+export const drumFamilyPath = (family: DrumFamily): string =>
+  `/01_ONE_SHOTS/01_DRUMS/${DRUM_FAMILY_FOLDERS[family]}`;
+
 /**
  * Canonical on-disk layout for Resonance. It deliberately has only two main
  * sound families: one-shots and loops. Multi-hit kits live with one-shots.
@@ -380,7 +441,10 @@ export function classifySampleForLibrary(sample: SampleItem): { folderPath: stri
     return { folderPath: '/01_ONE_SHOTS/06_KITS_MULTI', folderId: 'f-root-multisound', category: 'multi-sound' };
   }
   if (['kick', 'snare', 'hihat', 'clap', 'cymbal', 'percussion'].includes(sample.type)) {
-    return { folderPath: '/01_ONE_SHOTS/01_DRUMS', folderId: 'f-os-drums', category: 'one-shot' };
+    // One level deeper: kicks, snares, hats, claps, cymbals and percs each get
+    // their own folder instead of a single 01_DRUMS bucket.
+    const family = drumFamilyFor(sample.type, name);
+    return { folderPath: drumFamilyPath(family), folderId: DRUM_FAMILY_IDS[family], category: 'one-shot' };
   }
   if (sample.type === '808' || sample.type === 'bass') {
     return { folderPath: '/01_ONE_SHOTS/02_BASS_808', folderId: 'f-os-bass', category: 'one-shot' };

@@ -31,6 +31,8 @@ export interface DesktopFS {
   /** True when the folder holds nothing; reads a single entry. */
   isDirEmpty?(rel: string): Promise<boolean>;
   readFile(rel: string): Promise<ArrayBuffer>;
+  /** Read `length` bytes from `offset`; cheaper than reading a whole sample. */
+  readFilePart?(rel: string, offset: number, length: number): Promise<ArrayBuffer>;
   writeFile(rel: string, data: ArrayBuffer | Uint8Array): Promise<boolean>;
   mkdirp(rel: string): Promise<boolean>;
   remove(rel: string): Promise<boolean>;

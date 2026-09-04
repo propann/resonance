@@ -46,6 +46,12 @@ const MUSICAL_KEYS = ['all', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A
 const DISK_PATH_BY_FOLDER_ID: Record<string, string> = {
   'f-root-oneshots': '01_ONE_SHOTS',
   'f-os-drums': '01_ONE_SHOTS/01_DRUMS',
+  'f-os-drums-kicks': '01_ONE_SHOTS/01_DRUMS/01_KICKS',
+  'f-os-drums-snares': '01_ONE_SHOTS/01_DRUMS/02_SNARES',
+  'f-os-drums-hats': '01_ONE_SHOTS/01_DRUMS/03_HATS',
+  'f-os-drums-claps': '01_ONE_SHOTS/01_DRUMS/04_CLAPS',
+  'f-os-drums-cymbals': '01_ONE_SHOTS/01_DRUMS/05_CYMBALS',
+  'f-os-drums-percs': '01_ONE_SHOTS/01_DRUMS/06_PERCS',
   'f-os-bass': '01_ONE_SHOTS/02_BASS_808',
   'f-os-melodic': '01_ONE_SHOTS/03_MELODIC',
   'f-os-vocals': '01_ONE_SHOTS/04_VOCALS',

@@ -9,6 +9,12 @@ import { classifySampleForLibrary } from '../services/proFolderOrganizer';
 export const DEFAULT_FOLDERS: FolderItem[] = [
   { id: 'f-root-oneshots', name: '01_ONE_SHOTS', path: '/01_ONE_SHOTS', color: '#00F0FF', icon: 'Zap', count: 0 },
   { id: 'f-os-drums', name: '01_DRUMS', path: '/01_ONE_SHOTS/01_DRUMS', color: '#00F0FF', icon: 'Drum', count: 0, parentId: 'f-root-oneshots' },
+  { id: 'f-os-drums-kicks', name: '01_KICKS', path: '/01_ONE_SHOTS/01_DRUMS/01_KICKS', color: '#00F0FF', icon: 'Drum', count: 0, parentId: 'f-os-drums' },
+  { id: 'f-os-drums-snares', name: '02_SNARES', path: '/01_ONE_SHOTS/01_DRUMS/02_SNARES', color: '#EF4444', icon: 'Drum', count: 0, parentId: 'f-os-drums' },
+  { id: 'f-os-drums-hats', name: '03_HATS', path: '/01_ONE_SHOTS/01_DRUMS/03_HATS', color: '#F59E0B', icon: 'Drum', count: 0, parentId: 'f-os-drums' },
+  { id: 'f-os-drums-claps', name: '04_CLAPS', path: '/01_ONE_SHOTS/01_DRUMS/04_CLAPS', color: '#F97316', icon: 'Drum', count: 0, parentId: 'f-os-drums' },
+  { id: 'f-os-drums-cymbals', name: '05_CYMBALS', path: '/01_ONE_SHOTS/01_DRUMS/05_CYMBALS', color: '#EAB308', icon: 'Drum', count: 0, parentId: 'f-os-drums' },
+  { id: 'f-os-drums-percs', name: '06_PERCS', path: '/01_ONE_SHOTS/01_DRUMS/06_PERCS', color: '#14B8A6', icon: 'Drum', count: 0, parentId: 'f-os-drums' },
   { id: 'f-os-bass', name: '02_BASS_808', path: '/01_ONE_SHOTS/02_BASS_808', color: '#A855F7', icon: 'Flame', count: 0, parentId: 'f-root-oneshots' },
   { id: 'f-os-melodic', name: '03_MELODIC', path: '/01_ONE_SHOTS/03_MELODIC', color: '#3B82F6', icon: 'Music', count: 0, parentId: 'f-root-oneshots' },
   { id: 'f-os-vocals', name: '04_VOCALS', path: '/01_ONE_SHOTS/04_VOCALS', color: '#EC4899', icon: 'Mic', count: 0, parentId: 'f-root-oneshots' },

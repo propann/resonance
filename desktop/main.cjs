@@ -189,6 +189,22 @@ ipcMain.handle('fs:readFile', async (_e, rel) => {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 });
 
+/**
+ * Read a slice of a file. Used to fingerprint a library of 200 000 samples
+ * without reading every byte of every one of them.
+ */
+ipcMain.handle('fs:readFilePart', async (_e, rel, offset, length) => {
+  const handle = await fs.open(resolveInRoot(rel), 'r');
+  try {
+    const buf = Buffer.alloc(Math.max(0, length));
+    const { bytesRead } = await handle.read(buf, 0, buf.length, Math.max(0, offset));
+    const slice = buf.subarray(0, bytesRead);
+    return slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength);
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+});
+
 ipcMain.handle('fs:writeFile', async (_e, rel, data) => {
   const abs = resolveInRoot(rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });

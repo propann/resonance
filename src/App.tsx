@@ -8,6 +8,7 @@ import { useUiStore } from './stores/uiStore';
 import { useLibraryStore } from './stores/libraryStore';
 import { useSampleTargetStore, openSampleModal } from './stores/sampleTargetStore';
 import { activeAudition } from './stores/transportStore';
+import { sortDrumFolder } from './services/drumSorter';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
@@ -541,9 +542,31 @@ export default function App() {
     setSelectedSampleIds([]);
   };
 
-  const handleAutoOrganizeLibrary = () => {
+  /**
+   * Second sorting pass on disk: the drums already filed in 01_DRUMS are moved
+   * into their family folder (kicks, snares, hats, claps, cymbals, percs), and
+   * the in-memory library is re-labelled to match.
+   */
+  const handleAutoOrganizeLibrary = async () => {
     const { organizedSamples } = autoOrganizeLibrary(samples);
     setSamples(organizedSamples);
+    if (!libraryRoot) return;
+    try {
+      const { moved, perFamily, failed } = await sortDrumFolder(libraryRoot);
+      if (moved === 0) {
+        toast.info('Tri à jour : aucun son de batterie à déplacer.');
+      } else {
+        const detail = Object.entries(perFamily)
+          .map(([family, count]) => `${count} ${family}`)
+          .join(', ');
+        toast.success(`${moved} son(s) rangé(s) par famille (${detail}).`);
+      }
+      if (failed > 0) toast.error(`${failed} fichier(s) n'ont pas pu être déplacés.`);
+      await refreshLibrary();
+    } catch (error) {
+      console.error('Tri des batteries impossible', error);
+      toast.error('Impossible de ranger les sons de batterie.');
+    }
   };
 
   const handleApplyCuration = (curatedSamples: SampleItem[]) => {
@@ -875,7 +898,7 @@ export default function App() {
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenFxRack={() => handleOpenFxRack()}
         onOpenAutoSlicer={() => handleOpenSlicer()}
-        onAutoOrganizeLibrary={handleAutoOrganizeLibrary}
+        onAutoOrganizeLibrary={() => void handleAutoOrganizeLibrary()}
         isPlaying={isPlaying}
         onTogglePlayPause={handleTogglePlayPause}
         onPlayNext={handlePlayNext}

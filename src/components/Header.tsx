@@ -286,7 +286,7 @@ export const Header: React.FC<HeaderProps> = ({
             id="auto-organize-header-btn"
             onClick={onAutoOrganizeLibrary}
             className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 text-[#00F0FF] border-2 border-[#00F0FF]/30 text-[9px] font-pixel pixel-btn"
-            title="Auto-classer tous les sons en dossiers standards (01_ONE_SHOTS, 02_LOOPS, etc.)"
+            title="Ranger les sons de batterie par famille (kicks, snares, hats, claps, cymbales, percussions)"
           >
             <Wand2 className="w-3 h-3 text-[#00F0FF]" />
             <span className="hidden xl:inline">AUTO-TRI</span>

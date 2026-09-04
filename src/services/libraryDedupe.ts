@@ -11,13 +11,20 @@ import {
   hashFileContent,
   listManagedLibraryFiles,
   readLibraryFileBlob,
+  readLibraryFileHead,
   readLibraryManifest,
   removeWorkFolderFiles,
   replaceLibraryManifest,
+  runWithConcurrency,
   writeLibraryManifest,
   type LibraryRoot,
   type ManagedLibraryFile,
 } from './localLibrary';
+
+/** Files hashed at once during a de-duplication scan. */
+const HASH_CONCURRENCY = 8;
+/** Bytes read to fingerprint a file before deciding to read it whole. */
+const HEAD_BYTES = 64 * 1024;
 
 export interface DuplicateGroup {
   hash: string;
@@ -109,21 +116,42 @@ export async function scanLibraryDuplicates(
   const buckets = groupBySize(files);
   const candidates = buckets.flat();
 
+  // Two passes, because a 200 000-file library is 40 Go of audio and reading
+  // all of it to find duplicates is not an option:
+  //  1. fingerprint the head of each same-size file (cheap, eliminates almost
+  //     every unique file);
+  //  2. hash in full only the files that still look alike.
+  let done = 0;
+  const total = candidates.length;
+  const heads = new Map<string, string>();
+  await runWithConcurrency(candidates, HASH_CONCURRENCY, async (file) => {
+    const head = await hashFileContent(await readLibraryFileHead(file.relPath, HEAD_BYTES)).catch(
+      () => undefined
+    );
+    if (head) heads.set(file.relPath, head);
+    done++;
+    if (done % 50 === 0 || done === total) onProgress?.(done, total);
+  });
+
+  const suspects = buckets.flatMap((bucket) =>
+    groupByHash(heads, bucket).flatMap((group) => [group.keep, ...group.duplicates])
+  );
+
   const hashes = new Map<string, string>();
   let hashed = 0;
-  for (const file of candidates) {
-    const hash = await hashFileContent(await readLibraryFileBlob(file.relPath));
+  await runWithConcurrency(suspects, HASH_CONCURRENCY, async (file) => {
+    const hash = await hashFileContent(await readLibraryFileBlob(file.relPath)).catch(() => undefined);
     if (hash) hashes.set(file.relPath, hash);
     hashed++;
-    onProgress?.(hashed, candidates.length);
-  }
+    if (hashed % 25 === 0 || hashed === suspects.length) onProgress?.(total, total);
+  });
 
   const groups = buckets.flatMap((bucket) => groupByHash(hashes, bucket));
   const reclaimedBytes = groups.reduce(
     (total, group) => total + group.duplicates.reduce((sum, file) => sum + file.size, 0),
     0
   );
-  return { groups, scanned: files.length, hashed, reclaimedBytes };
+  return { groups, scanned: files.length, hashed: suspects.length, reclaimedBytes };
 }
 
 export interface DedupeResult {

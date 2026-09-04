@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Loader2, Search, Trash2 } from 'lucide-react';
+import { Copy, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { Modal } from './Modal';
 import { toast } from '../stores/toastStore';
 import {
@@ -7,6 +7,7 @@ import {
   scanLibraryDuplicates,
   type DedupeScan,
 } from '../services/libraryDedupe';
+import { rebuildManifestFromDisk } from '../services/manifestRebuilder';
 import type { DirectoryHandle } from '../services/localLibrary';
 
 interface LibraryDedupeModalProps {
@@ -34,6 +35,7 @@ export const LibraryDedupeModal: React.FC<LibraryDedupeModalProps> = ({
   const [scan, setScan] = useState<DedupeScan | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isRebuilding, setIsRebuilding] = useState(false);
 
   const duplicateCount = scan?.groups.reduce((n, g) => n + g.duplicates.length, 0) ?? 0;
 
@@ -51,6 +53,28 @@ export const LibraryDedupeModal: React.FC<LibraryDedupeModalProps> = ({
       toast.error("L'analyse des doublons a échoué. Reconnectez le dossier de travail.");
     } finally {
       setProgress(null);
+    }
+  };
+
+  /**
+   * Re-registers every file found in the library folders. Used when the
+   * manifest has fallen behind what is on disk — the sounds are there, the app
+   * just no longer lists them.
+   */
+  const handleRebuild = async () => {
+    if (!libraryRoot) return;
+    setIsRebuilding(true);
+    try {
+      const { onDisk, before, after } = await rebuildManifestFromDisk(libraryRoot);
+      toast.success(
+        `Manifeste reconstruit : ${after} entrée(s) pour ${onDisk} fichier(s) (${after - before} ajoutée(s)).`
+      );
+      onLibraryChanged();
+    } catch (error) {
+      console.error('Reconstruction du manifeste impossible', error);
+      toast.error('Impossible de reconstruire le manifeste.');
+    } finally {
+      setIsRebuilding(false);
     }
   };
 
@@ -91,6 +115,15 @@ export const LibraryDedupeModal: React.FC<LibraryDedupeModalProps> = ({
           >
             {progress ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
             <span>{progress ? 'Analyse...' : 'Analyser la bibliothèque'}</span>
+          </button>
+          <button
+            onClick={() => void handleRebuild()}
+            disabled={!libraryRoot || isRebuilding || progress !== null}
+            className="flex items-center gap-2 border border-[#F59E0B]/60 px-3 py-1.5 font-bold text-[#FBBF24] transition hover:bg-[#F59E0B]/20 disabled:opacity-40"
+            title="Ré-enregistrer dans le manifeste tous les fichiers présents dans les dossiers de la bibliothèque"
+          >
+            {isRebuilding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            <span>{isRebuilding ? 'Reconstruction...' : 'Reconstruire le manifeste'}</span>
           </button>
           <p className="text-[10px] text-[#FBBF24]">
             {progress

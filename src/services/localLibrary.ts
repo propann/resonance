@@ -32,6 +32,12 @@ export interface WorkFolderAudioEntry {
 export const LIBRARY_FOLDERS = [
   '00_RECEPTION',
   '01_ONE_SHOTS/01_DRUMS',
+  '01_ONE_SHOTS/01_DRUMS/01_KICKS',
+  '01_ONE_SHOTS/01_DRUMS/02_SNARES',
+  '01_ONE_SHOTS/01_DRUMS/03_HATS',
+  '01_ONE_SHOTS/01_DRUMS/04_CLAPS',
+  '01_ONE_SHOTS/01_DRUMS/05_CYMBALS',
+  '01_ONE_SHOTS/01_DRUMS/06_PERCS',
   '01_ONE_SHOTS/02_BASS_808',
   '01_ONE_SHOTS/03_MELODIC',
   '01_ONE_SHOTS/04_VOCALS',
@@ -464,6 +470,24 @@ export async function listManagedLibraryFiles(_root?: LibraryRoot): Promise<Mana
   return out;
 }
 
+/** Move a library file, creating the destination folder as needed. */
+export async function renameLibraryFile(fromRel: string, toRel: string): Promise<void> {
+  const fs = desktopFS();
+  await fs.mkdirp(dirName(j(toRel)));
+  await fs.rename(j(fromRel), j(toRel));
+}
+
+/**
+ * Read the first `bytes` of a library file. Falls back to the whole file when
+ * the bridge is too old to slice.
+ */
+export async function readLibraryFileHead(relPath: string, bytes: number): Promise<Blob> {
+  const fs = desktopFS();
+  const rel = j(relPath);
+  if (fs.readFilePart) return new Blob([await fs.readFilePart(rel, 0, bytes)]);
+  return new Blob([await fs.readFile(rel)]);
+}
+
 /** Read one library file's bytes for hashing. */
 export async function readLibraryFileBlob(relPath: string): Promise<Blob> {
   return new Blob([await desktopFS().readFile(j(relPath))]);
@@ -581,18 +605,50 @@ async function writeJsonFile(rel: string, value: unknown): Promise<void> {
   await desktopFS().writeFile(rel, new TextEncoder().encode(JSON.stringify(value, null, 2)));
 }
 
+/**
+ * The manifest entries, or null when the file exists but cannot be read. The
+ * difference matters: an empty library and an unreadable manifest look the
+ * same to a merge, and treating the second as the first rewrites the file with
+ * only the newest batch — which is exactly how a 2 000-entry manifest became a
+ * 1 500-entry one while the folder held 110 000 files.
+ */
+async function readManifestSamples(): Promise<Array<Record<string, unknown>> | null> {
+  const stat = await desktopFS().stat(MANIFEST_FILE);
+  if (!stat.exists) return [];
+  const parsed = (await readJsonFile(MANIFEST_FILE)) as { samples?: unknown } | null;
+  if (!parsed || !Array.isArray(parsed.samples)) return null;
+  return parsed.samples as Array<Record<string, unknown>>;
+}
+
+const manifestKey = (sample: Record<string, unknown>): string =>
+  `${sample.path || ''}/${sample.fileName || sample.name || ''}`;
+
+/**
+ * Merge `samples` into the manifest. Throws rather than write a truncated
+ * manifest: callers delete the source files once this resolves, so a silent
+ * loss here would lose the record of sounds that are already on disk.
+ */
 export async function writeLibraryManifest(
   _root: LibraryRoot,
   samples: Array<Record<string, unknown>>
 ): Promise<void> {
-  const existing = (await readJsonFile(MANIFEST_FILE)) as { samples?: Array<Record<string, unknown>> } | null;
+  const existing = await readManifestSamples();
+  if (existing === null) {
+    throw new Error('Manifeste illisible : écriture annulée pour ne pas écraser la bibliothèque.');
+  }
+
   const merged = new Map<string, Record<string, unknown>>();
-  for (const sample of existing?.samples ?? []) {
-    merged.set(`${sample.path || ''}/${sample.fileName || sample.name || ''}`, sample);
+  for (const sample of existing) merged.set(manifestKey(sample), sample);
+  for (const sample of samples) merged.set(manifestKey(sample), sample);
+
+  // Keep the previous file around: a manifest is the library's memory.
+  if (existing.length > 0) {
+    await desktopFS()
+      .readFile(MANIFEST_FILE)
+      .then((buf) => desktopFS().writeFile(`${MANIFEST_FILE}.bak`, buf))
+      .catch(() => undefined);
   }
-  for (const sample of samples) {
-    merged.set(`${sample.path || ''}/${sample.fileName || sample.name || ''}`, sample);
-  }
+
   await writeJsonFile(MANIFEST_FILE, {
     generatedAt: new Date().toISOString(),
     schemaVersion: 1,
