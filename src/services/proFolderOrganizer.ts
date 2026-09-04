@@ -1,5 +1,5 @@
 import { SampleItem, SampleType, SampleCategory } from '../types/sample';
-import { rule, token, word } from './nameTokens';
+import { declaredTypeFromName, rule, token, word } from './nameTokens';
 
 /** The drum families that get their own folder under 01_DRUMS. */
 export type DrumFamily = 'kicks' | 'snares' | 'hats' | 'claps' | 'cymbals' | 'percs';
@@ -78,6 +78,14 @@ const DRUM_NAME_RULES: Array<[RegExp, DrumFamily]> = [
   ],
 ];
 
+/**
+ * Types that are a bucket rather than a verdict. `percussion` is where a sound
+ * lands when nothing more precise fitted, so a name that *is* more precise
+ * ("AZ_Percussion_Rimshot" — a rimshot is a snare) overrules it. A specific
+ * type like `clap` or `cymbal` is not overruled by a passing word.
+ */
+const GENERIC_TYPES = new Set(['percussion', 'other']);
+
 const DRUM_TYPE_FAMILY: Partial<Record<SampleType, DrumFamily>> = {
   kick: 'kicks',
   snare: 'snares',
@@ -103,10 +111,20 @@ export function drumFamilyFor(type: SampleType | undefined, name: string): DrumF
  * else stays where it is, including whatever the user filed by hand.
  */
 export function drumFamilyFromName(name: string): DrumFamily | undefined {
-  for (const [pattern, family] of DRUM_NAME_RULES) {
-    if (pattern.test(name)) return family;
+  // What this app wrote into the name wins: `AZ_Clap_Electro_Rim_03.wav` is a
+  // clap, whatever the word `Rim` further along would otherwise say.
+  const declared = declaredTypeFromName(name);
+  if (declared && !GENERIC_TYPES.has(declared)) {
+    const family = DRUM_TYPE_FAMILY[declared as SampleType];
+    if (family) return family;
   }
-  return undefined;
+
+  for (const [pattern, named] of DRUM_NAME_RULES) {
+    if (pattern.test(name)) return named;
+  }
+  // `AZ_Percussion_…` with nothing more specific in it: percs is the answer,
+  // and a confident one — the app put it there on purpose.
+  return declared === 'percussion' ? 'percs' : undefined;
 }
 
 /** Full library path of a drum family, e.g. `/01_ONE_SHOTS/01_DRUMS/01_KICKS`. */

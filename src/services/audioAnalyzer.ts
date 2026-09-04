@@ -1,5 +1,5 @@
 import { MusicGenre, SampleCategory, SampleType, SliceRegion, SampleItem } from '../types/sample';
-import { rule, token, word } from './nameTokens';
+import { declaredTypeFromName, rule, token, word } from './nameTokens';
 
 // Note names
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -720,6 +720,27 @@ const KEYWORD_RULES: Array<[RegExp, KeywordVerdict]> = [
     { type: 'fx', tags: ['transition', 'texture', 'cinema'], acousticConfidence: 0.95, acousticDetails: 'Keyword: Sound FX' },
   ],
 ];
+
+/**
+ * The type the name itself states, or undefined when it names nothing. Used
+ * by the library re-sort: a file is only moved on the strength of its name,
+ * never on a guess, so whatever was filed by hand stays where it is.
+ */
+export function keywordTypeFromName(name: string): SampleType | undefined {
+  // A name this app wrote states the type in its second token, and that is
+  // its own earlier verdict — a stray word from the original source name must
+  // not overturn it.
+  const declared = declaredTypeFromName(name);
+  // `percussion` is the bucket a sound falls into when nothing fitted, so a
+  // name with something more precise in it overrules that one.
+  if (declared && declared !== 'percussion') return declared as SampleType;
+
+  const lower = name.toLowerCase();
+  for (const [pattern, verdict] of KEYWORD_RULES) {
+    if (pattern.test(lower)) return verdict.type;
+  }
+  return declared as SampleType | undefined;
+}
 
 export function classifySample(
   buffer: AudioBuffer,

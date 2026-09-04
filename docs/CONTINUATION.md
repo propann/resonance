@@ -215,6 +215,49 @@ Table de non-régression : `audioAnalyzer.test.ts`.
 
 Tests : 137 → 143.
 
+### 6. Re-rangement de toute la bibliotheque, sans toucher a l'audio
+
+Demande : vider les dossiers ranges, tout remettre dans `00_RECEPTION` et
+refaire une passe. **Ne pas faire.** Deux raisons, verifiees :
+
+1. `AutoCuratorModal.tsx:717` : un fichier dont le hash de contenu est deja
+   connu du manifeste est compte doublon **et sa source est poussee dans
+   `transferredSourceFiles`, donc effacee**. Le manifeste (93,6 Mo) porte les
+   hashes des 220 000 fichiers : les remettre en reception et relancer
+   l'ingestion les aurait tous supprimes.
+2. Meme manifeste purge, l'ingestion tourne a ~127 fichiers/min : ~29 h, et
+   chaque son serait re-decode, re-normalise, re-encode.
+
+A la place, `src/services/librarySorter.ts` : `sortLibrary()` deplace les
+fichiers sur place, sans decoder un octet. Il remplace `drumSorter` (supprime,
+c'en etait un sous-ensemble) et le bouton RANGER l'appelle.
+
+Regle de deplacement, volontairement etroite : on ne bouge un fichier que si
+quelque chose le nomme — le nom, sinon le type stocke dans le manifeste. Sans
+avis, le fichier ne bouge pas, donc le rangement manuel survit. `03_HARDWARE`
+est exclu : un patch OP-1 appartient a sa machine.
+
+Outils : `tools/audit-library.mts` (lecture seule) et
+`tools/sort-library.mts` (`--apply` pour la passe hors ligne, app fermee ;
+sauvegarde le manifeste et ecrit `_MANIFEST/sort-log-<date>.json` pour
+pouvoir revenir en arriere).
+
+**Etat mesure sur `D:\Son` (224 362 fichiers) :** 74,1 % deja au bon endroit,
+**55 345 a deplacer**, 2 717 laisses en place. Dont 50 817 encore en vrac
+directement dans `01_DRUMS` et 3 771 coinces dans `06_PERCS` par le bug de
+l'underscore. Simulation : 0 collision, 0 echec.
+
+### 7. Le label ecrit par l'app prime sur un mot de passage
+
+L'audit a montre `AZ_Clap_Electro_Rim_03.wav` partant vers SNARES parce que
+`Rim` apparait plus loin dans le nom, et 1 340 `AZ_Cymbal_..._CH_...` vers
+HATS. Le deuxieme jeton d'un nom que l'app a ecrit est son propre verdict :
+`declaredTypeFromName()` le lit et il gagne. Exception : `percussion` est le
+bac generique, pas un verdict — il cede devant plus precis, donc
+`AZ_Percussion_Rimshot` reste bien un snare.
+
+Tests : 143 -> 151.
+
 ## Pistes ouvertes
 
 - Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.

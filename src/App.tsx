@@ -10,7 +10,7 @@ import { useSampleTargetStore, openSampleModal } from './stores/sampleTargetStor
 import { activeAudition } from './stores/transportStore';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { sampleMatchesQuery } from './services/sampleSearchIndex';
-import { sortDrumFolder } from './services/drumSorter';
+import { sortLibrary } from './services/librarySorter';
 import { folderIdForPath, folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
@@ -545,36 +545,49 @@ export default function App() {
   };
 
   /**
-   * Second sorting pass on disk: every drum sound lands in its family folder
-   * (kicks, snares, hats, claps, cymbals, percs) — the ones still loose in
-   * 01_DRUMS, and the ones an earlier pass filed under the wrong family. The
-   * in-memory library is re-labelled to match.
+   * Sorting pass on disk: every sound moves to the folder the current rules
+   * place it in — the drums still loose in 01_DRUMS, and anything an earlier
+   * pass filed elsewhere. Files are moved, never rewritten, so no audio is
+   * re-encoded. A sound nobody can name stays exactly where it is.
    */
   const handleAutoOrganizeLibrary = async () => {
     const { organizedSamples } = autoOrganizeLibrary(samples);
     setSamples(organizedSamples);
     if (!libraryRoot) return;
     try {
-      const { moved, perFamily, failed, renamed, refiled } = await sortDrumFolder(libraryRoot);
+      // A large library takes a couple of minutes: report each quarter rather
+      // than leave the pass looking stuck.
+      let nextMark = 0.25;
+      const result = await sortLibrary(libraryRoot, {
+        onProgress: (done, total) => {
+          if (total < 5000 || done / total < nextMark) return;
+          toast.info(`Rangement en cours : ${Math.round(nextMark * 100)} %…`);
+          nextMark += 0.25;
+        },
+      });
+
+      const { moved, renamed, skipped, failed } = result;
       if (moved === 0) {
-        toast.info('Tri à jour : aucun son de batterie à déplacer.');
+        toast.info('Tri à jour : aucun son à déplacer.');
       } else {
-        const detail = Object.entries(perFamily)
-          .map(([family, count]) => `${count} ${family}`)
+        const top = Object.entries(result.perMove)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([move, count]) => `${count} vers ${move.split(' -> ')[1].split('/').pop()}`)
           .join(', ');
-        toast.success(`${moved} son(s) rangé(s) par famille (${detail}).`);
-      }
-      if (refiled > 0) {
-        toast.info(`${refiled} son(s) mal rangé(s) ont retrouvé leur famille.`);
+        toast.success(`${moved.toLocaleString('fr-FR')} son(s) rangé(s) — ${top}.`);
       }
       if (renamed > 0) {
-        toast.info(`${renamed} son(s) renommé(s) : la famille avait déjà ce nom, rien n'a été écrasé.`);
+        toast.info(`${renamed} son(s) renommé(s) : le dossier avait déjà ce nom, rien n'a été écrasé.`);
+      }
+      if (skipped > 0) {
+        toast.info(`${skipped.toLocaleString('fr-FR')} son(s) laissé(s) en place : leur nom ne dit rien.`);
       }
       if (failed > 0) toast.error(`${failed} fichier(s) n'ont pas pu être déplacés.`);
       await refreshLibrary();
     } catch (error) {
-      console.error('Tri des batteries impossible', error);
-      toast.error('Impossible de ranger les sons de batterie.');
+      console.error('Rangement de la bibliothèque impossible', error);
+      toast.error('Impossible de ranger la bibliothèque.');
     }
   };
 
