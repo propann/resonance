@@ -15,15 +15,15 @@ cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
-# doit tout passer : 0 erreur, 207 tests
+# doit tout passer : 0 erreur, 269 tests
 ```
 
-- `main` @ `4ccae8f` (2026-09-05), poussé. Build installé depuis
+- `main` @ `0317b52` (2026-09-05), poussé. Build installé depuis
   `C:\Users\azoth\resonance-release\Resonance-1.0.0-x64.exe`
   (electron-builder avec `-c.directories.output` hors du dépôt : dans le dépôt,
   le rename de `release\win-unpacked.tmp` échoue en EPERM).
 - App installée : `%LOCALAPPDATA%\Programs\Resonance\`, connectée à `D:\Son`
-  (**252 564 fichiers rangés**, réception vide). Config :
+  (**271 000+ fichiers rangés**, ingestion en cours). Config :
   `%APPDATA%\Resonance\resonance-config.json`.
 - Rebuild + réinstall :
   `npx vite build && npx electron-builder --win -c.electronVersion=37.10.3 -c.directories.output=C:/Users/azoth/resonance-release`
@@ -40,7 +40,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 Application desktop **Electron** (React 19 / Vite 6 / Tailwind 4 / Tone.js).
 Portes de vérification à chaque commit : `tsc --noEmit` · `eslint .` (0 erreur) ·
-`vitest run` (67 tests) · `vite build`.
+`vitest run` (269 tests) · `vite build`.
 
 ### Fait — phases 0 à 5 de la refonte
 
