@@ -1,11 +1,12 @@
 # Reprise du travail — Resonance
 
-Dernière mise à jour : **2026-09-03** (session nuit)
+Dernière mise à jour : **2026-09-05**
 
 Ce fichier est le point de reprise versionné : lu depuis le dépôt, il survit à
-tout redémarrage de console (et à un changement de modèle). Historique
-détaillé : `git log`. Mémoire longue durée : `resonance-refonte.md` +
-`resonance-op1-format.md` (chargées automatiquement chaque session).
+tout redémarrage de console (et à un changement de modèle). Vue d'ensemble et
+urgences : `docs/ROADMAP.md`. Historique détaillé : `git log`. Mémoire longue
+durée : `resonance-refonte.md` + `resonance-op1-format.md` (chargées
+automatiquement chaque session).
 
 ## Reprise immédiate
 
@@ -13,21 +14,27 @@ détaillé : `git log`. Mémoire longue durée : `resonance-refonte.md` +
 cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
-npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build   # doit tout passer (0 erreur, 67 tests)
+npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
+# doit tout passer : 0 erreur, 207 tests
 ```
 
-- `main` @ `3a38c2f` (2026-09-03 nuit), poussé. Build installé depuis
+- `main` @ `4ccae8f` (2026-09-05), poussé. Build installé depuis
   `C:\Users\azoth\resonance-release\Resonance-1.0.0-x64.exe`
   (electron-builder avec `-c.directories.output` hors du dépôt : dans le dépôt,
   le rename de `release\win-unpacked.tmp` échoue en EPERM).
 - App installée : `%LOCALAPPDATA%\Programs\Resonance\`, connectée à `D:\Son`
-  (442 samples). Config : `%APPDATA%\Resonance\resonance-config.json`.
+  (**252 564 fichiers rangés**, réception vide). Config :
+  `%APPDATA%\Resonance\resonance-config.json`.
 - Rebuild + réinstall :
-  `npm run build && npx electron-builder --win -c.directories.output=C:/Users/azoth/resonance-release`
-  puis lancer le `.exe` avec `/S`. (En sandbox il faut rediriger l'output
-  hors du dépôt ; sur la vraie machine `npm run dist:win` suffit.)
+  `npx vite build && npx electron-builder --win -c.electronVersion=37.10.3 -c.directories.output=C:/Users/azoth/resonance-release`
+  puis lancer le `.exe` avec `/S`. **Depuis un worktree**, `-c.electronVersion`
+  est obligatoire : sans `node_modules` local, electron-builder ne sait pas
+  résoudre la plage `^37.10.3`.
+- **Moteurs natifs** : `bash tools/build-engine.sh <plaits|rings|clouds|elements>`.
+  Nécessite emsdk (`%LOCALAPPDATA%\emsdk`) — à lancer depuis bash, pas
+  PowerShell, qui transforme le stderr d'emcc en erreur.
 - Test headless : lancer `Resonance.exe --remote-debugging-port=9222` et
-  piloter via CDP (voir les scripts `/tmp/*.mjs` des sessions précédentes).
+  piloter via CDP.
 
 ## État actuel
 
