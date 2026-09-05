@@ -68,9 +68,32 @@ export function cacheBuffer(key: string, buffer: AudioBuffer): void {
   }
 }
 
+/**
+ * The object URL and byte size that came with a decoded file.
+ *
+ * They travel with the buffer because the interface needs all three at once —
+ * the waveform wants the samples, the player wants a URL, the table wants a
+ * size — and keeping them apart would mean reading the file again for two of
+ * them.
+ */
+const blobUrls = new Map<string, { url: string; size: number }>();
+
+export function cacheBlobUrl(key: string, url: string, size: number): void {
+  if (!key) return;
+  const previous = blobUrls.get(key);
+  // Replacing an entry without releasing the old URL leaks the file it holds.
+  if (previous && previous.url !== url) URL.revokeObjectURL(previous.url);
+  blobUrls.set(key, { url, size });
+}
+
+export const getCachedBlobUrl = (key: string): { url: string; size: number } | undefined =>
+  blobUrls.get(key);
+
 /** Forget everything. Used when the working folder changes underneath us. */
 export function clearBufferCache(): void {
   entries.clear();
+  for (const { url } of blobUrls.values()) URL.revokeObjectURL(url);
+  blobUrls.clear();
   heldSeconds = 0;
   clock = 0;
 }

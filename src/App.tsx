@@ -11,7 +11,12 @@ import { activeAudition } from './stores/transportStore';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortLibrary } from './services/librarySorter';
-import { cacheBuffer, getCachedBuffer } from './services/audioBufferCache';
+import {
+  cacheBlobUrl,
+  cacheBuffer,
+  getCachedBlobUrl,
+  getCachedBuffer,
+} from './services/audioBufferCache';
 import { folderIdForPath, folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
@@ -115,6 +120,12 @@ export default function App() {
   const [pendingFilesAlreadyArchived, setPendingFilesAlreadyArchived] = useState(false);
   const [isCuratorProcessing, setIsCuratorProcessing] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+  /**
+   * Bumped when a sample's audio finishes loading. It is the whole reason the
+   * interface notices: the buffer itself lives in the cache, not in `samples`,
+   * so nothing else would tell React that a wave is ready to draw.
+   */
+  const [loadedAudioVersion, setLoadedAudioVersion] = useState(0);
   const [autoLoudnessLeveling, setAutoLoudnessLeveling] = useState<boolean>(
     audioEngine.isAutoLoudnessEnabled()
   );
@@ -197,43 +208,35 @@ export default function App() {
     const selected = useLibraryStore
       .getState()
       .samples.find((sample) => sample.id === selectedSampleId);
-    if (!selected || selected.audioBuffer || !selected.diskPath) return;
+    if (!selected || getCachedBuffer(selected.diskPath ?? '') || selected.audioBuffer || !selected.diskPath) return;
     let cancelled = false;
     const loadSelectedAudio = async () => {
       try {
         // Going back to a sample used to read its file over IPC and decode it
         // again, every time. The cache makes a return trip free, which is what
         // moving through a folder mostly consists of.
-        const cached = getCachedBuffer(selected.diskPath!);
-        const file = cached ? null : await readLibraryAudioFile(libraryRoot, selected.diskPath!);
-        const audioBuffer = cached ?? (await audioEngine.decodeAudioData(await file!.arrayBuffer()));
+        const file = await readLibraryAudioFile(libraryRoot, selected.diskPath!);
+        const audioBuffer = await audioEngine.decodeAudioData(await file.arrayBuffer());
         if (cancelled) return;
-        if (!cached) cacheBuffer(selected.diskPath!, audioBuffer);
-        const blobUrl = file ? URL.createObjectURL(file) : '';
-        // One pass, and the index found first: `map` over the array calls back
-        // once per sample, and this library holds 283 000 of them.
-        setSamples((previous) => {
-          const index = previous.findIndex((sample) => sample.id === selected.id);
-          if (index === -1) return previous;
-          const next = previous.slice();
-          next[index] = {
-            ...next[index],
-            audioBuffer,
-            blobUrl: blobUrl || next[index].blobUrl,
-            size: file ? file.size : next[index].size,
-            duration: audioBuffer.duration,
-            sampleRate: audioBuffer.sampleRate,
-            channels: audioBuffer.numberOfChannels,
-          };
-          return next;
-        });
+        cacheBuffer(selected.diskPath!, audioBuffer);
+        cacheBlobUrl(selected.diskPath!, URL.createObjectURL(file), file.size);
+        // Deliberately NOT written into `samples`.
+        //
+        // Doing so replaced the array, which invalidated the filtered-and-
+        // sorted memo, which re-sorted 283 000 items — 113 ms by date, 374 ms
+        // by name — on every single selection. That is what made the playhead
+        // jump: it is painted from requestAnimationFrame, and a main thread
+        // busy for a third of a second skips it forward instead of advancing
+        // it. The buffer reaches the interface through `withLoadedAudio`
+        // below, on the one sample that needs it.
+        setLoadedAudioVersion((version) => version + 1);
       } catch (error) {
         console.error('Impossible de charger le sample sélectionné depuis le dossier de travail', error);
       }
     };
     void loadSelectedAudio();
     return () => { cancelled = true; };
-  }, [selectedSampleId, libraryRoot, setSamples]);
+  }, [selectedSampleId, libraryRoot]);
 
   // Filters State
   const filterState = useLibraryStore((s) => s.filterState);
@@ -342,16 +345,45 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const selectedSample = useMemo(() => {
-    return samples.find((s) => s.id === selectedSampleId) || filteredSamples[0] || null;
-  }, [samples, selectedSampleId, filteredSamples]);
+  /**
+   * Hand a sample its decoded audio, from the cache rather than from the list.
+   *
+   * The buffer is kept outside `samples` on purpose — writing it in replaced
+   * the array and re-sorted 283 000 items on every selection. Merging it here
+   * costs one object, and only the samples actually being looked at get it.
+   */
+  const withLoadedAudio = useCallback(
+    (sample: SampleItem | null): SampleItem | null => {
+      if (!sample?.diskPath || sample.audioBuffer) return sample;
+      const buffer = getCachedBuffer(sample.diskPath);
+      if (!buffer) return sample;
+      const blob = getCachedBlobUrl(sample.diskPath);
+      return {
+        ...sample,
+        audioBuffer: buffer,
+        blobUrl: blob?.url || sample.blobUrl,
+        size: blob?.size ?? sample.size,
+        duration: buffer.duration,
+        sampleRate: buffer.sampleRate,
+        channels: buffer.numberOfChannels,
+      };
+    },
+    // Recomputed when a load lands, which is what makes the buffer appear.
+    [loadedAudioVersion]
+  );
+
+  const selectedSample = useMemo(
+    () =>
+      withLoadedAudio(samples.find((s) => s.id === selectedSampleId) || filteredSamples[0] || null),
+    [samples, selectedSampleId, filteredSamples, withLoadedAudio]
+  );
 
   // A sample-scoped modal stores a snapshot of its target sample; re-resolve it
   // against the live library so a later disk-decode (audioBuffer) reaches the modal.
   const liveSample = useCallback(
     (snap: SampleItem | null): SampleItem | null =>
-      snap ? samples.find((s) => s.id === snap.id) ?? snap : null,
-    [samples]
+      snap ? withLoadedAudio(samples.find((s) => s.id === snap.id) ?? snap) : null,
+    [samples, withLoadedAudio]
   );
 
   // Restore the last-worked sample once the library is populated, and persist
