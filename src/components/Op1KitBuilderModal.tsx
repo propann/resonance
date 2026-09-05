@@ -53,6 +53,7 @@ import {
   classifyGenre,
 } from '../services/audioAnalyzer';
 import { MiniWaveform } from './MiniWaveform';
+import { Op1FillGauge } from './Op1FillGauge';
 
 interface Op1KitBuilderModalProps {
   isOpen: boolean;
@@ -97,6 +98,12 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   const [slices, setSlices] = useState<Op1DrumSlice[]>([]);
   const [selectedPadIndex, setSelectedPadIndex] = useState<number>(0);
   const [compositeBuffer, setCompositeBuffer] = useState<AudioBuffer | null>(null);
+  /**
+   * What the chosen sounds add up to before the builder squeezes them onto the
+   * 12-second tape. The composite is always ≤ 12 s, so reading its duration
+   * would show a full gauge and never an overfilled one.
+   */
+  const [rawKitSec, setRawKitSec] = useState<number>(0);
   const [isPlayingFullKit, setIsPlayingFullKit] = useState<boolean>(false);
   const [activePlayingPad, setActivePlayingPad] = useState<number | null>(null);
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
@@ -131,13 +138,13 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   const rebuildCompositeBuffer = async (currentSlices: Op1DrumSlice[]) => {
     setIsCompiling(true);
     try {
-      const { audioBuffer, calculatedSlices } = await buildOp1DrumBuffer(currentSlices, {
-        useMono,
-        loudnessMatch,
-        maxTotalDurationSec: 12.0,
-      });
+      const { audioBuffer, calculatedSlices, rawDurationSec } = await buildOp1DrumBuffer(
+        currentSlices,
+        { useMono, loudnessMatch, maxTotalDurationSec: 12.0 }
+      );
       setCompositeBuffer(audioBuffer);
       setSlices(calculatedSlices);
+      setRawKitSec(rawDurationSec);
     } catch (err) {
       console.error('Failed to compile OP-1 audio buffer', err);
     } finally {
@@ -661,6 +668,8 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
 
   const selectedSlice = slices[selectedPadIndex];
   const totalAllocatedSec = compositeBuffer ? compositeBuffer.duration.toFixed(2) : '0.00';
+  /** Pads that actually hold a sound — an empty pad costs the kit nothing. */
+  const padsUsed = slices.filter((slice) => slice.audioBuffer).length;
 
   return (
     <Modal
@@ -927,20 +936,17 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
               {/* Compact Visual Tape & Waveform Strip (Reduced Height) */}
               <div className="bg-[#08090E] p-3 rounded-xl border border-[#272A38] space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[#8A8F9E] flex items-center gap-1.5 text-xs">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <span className="text-[#8A8F9E] flex items-center gap-1.5 text-xs shrink-0">
                       <Sliders className="w-3 h-3 text-[#00F0FF]" />
-                      Bande Master OP-1 12.0s (44.1 kHz / 16-bit)
+                      Bande Master OP-1 (44.1 kHz / 16-bit)
                     </span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        Number(totalAllocatedSec) > 12.0
-                          ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      }`}
-                    >
-                      {totalAllocatedSec}s / 12.00s MAX
-                    </span>
+                    <Op1FillGauge
+                      kind="drum"
+                      usedSec={rawKitSec || Number(totalAllocatedSec)}
+                      padsUsed={padsUsed}
+                      className="flex-1 min-w-[220px] max-w-md"
+                    />
                   </div>
 
                   <div className="flex items-center gap-2">

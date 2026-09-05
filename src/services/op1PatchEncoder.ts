@@ -110,6 +110,8 @@ export async function buildOp1DrumBuffer(
 ): Promise<{
   audioBuffer: AudioBuffer;
   calculatedSlices: Op1DrumSlice[];
+  /** Total length of the sounds before they are scaled to fit the 12 s tape. */
+  rawDurationSec: number;
 }> {
   const sampleRate = 44100;
   const maxSec = options?.maxTotalDurationSec ?? 12.0;
@@ -242,6 +244,10 @@ export async function buildOp1DrumBuffer(
   return {
     audioBuffer: compositeBuffer,
     calculatedSlices,
+    // What the sounds add up to before anything is squeezed. The composite is
+    // scaled down to fit 12 s, so its own duration can never show a kit being
+    // overfilled — this is the number the fill gauge has to read.
+    rawDurationSec: totalRawDuration,
   };
 }
 
