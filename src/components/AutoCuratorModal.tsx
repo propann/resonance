@@ -60,6 +60,8 @@ import {
 } from '../services/sampleNamingConvention';
 import { classifySampleForLibrary } from '../services/proFolderOrganizer';
 import { parseOp1AiffPatch } from '../services/op1PatchEncoder';
+import { readOp1PatchInfo, op1FolderPathFor, type Op1PatchKind } from '../services/op1PatchFile';
+import { folderIdForPath } from '../services/libraryFolders';
 import {
   archiveIncomingFiles,
   chooseLibraryRoot,
@@ -350,15 +352,32 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   };
 
   /** Decode one source; AIFF may carry an OP-1 patch. */
-  const decodeItem = async (item: CuratorItem): Promise<{ buffer: AudioBuffer; isOp1Patch: boolean }> => {
-    if (item.audioBuffer) return { buffer: item.audioBuffer, isOp1Patch: false };
+  /**
+   * Decode a queued file, and — for an AIFF — find out what kind of OP-1 patch
+   * it is before doing so.
+   *
+   * Every patch used to be filed as a drum kit. In a real pack that is wrong
+   * for most of them: of 768 patches, 173 are kits and 558 are synth patches,
+   * which load into an entirely different part of the machine. The metadata
+   * says which, and reading it costs nothing — no audio is decoded for it.
+   */
+  const decodeItem = async (
+    item: CuratorItem
+  ): Promise<{ buffer: AudioBuffer; op1Kind: Op1PatchKind | null; op1Engine?: string }> => {
+    if (item.audioBuffer) return { buffer: item.audioBuffer, op1Kind: null };
     if (!item.file) throw new Error('Impossible de décoder le flux audio');
+
     if (/\.aif{1,2}$/i.test(item.file.name)) {
+      const info = readOp1PatchInfo(await item.file.arrayBuffer());
       const parsed = await parseOp1AiffPatch(item.file);
-      return { buffer: parsed.audioBuffer, isOp1Patch: Boolean(parsed.rawJson) };
+      // `audio` means a plain AIFF sitting beside the patches — a sample, not
+      // a patch, and it belongs in the library like any other sound.
+      const kind = info && info.kind !== 'audio' ? info.kind : null;
+      return { buffer: parsed.audioBuffer, op1Kind: kind, op1Engine: info?.engine };
     }
+
     const buffer = await audioEngine.decodeAudioData(await item.file.arrayBuffer());
-    return { buffer, isOp1Patch: false };
+    return { buffer, op1Kind: null };
   };
 
   // DSP Study & Processing Pipeline
@@ -369,7 +388,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
 
     // Decoding happens off the main thread, so keep a few files decoding ahead
     // of the analysis instead of decoding one, analysing it, decoding the next.
-    const decoding = new Map<string, Promise<{ buffer: AudioBuffer; isOp1Patch: boolean }>>();
+    const decoding = new Map<string, ReturnType<typeof decodeItem>>();
     const pool = analysisPool();
     /** Analyses started ahead of the loop, keyed by item. */
     const analysing = new Map<string, Promise<AnalysisResult>>();
@@ -432,7 +451,8 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         decodeMs += performance.now() - decodeStart;
         const analyseStart = performance.now();
         const buffer = decoded.buffer;
-        const isOp1Patch = decoded.isOp1Patch;
+        const op1Kind = decoded.op1Kind;
+        const isOp1Patch = op1Kind !== null;
 
         if (!buffer) {
           throw new Error('Impossible de décoder le flux audio');
@@ -480,7 +500,17 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
             bpm: detectedBpm || loopAnalysis.bpm,
             loopBars: loopAnalysis.loopBars,
             genre,
-            tags: [...classification.tags, ...timbralTags, ...(isOp1Patch ? ['op-1', 'op1-drum-patch', '24-pad'] : [])],
+            tags: [
+              ...classification.tags,
+              ...timbralTags,
+              // Say which kind, and which engine: they are what a patch is
+              // searched for, and the three are not interchangeable.
+              ...(op1Kind === 'drum' ? ['op-1', 'op1-drum-patch', '24-pad'] : []),
+              ...(op1Kind === 'sampler' ? ['op-1', 'op1-synth-patch', 'sampler'] : []),
+              ...(op1Kind === 'engine'
+                ? ['op-1', 'op1-synth-patch', 'moteur', ...(decoded.op1Engine ? [decoded.op1Engine] : [])]
+                : []),
+            ],
             ep133Slot,
             sampleRate: targetFormat === '24b48k' ? 48000 : 44100,
             bitDepth: targetFormat === '24b48k' ? 24 : 16,
@@ -547,8 +577,13 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         const standardCleanName = generateStandardSampleName(dummySample, namingConfig, i + 1);
 
         // 9. Clean Target Folder
-        const folderInfo = isOp1Patch
-          ? { folderPath: '/03_HARDWARE/OP-1_DRUM_PATCHES', folderId: 'f-op1-patches', category: 'multi-sound' as const }
+        const op1FolderPath = op1Kind ? op1FolderPathFor(op1Kind) : null;
+        const folderInfo = op1FolderPath
+          ? {
+              folderPath: op1FolderPath,
+              folderId: folderIdForPath(op1FolderPath) ?? 'f-op1-patches',
+              category: 'multi-sound' as const,
+            }
           : classifySampleForLibrary(dummySample);
 
         analyseMs += performance.now() - analyseStart;
