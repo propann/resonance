@@ -15,7 +15,7 @@ cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
-# doit tout passer : 0 erreur, 269 tests
+# doit tout passer : 0 erreur, 308 tests
 ```
 
 - `main` @ `0317b52` (2026-09-05), poussé. Build installé depuis
@@ -35,6 +35,75 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
   PowerShell, qui transforme le stderr d'emcc en erreur.
 - Test headless : lancer `Resonance.exe --remote-debugging-port=9222` et
   piloter via CDP.
+
+## 2026-09-05 — L'application était bloquée 97 % du temps
+
+Branche `worktree-trieuse-coherence`, trois commits, non fusionnée.
+
+Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
+la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
+deux n'était celui qu'on croyait.
+
+### Mesuré, pas supposé
+
+`tools/profile-app.mjs` (nouveau) profile le CPU de l'app en fonctionnement ;
+`tools/eval-in-app.mjs` chronomètre. Lancer `Resonance.exe
+--remote-debugging-port=9222` d'abord.
+
+Sur 282 000 samples, **sans aucun clic**, le thread principal enchaînait des
+tâches longues de **4,4 s** — occupé ~97 % du temps. Les clics n'étaient pas
+lents : ils attendaient leur tour. C'est ça qui faisait sauter la tête de
+lecture (peinte en `requestAnimationFrame`).
+
+| Suspect | Coût | Verdict |
+|---|---|---|
+| Réallocation des 282 k objets par rafraîchissement | 930 ms | **la cause** |
+| Compteurs sidebar (21 dossiers + 15 types) | 443 ms | réel, secondaire |
+| Tri par date | 128 ms | mineur |
+| Filtre complet | 37 ms | négligeable |
+| Décodage audio | 0 | **hors de cause** (un clic sur une ligne déjà en cache coûtait pareil) |
+
+Deux hypothèses tombées sur les chiffres : la latence de sortie (10 ms) et le
+`map` sur 282 k (9 ms).
+
+### Corrigé
+
+1. **Le bouton play des lignes ne faisait rien** (`6f73a2f`). `SampleTable`
+   lisait `sample.audioBuffer` et sortait en silence quand il manquait — donc
+   pour tout sample venu du manifeste, c'est-à-dire tous sauf ceux fraîchement
+   enregistrés. Nouveau `services/sampleAudio.ts` : `loadSampleAudio` répond
+   depuis le sample, puis le cache, puis le fichier, et fusionne les demandes
+   concurrentes. `peekSampleAudio` pour les mini-ondes (jamais de décodage au
+   défilement).
+2. **Hydratation du manifeste** (`b683186`). Le manifeste entier est relu à
+   chaque rafraîchissement ; on construisait les 282 126 items puis on jetait
+   ceux déjà connus — 64 nouveaux fichiers coûtaient 282 126 allocations.
+   `services/manifestHydration.ts` calcule l'id d'abord et ne construit que le
+   neuf ; un manifeste inchangé rend le tableau intact, donc rien ne re-trie.
+3. **Compteurs sidebar** (`8b5514c`). `services/libraryCounts.ts` : une passe
+   pour tous les badges, mémoïsée, et `Sidebar` passe sous `React.memo`.
+   Attention : `folderMatcher` accepte aussi par **chemin**, pas seulement par
+   `folderId` — les samples sans id sont gardés à part et passés au vrai
+   matcher, sinon le badge cesse d'accorder avec la liste qu'il étiquette.
+
+### Après, sur la même bibliothèque
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Tâches longues, 20 s au repos | 2 × 4,4 s | **aucune** |
+| Clic sur une ligne | bloqué derrière 4,4 s | **3 ms** |
+| Bouton play d'une ligne | ne faisait rien | joue |
+
+### Reste à faire
+
+- `audioBuffer` vit encore dans `SampleItem` : deux mécanismes coexistent pour
+  trouver un buffer. Les exports qui itèrent tout le tableau
+  (`exportEp133ProjectPack`, `processBatchConvert`, `exportMultipleWavsAsZip`,
+  `batchGenerateOp1Kits`) font tous `if (!sample.audioBuffer) continue` — donc
+  **ils exportent presque rien** pour une bibliothèque venue du disque. Même
+  bug de fond que le bouton play, à plus grande échelle.
+- `LoudnessStandardModal` et `AudioAnalysisModal` ne sont **montés nulle part** :
+  les boutons DSP / calibrage de `SampleRow` n'ouvrent rien.
 
 ## État actuel
 
