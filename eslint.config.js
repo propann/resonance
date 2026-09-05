@@ -39,7 +39,7 @@ export default tseslint.config(
   },
   {
     // CommonJS Node scripts (tooling, Electron helpers run outside the bundle)
-    files: ['**/*.cjs', 'tools/**/*.js'],
+    files: ['**/*.cjs', 'tools/**/*.{js,mjs,mts}'],
     languageOptions: {
       sourceType: 'commonjs',
       globals: { ...globals.node },
