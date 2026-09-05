@@ -54,6 +54,7 @@ import { useNoteDrivers } from '../hooks/useNoteDrivers';
 import { STEP_COUNT, type ArpMode } from '../services/noteDrivers';
 import type { NativeEngineId } from '../services/engineBridge';
 import { NativeEngineFolder } from './NativeEngineFolder';
+import { buildOp1QuickKit } from '../services/op1QuickKit';
 
 registerBuiltinModules();
 
@@ -177,12 +178,18 @@ interface AtelierColumnProps {
   onSaveAsNewSample: (sample: SampleItem) => void;
   /** Empty the edit window, to build an engine sound on a clean wave. */
   onClearSample: () => void;
+  /**
+   * Write a finished OP-1 patch into 03_HARDWARE/OP-1_DRUM_PATCHES. The
+   * column builds the kit; only App knows how to reach the disk.
+   */
+  onSaveOp1Kit: (name: string, aiff: Blob) => void;
 }
 
 export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   sample,
   onSaveAsNewSample,
   onClearSample,
+  onSaveOp1Kit,
 }) => {
   const rack = useRackStore((s) => s.rack);
   const addModule = useRackStore((s) => s.addModule);
@@ -253,6 +260,51 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
       } as SampleItem);
     },
     [onSaveAsNewSample]
+  );
+
+  /**
+   * Every model of an engine, laid across the OP-1's twenty-four pads: the
+   * composite lands on the wave with its markers showing, and the patch is
+   * written beside it.
+   */
+  const handleEngineKit = useCallback(
+    async (
+      engineId: NativeEngineId,
+      label: string,
+      sounds: Array<{ label: string; buffer: AudioBuffer }>
+    ) => {
+      try {
+        const kit = await buildOp1QuickKit(sounds, label);
+        const blob = audioBufferToWavBlob(kit.buffer, { bitDepth: 24, normalize: false });
+        const metrics = calculateAudioMetrics(kit.buffer);
+        onSaveAsNewSample({
+          ...SYNTH_SAMPLE_BASE,
+          id: `op1kit-${engineId}-${Date.now().toString(36)}`,
+          name: `${kit.name}_KIT`,
+          originalFileName: `${kit.name}_KIT.wav`,
+          type: 'multi-sound',
+          category: 'multi-sound',
+          isMultiSound: true,
+          tags: ['op-1', 'kit', 'moteur'],
+          audioBuffer: kit.buffer,
+          blobUrl: URL.createObjectURL(blob),
+          size: blob.size,
+          duration: kit.buffer.duration,
+          sampleRate: kit.buffer.sampleRate,
+          channels: kit.buffer.numberOfChannels,
+          // The markers travel with the sound, so the editor can draw and move
+          // them instead of the kit arriving as a finished, opaque file.
+          slices: kit.slices,
+          ...metrics,
+        } as SampleItem);
+        onSaveOp1Kit(kit.name, kit.aiff);
+        toast.success(`Kit OP-1 « ${kit.name} » : ${kit.slices.length} pads sur l'onde.`);
+      } catch (error) {
+        console.error('Kit OP-1 impossible', error);
+        toast.error("Le kit OP-1 n'a pas pu être construit.");
+      }
+    },
+    [onSaveAsNewSample, onSaveOp1Kit]
   );
 
   const [selfTest, setSelfTest] = useState<ModuleTestResult[] | null>(null);
@@ -432,6 +484,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
                 note={(player.octave + 1) * 12}
                 sampleBuffer={sample?.audioBuffer}
                 onRendered={handleEngineRendered}
+                onKit={(id, label, sounds) => void handleEngineKit(id, label, sounds)}
               />
             ))}
           </div>

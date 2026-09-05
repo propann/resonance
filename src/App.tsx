@@ -739,6 +739,35 @@ export default function App() {
     });
   };
 
+  /**
+   * Write a finished OP-1 patch where the device expects it. The folder is one
+   * of the ones the library creates at startup, so it is always there.
+   */
+  const handleSaveOp1Kit = async (name: string, aiff: Blob) => {
+    if (!libraryRoot) {
+      toast.info('Connecte le dossier de travail pour enregistrer le kit.');
+      return;
+    }
+    try {
+      const directory = await getDirectoryForPath(libraryRoot, '/03_HARDWARE/OP-1_DRUM_PATCHES');
+      const fileName = await writeUniqueFile(directory, `${name}.aif`, aiff);
+      await writeLibraryManifest(libraryRoot, [
+        {
+          path: '/03_HARDWARE/OP-1_DRUM_PATCHES',
+          fileName,
+          name,
+          type: 'multi-sound',
+          category: 'multi-sound',
+          format: 'op-1-aiff',
+        },
+      ]);
+      toast.success(`Patch OP-1 écrit : 03_HARDWARE/OP-1_DRUM_PATCHES/${fileName}`);
+    } catch (error) {
+      console.error('Écriture du patch OP-1 impossible', error);
+      toast.error("Le patch OP-1 n'a pas pu être écrit sur le disque.");
+    }
+  };
+
   const handleSaveProcessedAsNew = async (newSample: SampleItem) => {
     setSamples((prev) => [newSample, ...prev]);
     setSelectedSampleId(newSample.id);
@@ -1043,6 +1072,7 @@ export default function App() {
             sample={selectedSample}
             onSaveAsNewSample={handleSaveProcessedAsNew}
             onClearSample={() => setSelectedSampleId(null)}
+            onSaveOp1Kit={handleSaveOp1Kit}
             onOpenSlicer={(s) => setSampleTarget('slicer', s)}
           />
         </aside>

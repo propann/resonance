@@ -176,6 +176,32 @@ secondes d'un seul son tenu au lieu d'une note qui resonne.
 Restent dans `vendor/` : Braids (proche de Plaits), Marbles (generateur de CV,
 peu d'interet ici), Warps, Tides.
 
+### Kit OP-1 en un clic, depuis un moteur
+
+`src/services/op1QuickKit.ts` : donne-lui des buffers, il rend le composite de
+12 s, les 24 marqueurs et le `.aif`. Chaque dossier de moteur porte un bouton
+« -> Kit OP-1 (n pads) » qui rend tous ses modeles d'affilee (0,45 s chacun :
+seize modeles a deux secondes ne tiendraient pas dans les douze secondes du
+format) et assemble le tout.
+
+Le kit arrive **sur l'onde avec ses marqueurs**, pas comme un fichier opaque :
+les tranches sont des `SliceRegion`, que l'editeur sait deja dessiner et
+deplacer. Le `.aif` part en parallele dans
+`03_HARDWARE/OP-1_DRUM_PATCHES` — dossier deja cree par
+`ensureLibraryStructure`, donc rien a creer.
+
+**Un defaut que seul le test reel a montre.** `buildOp1DrumBuffer` renvoie
+toujours vingt-quatre slots, remplissant ceux qu'on ne lui a pas donnes avec
+les noms de pads par defaut de l'OP-1. Seize sons donnaient donc seize pads
+plus huit marqueurs fantomes, le dernier etiquete « Break / Mini Loop » sur du
+silence. Corrige (`calculatedSlices.slice(0, kept.length)`), et le double du
+test a ete rendu fidele — il renvoyait naivement autant de slots que de sons,
+ce qui masquait exactement ce cas.
+
+Verifie de bout en bout depuis Plaits : 16 sons -> 16 pads, noms de modeles
+reels, bornes contigues de 0,45 s, derniere a 7,2 s, AIFF `FORM/AIFF` de
+759 Ko en 44,1 kHz mono.
+
 ### Dexed
 
 Toujours pas fait : JUCE, autrement plus lourd que Plaits. Le contrat
