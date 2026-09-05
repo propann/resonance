@@ -1155,8 +1155,11 @@ export default function App() {
               {selectedSample ? (
                 <WaveformCanvas
                   height={
+                    // Bigger to work on, but never the whole pane: the list has
+                    // to stay in view underneath, so a sound can be picked
+                    // without leaving the editor.
                     activeView === 'edit' && centerPaneHeight > 0
-                      ? centerPaneHeight - 20
+                      ? Math.max(waveformHeight, Math.round(centerPaneHeight * 0.55))
                       : waveformHeight
                   }
                   sample={selectedSample}
@@ -1189,9 +1192,9 @@ export default function App() {
                   sample shows nothing here. */}
               {activeView === 'edit' && <Op1PatchEditor sample={selectedSample} />}
 
-              {/* The list is set aside while a sound is being worked on. */}
-              {activeView === 'library' && (
-                <>
+              {/* The list stays put in both views. Hiding it while editing
+                  meant the only way to reach the next sound was to leave the
+                  editor first, which is not how one works through a folder. */}
               {/* Horizontal Splitter Handle (Resize Waveform Height with Mouse Drag) */}
               <div
                 onMouseDown={startWaveformResize}
@@ -1216,8 +1219,6 @@ export default function App() {
                 onToggleSelectSample={handleToggleSelectSample}
                 onSelectAllSamples={handleSelectAllSamples}
               />
-                </>
-              )}
             </>
           ) : (
             /* 2D Timbre Galaxy View */
