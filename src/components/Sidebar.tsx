@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import { FolderItem, SampleType, FilterState, SampleItem, MusicGenre } from '../types/sample';
 import { useUiStore } from '../stores/uiStore';
-import { diskPathForFolder, folderMatcher } from '../services/libraryFolders';
+import { diskPathForFolder } from '../services/libraryFolders';
+import { countInFolder, countLibrary, countOfType } from '../services/libraryCounts';
 
 interface SidebarProps {
   width?: number;
@@ -69,7 +70,12 @@ const EP133_PAD_GROUPS = [
   { id: 'pad-9', slot: '900-999', label: '00 LOOPS', type: 'loop' },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({
+/**
+ * Memoised: it takes the whole library as a prop and counts it, so without
+ * this it redid the counting on every selection — App re-renders, and nothing
+ * about a sidebar changes when a different sample is picked.
+ */
+export const Sidebar = React.memo(function Sidebar({
   width,
   folders,
   samples,
@@ -82,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onViewChange,
   physicalSampleCount = 0,
   diskFolderCounts = {},
-}) => {
+}: SidebarProps) {
   const openModal = useUiStore((state) => state.openModal);
   const [sidebarTab, setSidebarTab] = useState<'folders' | 'types' | 'hardware' | 'keys'>('folders');
   /**
@@ -90,9 +96,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
    * filter would list for it, or the count read off the disk, whichever is
    * higher (the disk is ahead of the manifest right after an import).
    */
+  const counts = useMemo(() => countLibrary(samples), [samples]);
   const countFor = (folder: FolderItem) => {
-    const inFolder = folderMatcher(folder.id, folders);
-    const loaded = samples.filter(inFolder).length;
+    const loaded = countInFolder(counts, folder.id, folders);
     return Math.max(loaded, diskFolderCounts[diskPathForFolder(folder)] || 0);
   };
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
@@ -131,16 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return folders.filter((f) => f.parentId === parentId);
   };
 
-  const getCountForType = (type: SampleType | 'all') => {
-    if (type === 'all') return samples.length;
-    if (type === 'snare') {
-      return samples.filter((s) => s.type === 'snare' || s.type === 'clap').length;
-    }
-    if (type === 'hihat') {
-      return samples.filter((s) => s.type === 'hihat' || s.type === 'cymbal').length;
-    }
-    return samples.filter((s) => s.type === type).length;
-  };
+  const getCountForType = (type: SampleType | 'all') => countOfType(counts, type);
 
   return (
     <aside
@@ -660,10 +657,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="space-y-1">
               {EP133_PAD_GROUPS.map((pg) => {
                 const isSel = filterState.selectedType === pg.type;
-                const count = samples.filter((s) => {
-                  if (pg.type === 'loop') return s.isLoop || s.category === 'loop' || s.type === 'loop';
-                  return s.type === pg.type;
-                }).length;
+                const count =
+                  pg.type === 'loop' ? counts.loops : (counts.byType.get(pg.type) ?? 0);
                 return (
                   <button
                     key={pg.id}
@@ -769,5 +764,5 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
     </aside>
   );
-};
+});
 

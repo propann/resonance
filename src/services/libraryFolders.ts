@@ -52,7 +52,7 @@ export function folderIdsWithin(folderId: string, folders: FolderItem[] = DEFAUL
 }
 
 /** What a sample has to say about where it lives. */
-interface FolderPlacement {
+export interface FolderPlacement {
   folderId?: string;
   folderPath?: string;
 }
