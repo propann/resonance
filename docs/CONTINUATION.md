@@ -15,7 +15,7 @@ cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
-# doit tout passer : 0 erreur, 351 tests
+# doit tout passer : 0 erreur, 370 tests
 ```
 
 - `main` @ `0317b52` (2026-09-05), poussé. Build installé depuis
@@ -38,7 +38,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 ## 2026-09-05 — L'application était bloquée 97 % du temps
 
-Branche `worktree-trieuse-coherence`, dix-neuf commits, non fusionnée.
+Branche `worktree-trieuse-coherence`, vingt-trois commits, non fusionnée.
 
 Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
 la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
@@ -180,6 +180,56 @@ marqueurs et la jauge doivent suivre.
 Vérifié dans l'app : fenêtre ouverte en 4 ms, `RACK · C1 · <nom du pad>`,
 dossier EFFETS avec ses 24 effets par famille, jauge `29.12s / 12.00s`.
 
+### Le navigateur ne décode pas l'AIFF — 78 000 fichiers étaient bloqués
+
+**La découverte la plus importante de la session.** Trouvée en cherchant
+pourquoi les patches OP-1 copiés dans `00_RECEPTION` n'étaient pas ingérés.
+
+Chrome, donc Electron, répond `Unable to decode audio data` pour l'AIFF sur
+cette plateforme — `FORM…AIFF` comme `FORM…AIFC`, les deux vérifiés contre
+l'app en fonctionnement. Et rien ne peut se passer après ça : un fichier qui ne
+décode pas ne devient jamais quelque chose que la bibliothèque puisse ranger,
+donc il reste dans le dossier de dépôt **pour toujours, sans un message**.
+
+Ici : **78 443 fichiers, plus de 22 Go**, dont les 77 675 qui dormaient dans un
+dossier `00_RECEPTION/OP-1` depuis le début. Ce n'était pas une file lente,
+c'était une file qui ne pouvait pas avancer.
+
+`services/aiffDecoder.ts` le fait nous-mêmes — l'AIFF est du PCM non compressé
+dans un conteneur à chunks, donc c'est lire deux chunks et convertir des
+entiers. Échantillonné sur la bibliothèque : 16 bits gros-boutiste presque
+partout, un peu de 24 bits, et les patches OP-1 en `AIFC/sowt` (le même PCM à
+l'envers). Tout ce qui est réellement compressé est **refusé**, pas deviné.
+
+Branché dans `audioEngine.decodeAudioData`, **après** que le navigateur ait
+refusé : un seul point, tous les chemins en profitent, et une plateforme qui
+sait lire l'AIFF garde son propre décodeur.
+
+Vérifié sur les vrais fichiers, pas seulement des fixtures : 456 échantillonnés
+sur la bibliothèque et le pack — tous décodés, aucun silencieux, aucun hors
+bornes (ce que donnerait une lecture à l'envers).
+
+⚠️ **Piège de diagnostic** : `00_RECEPTION/OP-1` contient 77 675 `.aif` qui ne
+sont **pas** des patches. 300 échantillonnés au hasard dans tout l'arbre :
+100 % de l'audio brut, aucune métadonnée OP-1. Le nom du dossier ment. Ils
+iront dans `01_ONE_SHOTS`/`02_LOOPS`, ce qui est correct.
+
+### L'éditeur de patch OP-1
+
+`components/Op1PatchEditor.tsx`, sous l'onde dans la vue édition : nom, octave,
+effet, LFO, enveloppe, boutons du moteur, et les 24 pads d'un kit (hauteur,
+volume, inversion, boucle). Il n'apparaît que pour un vrai patch — lu dans le
+fichier, pas deviné d'après un nom.
+
+`writeOp1PatchMetadata` ne reconstruit que le chunk `APPL` et **recopie tous
+les autres octet pour octet**. Renommer un kit n'a pas à ré-encoder ce qu'il
+joue, et un aller-retour par un décodeur changerait les échantillons en
+silence. Un fichier sans chunk OP-1 en reçoit un **avant** `SSND` — le firmware
+ne lit pas un patch qui le porte après.
+
+Vérifié sur 144 vrais patches : renommés, écrits, relus — aucun octet d'audio
+changé, aucun genre changé, aucun illisible.
+
 ### L'arborescence à plat, et la vue édition
 
 `03_HARDWARE` ne chapeautait que l'OP-1. Supprimé : l'OP-1 remonte à
@@ -243,7 +293,7 @@ toujours. Toutes trouvées en installant et en mesurant, pas en relisant.
 
 Application desktop **Electron** (React 19 / Vite 6 / Tailwind 4 / Tone.js).
 Portes de vérification à chaque commit : `tsc --noEmit` · `eslint .` (0 erreur) ·
-`vitest run` (351 tests) · `vite build`.
+`vitest run` (370 tests) · `vite build`.
 
 ### Fait — phases 0 à 5 de la refonte
 
