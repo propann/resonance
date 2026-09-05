@@ -537,6 +537,53 @@ contexte audio). Le levier suivant est donc `DECODE_AHEAD` (6 aujourd'hui) : en
 lancer davantage en parallele nourrirait les workers. **A mesurer avant de
 changer** — c'est ce qui a evite de paralleliser la mauvaise etape ici.
 
+## Lenteur generale — ce que la mesure a dit
+
+Symptomes rapportes : chargement d'un sample long, lecture qui « demarre quand
+ca veut », barre de lecture mal alignee.
+
+Mesure dans l'app vivante (`tools/eval-in-app.mjs`, qui evalue une expression
+via le protocole DevTools) :
+
+| Fait | Valeur |
+|---|---|
+| Samples dans le store | **282 985** |
+| Tri par date (defaut) | **113 ms** |
+| Tri par nom (`localeCompare`) | **374 ms** |
+| `map` vs `slice`+index sur 283 k | 9 ms vs 4,5 ms |
+| `baseLatency` / `outputLatency` | 10 ms / 0 |
+
+**Deux hypotheses ecartees par la mesure :**
+
+1. *Le `previous.map` sur 283 k serait le coupable.* Il coute 9 ms contre 4,5 —
+   l'ecart ne justifiait pas l'optimisation. (Elle est faite quand meme dans le
+   chargement, elle est gratuite.)
+2. *La barre de lecture derive a cause de la latence de sortie.* 10 ms, bien
+   trop peu. La tete est peinte en `requestAnimationFrame` : un thread
+   principal bloque 113 a 374 ms la fait **sauter**, pas deriver. Le decalage
+   est un symptome de la lenteur, pas un bug d'horloge.
+
+**Le vrai cout : le tri se refait a chaque `setSamples`** — donc a chaque
+chargement de sample, chaque favori, chaque decoupe — parce que
+`filteredSamples` depend de `samples`. Il filtre avant de trier, donc un
+dossier selectionne reduit la note ; c'est la vue par defaut, sans filtre, qui
+paie les 283 k.
+
+### Fait
+
+`audioBufferCache.ts` : revenir sur un sample ne relit plus son fichier par IPC
+et ne le redecode plus. Budget en **secondes d'audio** et non en entrees — cent
+kicks et cent boucles de quatre minutes ne pesent pas pareil — evicion LRU, et
+un son plus long que le budget entier n'est pas garde du tout.
+
+### A faire, dans l'ordre
+
+1. **Sortir `audioBuffer` du tableau `samples`.** C'est lui qui force le
+   re-tri : charger un buffer modifie `samples`, donc invalide le memo. Un
+   store separe pour les buffers supprimerait le cout a la racine.
+2. **Ne pas hydrater 283 000 objets React.** Le tableau est virtualise a
+   l'affichage mais pas en memoire. C'est le plafond de tout le reste.
+
 ## Pistes ouvertes
 
 - Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.

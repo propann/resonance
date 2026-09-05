@@ -11,6 +11,7 @@ import { activeAudition } from './stores/transportStore';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortLibrary } from './services/librarySorter';
+import { cacheBuffer, getCachedBuffer } from './services/audioBufferCache';
 import { folderIdForPath, folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
@@ -200,14 +201,32 @@ export default function App() {
     let cancelled = false;
     const loadSelectedAudio = async () => {
       try {
-        const file = await readLibraryAudioFile(libraryRoot, selected.diskPath!);
-        const audioBuffer = await audioEngine.decodeAudioData(await file.arrayBuffer());
+        // Going back to a sample used to read its file over IPC and decode it
+        // again, every time. The cache makes a return trip free, which is what
+        // moving through a folder mostly consists of.
+        const cached = getCachedBuffer(selected.diskPath!);
+        const file = cached ? null : await readLibraryAudioFile(libraryRoot, selected.diskPath!);
+        const audioBuffer = cached ?? (await audioEngine.decodeAudioData(await file!.arrayBuffer()));
         if (cancelled) return;
-        const blobUrl = URL.createObjectURL(file);
-        setSamples((previous) => previous.map((sample) => sample.id === selected.id ? {
-          ...sample, audioBuffer, blobUrl, size: file.size, duration: audioBuffer.duration,
-          sampleRate: audioBuffer.sampleRate, channels: audioBuffer.numberOfChannels,
-        } : sample));
+        if (!cached) cacheBuffer(selected.diskPath!, audioBuffer);
+        const blobUrl = file ? URL.createObjectURL(file) : '';
+        // One pass, and the index found first: `map` over the array calls back
+        // once per sample, and this library holds 283 000 of them.
+        setSamples((previous) => {
+          const index = previous.findIndex((sample) => sample.id === selected.id);
+          if (index === -1) return previous;
+          const next = previous.slice();
+          next[index] = {
+            ...next[index],
+            audioBuffer,
+            blobUrl: blobUrl || next[index].blobUrl,
+            size: file ? file.size : next[index].size,
+            duration: audioBuffer.duration,
+            sampleRate: audioBuffer.sampleRate,
+            channels: audioBuffer.numberOfChannels,
+          };
+          return next;
+        });
       } catch (error) {
         console.error('Impossible de charger le sample sélectionné depuis le dossier de travail', error);
       }
