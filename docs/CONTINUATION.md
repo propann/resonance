@@ -38,7 +38,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 ## 2026-09-05 — L'application était bloquée 97 % du temps
 
-Branche `worktree-trieuse-coherence`, seize commits, non fusionnée.
+Branche `worktree-trieuse-coherence`, dix-neuf commits, non fusionnée.
 
 Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
 la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
@@ -179,6 +179,34 @@ marqueurs et la jauge doivent suivre.
 
 Vérifié dans l'app : fenêtre ouverte en 4 ms, `RACK · C1 · <nom du pad>`,
 dossier EFFETS avec ses 24 effets par famille, jauge `29.12s / 12.00s`.
+
+### L'arborescence à plat, et la vue édition
+
+`03_HARDWARE` ne chapeautait que l'OP-1. Supprimé : l'OP-1 remonte à
+**`03_OP-1`**, à côté de `01_ONE_SHOTS` et `02_LOOPS`, avec `drum/` et
+`synth/` dessous. Rien n'y était rangé (0 fichier, 0 entrée manifeste) — on a
+déplacé une forme, pas des sons. `03_HARDWARE` reste dans la liste de balayage
+des dossiers vides uniquement pour que le répertoire résiduel disparaisse ; il
+n'est plus jamais créé. `UNTOUCHED_ROOTS` du trieur suit : un patch n'est pas
+un sample, et le re-ranger d'après son nom mettrait un kit « AZ_Kick_Kit »
+dans les kicks. Son test utilisait l'ancien chemin **et passait quand même** —
+il ne gardait donc plus rien ; il couvre maintenant drum et synth.
+
+**Sélectionner un son bascule le centre de la fenêtre sur l'éditeur** : l'onde
+prend tout le volet au lieu de le partager avec la liste. Même page, pas une
+nouvelle — l'onglet LISTE ramène. La hauteur du volet est **mesurée**
+(`ResizeObserver`), pas supposée : la fenêtre se redimensionne et les volets
+de part et d'autre se glissent. Vérifié : 175 → 759 → 175 px.
+
+Au passage, un bug qui dormait : `drawWaveform` lit `clientWidth`/`clientHeight`
+du canvas pour dimensionner son tampon, mais **rien ne le prévenait qu'ils
+avaient changé**. Le conteneur rétrécissait, le dessin restait à son ancienne
+résolution, étiré. Un `ResizeObserver` sur le canvas couvre d'un coup les trois
+cas : bascule liste/édition, glissement d'un séparateur, redimensionnement de
+la fenêtre.
+
+**À faire ensuite** : le dossier PACK EP-133, sous l'OP-1, pour regrouper des
+ensembles de sons tout prêts.
 
 ### Trois régressions attrapées sur le build installé
 
