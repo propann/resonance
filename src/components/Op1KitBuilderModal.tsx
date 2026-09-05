@@ -54,6 +54,7 @@ import {
 } from '../services/audioAnalyzer';
 import { MiniWaveform } from './MiniWaveform';
 import { Op1FillGauge } from './Op1FillGauge';
+import { Op1RackPanel } from './Op1RackPanel';
 
 interface Op1KitBuilderModalProps {
   isOpen: boolean;
@@ -701,6 +702,21 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   /** Pads that actually hold a sound — an empty pad costs the kit nothing. */
   const padsUsed = slices.filter((slice) => slice.audioBuffer).length;
 
+  /**
+   * Put a rack render onto a pad, keeping everything else about it.
+   *
+   * The composite is rebuilt from the changed pad, so the tape, the markers
+   * and the fill gauge all follow — the processed sound is longer or shorter
+   * than what it replaced, and the kit has to be re-laid out around it.
+   */
+  const applyProcessedToPad = (padIndex: number, processed: AudioBuffer) => {
+    const next = slices.map((slice, i) =>
+      i === padIndex ? { ...slice, audioBuffer: processed } : slice
+    );
+    setSlices(next);
+    void rebuildCompositeBuffer(next);
+  };
+
   return (
     <Modal
       open={isOpen}
@@ -1224,6 +1240,16 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* RIGHT COLUMN: the effects rack, on the pad being worked on */}
+            <div className="w-72 shrink-0 border-l border-[#272A38] bg-[#0C0E15] p-3">
+              <Op1RackPanel
+                padBuffer={selectedSlice?.audioBuffer}
+                padLabel={`${OP1_KEY_NAMES[selectedPadIndex]} · ${selectedSlice?.name ?? 'vide'}`}
+                active={isOpen}
+                onApplyToPad={(processed) => applyProcessedToPad(selectedPadIndex, processed)}
+              />
             </div>
           </div>
         )}

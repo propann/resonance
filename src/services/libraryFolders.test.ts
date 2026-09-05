@@ -23,7 +23,8 @@ describe('folderIdForPath', () => {
     expect(folderIdForPath('/01_ONE_SHOTS/01_DRUMS/01_KICKS')).toBe('f-os-drums-kicks');
     expect(folderIdForPath('01_ONE_SHOTS/01_DRUMS/06_PERCS')).toBe('f-os-drums-percs');
     expect(folderIdForPath('/02_LOOPS/03_VOCAL_LOOPS')).toBe('f-lp-vocals');
-    expect(folderIdForPath('/03_HARDWARE/OP-1_DRUM_PATCHES')).toBe('f-op1-patches');
+    expect(folderIdForPath('/03_HARDWARE/OP-1/drum')).toBe('f-op1-patches');
+    expect(folderIdForPath('/03_HARDWARE/OP-1/synth')).toBe('f-op1-synth');
   });
 
   it('says nothing about a path outside the managed tree', () => {

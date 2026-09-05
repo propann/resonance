@@ -249,7 +249,7 @@ export function op1Fill(
  * they load into different parts of the machine and are never interchangeable.
  */
 export function op1FolderPathFor(kind: Op1PatchKind): string {
-  if (kind === 'drum') return '/03_HARDWARE/OP-1_DRUM_PATCHES';
-  if (kind === 'sampler' || kind === 'engine') return '/03_HARDWARE/OP-1_SYNTH_PATCHES';
+  if (kind === 'drum') return '/03_HARDWARE/OP-1/drum';
+  if (kind === 'sampler' || kind === 'engine') return '/03_HARDWARE/OP-1/synth';
   return '/01_ONE_SHOTS/05_FX_TEXTURES';
 }

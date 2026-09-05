@@ -47,8 +47,9 @@ export const LIBRARY_FOLDERS = [
   '02_LOOPS/02_MELODIC_LOOPS',
   '02_LOOPS/03_VOCAL_LOOPS',
   '02_LOOPS/04_TEXTURES',
-  '03_HARDWARE/OP-1_DRUM_PATCHES',
-  '03_HARDWARE/OP-1_SYNTH_PATCHES',
+  // Shaped like the device's own disk, so the folder can go straight across.
+  '03_HARDWARE/OP-1/drum',
+  '03_HARDWARE/OP-1/synth',
   '_MANIFEST',
 ] as const;
 

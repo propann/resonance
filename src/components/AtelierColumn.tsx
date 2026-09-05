@@ -17,8 +17,6 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ChevronDown,
-  ChevronRight,
   Play,
   Square,
   Repeat,
@@ -31,6 +29,7 @@ import {
 } from 'lucide-react';
 import { SampleItem } from '../types/sample';
 import { peekSampleAudio } from '../services/sampleAudio';
+import { FolderRow, LeafRow } from './ToolTree';
 import { listModuleDefs } from '../rack/registry';
 import { registerBuiltinModules } from '../rack/modules';
 import { RackModulePanel } from '../rack/RackModulePanel';
@@ -116,63 +115,6 @@ const SYNTH_SAMPLE_BASE = {
   zeroCrossingRate: 0,
 };
 
-/** A folder row, drawn like the library tree's. */
-const FolderRow: React.FC<{
-  label: string;
-  color: string;
-  open: boolean;
-  count?: number;
-  onToggle: () => void;
-  children?: React.ReactNode;
-}> = ({ label, color, open, count, onToggle, children }) => (
-  <div
-    className={`group flex items-center justify-between border px-2 py-1.5 transition pixel-btn ${
-      open
-        ? 'border-[#FFE600] bg-[#1A1A26] font-bold text-white'
-        : 'border-[#1E1E28] bg-[#101016] text-[#EDEDEE] hover:border-[#333344]'
-    }`}
-  >
-    <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-      {open ? (
-        <ChevronDown className="h-3 w-3 shrink-0 text-[#FFE600]" />
-      ) : (
-        <ChevronRight className="h-3 w-3 shrink-0 text-[#8E8E93]" />
-      )}
-      <span style={{ color }} className="text-xs">
-        📁
-      </span>
-      <span className="truncate font-pixel text-[9px] tracking-tight">{label}</span>
-    </button>
-    <div className="flex shrink-0 items-center gap-1.5">
-      {children}
-      {count !== undefined && (
-        <span
-          className="border px-1.5 py-0.2 font-pixel text-[9px]"
-          style={{ color, borderColor: `${color}44`, backgroundColor: `${color}15` }}
-        >
-          {count}
-        </span>
-      )}
-    </div>
-  </div>
-);
-
-/** A leaf inside a folder: one module you can add to the chain. */
-const LeafRow: React.FC<{ label: string; title?: string; onClick: () => void }> = ({
-  label,
-  title,
-  onClick,
-}) => (
-  <button
-    onClick={onClick}
-    title={title}
-    className="flex w-full items-center gap-1.5 border border-[#14141E] bg-[#0A0A0F] px-2 py-0.5 text-left text-[#A5A5B5] transition hover:border-[#222230] hover:text-[#00F0FF] pixel-btn"
-  >
-    <span className="text-[9px] text-[#8E8E93]">•</span>
-    <span className="truncate text-[10px]">{label}</span>
-  </button>
-);
-
 interface AtelierColumnProps {
   sample: SampleItem | null;
   onSaveAsNewSample: (sample: SampleItem) => void;
@@ -225,7 +167,13 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   );
 
   // The chain lives as long as the column does, which is as long as the app.
-  const live = useLiveRack(peekSampleAudio(sample), true);
+  /**
+   * The OP-1 window carries the same rack, on whichever pad is being worked
+   * on. Two live racks over one chain would each hold a source node and fight
+   * over it, so this one steps back while that window is in front.
+   */
+  const op1StudioOpen = useUiStore((s) => s.modals.op1Studio);
+  const live = useLiveRack(peekSampleAudio(sample), !op1StudioOpen);
   const [isRendering, setIsRendering] = useState(false);
 
   // The engines are playable while their folder is open. Closed, they release
