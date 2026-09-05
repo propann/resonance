@@ -1,6 +1,7 @@
 import { SampleItem, SampleType } from '../types/sample';
 import { audioEngine } from './audioEngine';
 import { audioBufferToWavBlob } from './audioConverter';
+import { loadSampleAudio } from './sampleAudio';
 import {
   encodeOp1DrumPatch,
   encodeOp1SamplerPatch,
@@ -80,7 +81,23 @@ export const OP1_DEFAULT_CATEGORIES: { padIndex: number; suggestedType: SampleTy
 
 /**
  * Creates a combined 12.0s audio buffer containing up to 24 sounds sequentially arranged.
+/**
+ * The same slots, each with its audio to hand.
+ *
+ * A slot filled from the library carries a `sampleItem` and no buffer — the
+ * manifest never held any — so a kit assembled from the library came out as
+ * twenty-four empty pads. Returns copies: the caller's slices are React state.
  */
+export async function withLoadedSlices(slices: Op1DrumSlice[]): Promise<Op1DrumSlice[]> {
+  return Promise.all(
+    slices.map(async (slice) =>
+      slice.audioBuffer || !slice.sampleItem
+        ? slice
+        : { ...slice, audioBuffer: await loadSampleAudio(slice.sampleItem) }
+    )
+  );
+}
+
 export async function buildOp1DrumBuffer(
   slices: Op1DrumSlice[],
   options?: {
@@ -97,8 +114,10 @@ export async function buildOp1DrumBuffer(
   const maxSec = options?.maxTotalDurationSec ?? 12.0;
   const numChannels = options?.useMono ? 1 : 2;
 
+  const loaded = await withLoadedSlices(slices);
+
   // Filter out active slices
-  const activeSlices = slices.filter((s) => s.audioBuffer || (s.sampleItem && s.sampleItem.audioBuffer));
+  const activeSlices = loaded.filter((s) => s.audioBuffer || (s.sampleItem && s.sampleItem.audioBuffer));
 
   // Determine duration per slice so total fits within maxSec
   let currentOffsetSec = 0;
@@ -106,7 +125,7 @@ export async function buildOp1DrumBuffer(
 
   // Calculate total raw duration
   let totalRawDuration = 0;
-  for (const s of slices) {
+  for (const s of loaded) {
     const buf = s.audioBuffer || s.sampleItem?.audioBuffer;
     if (buf) {
       totalRawDuration += Math.min(buf.duration, 2.5);
@@ -119,7 +138,7 @@ export async function buildOp1DrumBuffer(
   const scale = totalRawDuration > maxSec ? maxSec / totalRawDuration : 1.0;
 
   for (let i = 0; i < 24; i++) {
-    const s = slices[i] || {
+    const s = loaded[i] || {
       id: `pad-${i}`,
       name: OP1_DEFAULT_CATEGORIES[i].label,
       type: OP1_DEFAULT_CATEGORIES[i].suggestedType,

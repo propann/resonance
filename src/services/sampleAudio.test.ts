@@ -32,7 +32,7 @@ beforeEach(() => {
 describe('loadSampleAudio', () => {
   it('hands back audio the sample already carries, touching no disk', async () => {
     const recorded = sound();
-    const buffer = await loadSampleAudio('/lib', item({ audioBuffer: recorded }));
+    const buffer = await loadSampleAudio(item({ audioBuffer: recorded }));
     expect(buffer).toBe(recorded);
     expect(readLibraryAudioFile).not.toHaveBeenCalled();
   });
@@ -40,7 +40,7 @@ describe('loadSampleAudio', () => {
   it('hands back a cached buffer, touching no disk', async () => {
     const kick = sound();
     cacheBuffer('01_KICKS/kick.wav', kick);
-    const buffer = await loadSampleAudio('/lib', item({ diskPath: '01_KICKS/kick.wav' }));
+    const buffer = await loadSampleAudio(item({ diskPath: '01_KICKS/kick.wav' }));
     expect(buffer).toBe(kick);
     expect(readLibraryAudioFile).not.toHaveBeenCalled();
   });
@@ -51,9 +51,9 @@ describe('loadSampleAudio', () => {
     decodeAudioData.mockResolvedValue(decoded);
 
     const sample = item({ diskPath: '01_KICKS/kick.wav' });
-    expect(await loadSampleAudio('/lib', sample)).toBe(decoded);
+    expect(await loadSampleAudio(sample)).toBe(decoded);
     // Second time round it comes from the cache, not from another read.
-    expect(await loadSampleAudio('/lib', sample)).toBe(decoded);
+    expect(await loadSampleAudio(sample)).toBe(decoded);
     expect(readLibraryAudioFile).toHaveBeenCalledTimes(1);
   });
 
@@ -64,8 +64,8 @@ describe('loadSampleAudio', () => {
 
     const sample = item({ diskPath: '02_LOOPS/loop.wav' });
     const [first, second] = await Promise.all([
-      loadSampleAudio('/lib', sample),
-      loadSampleAudio('/lib', sample),
+      loadSampleAudio(sample),
+      loadSampleAudio(sample),
     ]);
 
     expect(first).toBe(second);
@@ -73,20 +73,20 @@ describe('loadSampleAudio', () => {
   });
 
   it('has nothing to offer for a sample that never touched disk', async () => {
-    expect(await loadSampleAudio('/lib', item({ name: 'take 1' }))).toBeUndefined();
-    expect(await loadSampleAudio(null, item({ diskPath: 'a.wav' }))).toBeUndefined();
-    expect(await loadSampleAudio('/lib', null)).toBeUndefined();
+    expect(await loadSampleAudio(item({ name: 'take 1' }))).toBeUndefined();
+    expect(await loadSampleAudio(item({ diskPath: undefined }))).toBeUndefined();
+    expect(await loadSampleAudio(null)).toBeUndefined();
   });
 
   it('gives up quietly on an unreadable file rather than throwing at the caller', async () => {
     readLibraryAudioFile.mockRejectedValue(new Error('disparu'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(await loadSampleAudio('/lib', item({ diskPath: 'gone.wav' }))).toBeUndefined();
+    expect(await loadSampleAudio(item({ diskPath: 'gone.wav' }))).toBeUndefined();
     // The failure is not remembered: a later attempt tries the file again.
     readLibraryAudioFile.mockResolvedValue(fileOf());
     decodeAudioData.mockResolvedValue(sound());
-    expect(await loadSampleAudio('/lib', item({ diskPath: 'gone.wav' }))).toBeDefined();
+    expect(await loadSampleAudio(item({ diskPath: 'gone.wav' }))).toBeDefined();
   });
 });
 

@@ -9,7 +9,6 @@ import { SampleItem, FilterState } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { audioBufferToWavBlob, triggerFileDownload } from '../services/audioConverter';
 import { loadSampleAudio, peekSampleAudio } from '../services/sampleAudio';
-import type { LibraryRoot } from '../services/localLibrary';
 import { SampleRow } from './SampleRow';
 import { openSampleModal } from '../stores/sampleTargetStore';
 import {
@@ -31,8 +30,6 @@ interface SampleTableProps {
   selectedSampleIds: string[];
   onToggleSelectSample: (sampleId: string) => void;
   onSelectAllSamples: (select: boolean) => void;
-  /** Needed to read a row's file: rows arrive from the manifest without audio. */
-  libraryRoot: LibraryRoot | null;
 }
 
 export const SampleTable: React.FC<SampleTableProps> = ({
@@ -46,7 +43,6 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   selectedSampleIds,
   onToggleSelectSample,
   onSelectAllSamples,
-  libraryRoot,
 }) => {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
@@ -192,17 +188,17 @@ export const SampleTable: React.FC<SampleTableProps> = ({
       // A row almost never carries its own audio — library entries are hydrated
       // from the manifest without any. This used to be `if (!sample.audioBuffer)
       // return`, so the button silently did nothing for every sample on disk.
-      const buffer = await loadSampleAudio(libraryRoot, sample);
+      const buffer = await loadSampleAudio(sample);
       if (!buffer) return;
       audioEngine.play(buffer, sample.id);
     },
-    [onSelectSample, libraryRoot]
+    [onSelectSample]
   );
 
   const handleDownloadSingleWav = useCallback(
     async (e: React.MouseEvent, sample: SampleItem) => {
       e.stopPropagation();
-      const buffer = await loadSampleAudio(libraryRoot, sample);
+      const buffer = await loadSampleAudio(sample);
       if (!buffer) return;
       const blob = audioBufferToWavBlob(buffer, {
         bitDepth: 24,
@@ -211,7 +207,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
       });
       triggerFileDownload(blob, `${sample.name}_24bit.wav`);
     },
-    [libraryRoot]
+    []
   );
 
   const isAllSelected = samples.length > 0 && selectedSampleIds.length === samples.length;

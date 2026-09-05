@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { BatchConvertSettings, HardwarePreset, SampleItem, SliceRegion } from '../types/sample';
 import { audioEngine } from './audioEngine';
 import { batchGenerateOp1Kits } from './op1PatchEncoder';
+import { loadSampleAudio } from './sampleAudio';
 import {
   EP133_SAMPLE_RATE,
   ep133CategoryFolder,
@@ -241,7 +242,8 @@ export async function exportSlicesZip(
   sample: SampleItem,
   slices: SliceRegion[]
 ): Promise<Blob> {
-  if (!sample.audioBuffer) {
+  const audioBuffer = await loadSampleAudio(sample);
+  if (!audioBuffer) {
     throw new Error('AudioBuffer not loaded for sample');
   }
 
@@ -251,7 +253,7 @@ export async function exportSlicesZip(
 
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i];
-    const sliceBlob = audioBufferToWavBlob(sample.audioBuffer, {
+    const sliceBlob = audioBufferToWavBlob(audioBuffer, {
       startSec: slice.startSec,
       endSec: slice.endSec,
       bitDepth: 24,
@@ -299,7 +301,10 @@ export async function exportEp133ProjectPack(
   for (let i = 0; i < samples.length; i++) {
     const sample = samples[i];
     if (onProgress) onProgress(i + 1, samples.length, sample.name);
-    if (!sample.audioBuffer) continue;
+    // Library samples come from the manifest with no audio attached, so this
+    // used to skip every one of them and export an almost empty pack.
+    const audioBuffer = await loadSampleAudio(sample);
+    if (!audioBuffer) continue;
 
     const subFolder = epFolder.folder(ep133CategoryFolder(sample.type)) || epFolder;
 
@@ -387,9 +392,10 @@ export async function processBatchConvert(
   for (let i = 0; i < samples.length; i++) {
     const sample = samples[i];
     if (onProgress) onProgress(i + 1, total, sample.name);
-    if (!sample.audioBuffer) continue;
+    const audioBuffer = await loadSampleAudio(sample);
+    if (!audioBuffer) continue;
 
-    const wavBlob = audioBufferToWavBlob(sample.audioBuffer, {
+    const wavBlob = audioBufferToWavBlob(audioBuffer, {
       bitDepth: settings.bitDepth,
       sampleRate: settings.sampleRate === 'original' ? sample.sampleRate : settings.sampleRate,
       normalize: settings.normalize,
@@ -447,9 +453,10 @@ export async function exportMultipleWavsAsZip(
     if (options?.onProgress) {
       options.onProgress(i + 1, total, s.name);
     }
-    if (!s.audioBuffer) continue;
+    const audioBuffer = await loadSampleAudio(s);
+    if (!audioBuffer) continue;
 
-    const wavBlob = audioBufferToWavBlob(s.audioBuffer, {
+    const wavBlob = audioBufferToWavBlob(audioBuffer, {
       bitDepth: 24,
       sampleRate: s.sampleRate,
       normalize: false,

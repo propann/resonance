@@ -38,7 +38,6 @@ const Op1KitBuilderModal = lazy(() => import('./components/Op1KitBuilderModal').
 const SmartIngestionModal = lazy(() => import('./components/SmartIngestionModal').then((m) => ({ default: m.SmartIngestionModal })));
 const LibraryDedupeModal = lazy(() => import('./components/LibraryDedupeModal').then((m) => ({ default: m.LibraryDedupeModal })));
 const PatchesModal = lazy(() => import('./components/PatchesModal').then((m) => ({ default: m.PatchesModal })));
-const LayerSynthRackModal = lazy(() => import('./components/LayerSynthRackModal').then((module) => ({ default: module.LayerSynthRackModal })));
 
 /**
  * Mounts a lazily-loaded modal only while it is open, so its chunk is fetched
@@ -188,7 +187,7 @@ export default function App() {
     // moving through a folder mostly consists of.
     if (!selected || peekSampleAudio(selected)) return;
     let cancelled = false;
-    void loadSampleAudio(libraryRoot, selected).then((buffer) => {
+    void loadSampleAudio(selected).then((buffer) => {
       if (cancelled || !buffer) return;
       // Deliberately NOT written into `samples`.
       //
@@ -351,6 +350,32 @@ export default function App() {
       snap ? withLoadedAudio(samples.find((s) => s.id === snap.id) ?? snap) : null,
     [samples, withLoadedAudio]
   );
+
+  /**
+   * The ticked samples, for calibrating a whole selection at once. Only
+   * gathered while that modal is open: it is a pass over the whole library.
+   */
+  const selectedSamplesForLoudness = useMemo(() => {
+    if (!modals.loudnessModal || selectedSampleIds.length === 0) return undefined;
+    const wanted = new Set(selectedSampleIds);
+    return samples.filter((s) => wanted.has(s.id)).map((s) => withLoadedAudio(s)!);
+  }, [modals.loudnessModal, selectedSampleIds, samples, withLoadedAudio]);
+
+  /**
+   * Read the audio for whichever sample a sample-scoped modal is pointed at.
+   *
+   * These modals can be opened from a table row that is not the selected one —
+   * the DSP and calibration buttons do exactly that — and their target would
+   * then arrive with no sound at all, the manifest holding none.
+   */
+  useEffect(() => {
+    for (const target of [sampleForDsp, sampleForLoudness, slicerSample]) {
+      if (!target || peekSampleAudio(target)) continue;
+      void loadSampleAudio(target).then((buffer) => {
+        if (buffer) setLoadedAudioVersion((version) => version + 1);
+      });
+    }
+  }, [sampleForDsp, sampleForLoudness, slicerSample]);
 
   // Restore the last-worked sample once the library is populated, and persist
   // the current selection so a fresh launch lands on it.
@@ -853,24 +878,6 @@ export default function App() {
     }
   };
 
-  const handleCreateSynthSample = (audioBuffer: AudioBuffer, name: string) => {
-    const metrics = calculateAudioMetrics(audioBuffer);
-    const blob = audioBufferToWavBlob(audioBuffer, { bitDepth: 24, normalize: false });
-    const sample: SampleItem = {
-      id: `synth-${Date.now().toString(36)}`,
-      name,
-      originalFileName: `${name}.wav`,
-      format: 'wav', size: blob.size, duration: audioBuffer.duration,
-      sampleRate: audioBuffer.sampleRate, bitDepth: 24, channels: audioBuffer.numberOfChannels,
-      type: 'lead', category: 'one-shot', isLoop: false, genre: 'Universal / Multi-Genre',
-      tags: ['synth', 'layer-rack', 'created'], folderId: 'f-os-melodic', folderPath: '/01_ONE_SHOTS/03_MELODIC',
-      favorite: false, rating: 0, spectralCentroid: metrics.spectralCentroid, dynamicRangeDb: metrics.dynamicRangeDb,
-      peakDb: metrics.peakDb, rmsDb: metrics.rmsDb, lufs: metrics.lufs, loudnessGainDb: metrics.loudnessGainDb,
-      zeroCrossingRate: metrics.zeroCrossingRate, slices: [], blobUrl: URL.createObjectURL(blob), audioBuffer, dateAdded: Date.now(),
-    };
-    void handleSaveProcessedAsNew(sample);
-  };
-
   const handleCreateFolder = (name: string, color: string) => {
     const newF: FolderItem = {
       id: `folder-${Date.now().toString(36)}`,
@@ -1093,7 +1100,6 @@ export default function App() {
                 selectedSampleIds={selectedSampleIds}
                 onToggleSelectSample={handleToggleSelectSample}
                 onSelectAllSamples={handleSelectAllSamples}
-                libraryRoot={libraryRoot}
               />
             </>
           ) : (
@@ -1242,6 +1248,32 @@ export default function App() {
       </LazyModal>
 
       {/* Studio DSP Audio Analysis Modal */}
+      <LazyModal open={modals.dspModal}>
+        <AudioAnalysisModal
+          isOpen={modals.dspModal}
+          onClose={() => {
+            closeModal('dspModal');
+            setSampleTarget('dsp', null);
+          }}
+          sample={liveSample(sampleForDsp)}
+          onUpdateSample={handleUpdateSampleFromDsp}
+        />
+      </LazyModal>
+
+      {/* Loudness calibration against a broadcast standard */}
+      <LazyModal open={modals.loudnessModal}>
+        <LoudnessStandardModal
+          isOpen={modals.loudnessModal}
+          onClose={() => {
+            closeModal('loudnessModal');
+            setSampleTarget('loudness', null);
+          }}
+          sample={liveSample(sampleForLoudness)}
+          allSelectedSamples={selectedSamplesForLoudness}
+          onApplyNormalization={handleApplyLoudnessNormalization}
+          onBatchApplyNormalization={handleBatchApplyLoudnessNormalization}
+        />
+      </LazyModal>
 
       {/* Keyboard Shortcuts Modal */}
       <LazyModal open={modals.shortcuts}>

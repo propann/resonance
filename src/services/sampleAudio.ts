@@ -13,7 +13,7 @@
  */
 
 import { getCachedBuffer, cacheBuffer, cacheBlobUrl } from './audioBufferCache';
-import { readLibraryAudioFile, type LibraryRoot } from './localLibrary';
+import { readLibraryAudioFile } from './localLibrary';
 import { audioEngine } from './audioEngine';
 import type { SampleItem } from '../types/sample';
 
@@ -30,16 +30,21 @@ const pending = new Map<string, Promise<AudioBuffer | undefined>>();
  * The decoded audio for a sample: from the sample itself, from the cache, or
  * read from disk — in that order. `undefined` when there is nothing to read,
  * which is the case for a sample that only ever existed in memory.
+ *
+ * No work folder is passed in because there is nothing to choose: the desktop
+ * bridge resolves a `diskPath` against the folder it has adopted, and
+ * `readLibraryAudioFile` ignores the root handed to it. Asking every caller
+ * for one would have meant threading it through five components to reach the
+ * batch exporters.
  */
 export async function loadSampleAudio(
-  libraryRoot: LibraryRoot | null,
   sample: SampleItem | null | undefined
 ): Promise<AudioBuffer | undefined> {
   if (!sample) return undefined;
   if (sample.audioBuffer) return sample.audioBuffer;
 
   const path = sample.diskPath;
-  if (!path || !libraryRoot) return undefined;
+  if (!path) return undefined;
 
   const cached = getCachedBuffer(path);
   if (cached) return cached;
@@ -49,7 +54,7 @@ export async function loadSampleAudio(
 
   const decode = (async () => {
     try {
-      const file = await readLibraryAudioFile(libraryRoot, path);
+      const file = await readLibraryAudioFile('', path);
       const buffer = await audioEngine.decodeAudioData(await file.arrayBuffer());
       cacheBuffer(path, buffer);
       cacheBlobUrl(path, URL.createObjectURL(file), file.size);
