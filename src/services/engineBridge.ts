@@ -14,6 +14,15 @@ export interface EngineBridge {
   noteOn(note: number, velocity: number): void;
   noteOff(note: number): void;
   render(durationSeconds: number, sampleRate: number): Promise<AudioBuffer>;
+  /**
+   * Engines that transform a sound rather than make one — Clouds grains what
+   * it is fed. Absent on the voices, which have nothing to transform.
+   *
+   * The buffer comes back at the rate it went in: the engines run at their own
+   * fixed rate on the hardware, and resampling around that is the bridge's
+   * job, not the caller's.
+   */
+  process?(input: AudioBuffer): Promise<AudioBuffer>;
   dispose(): void;
 }
 

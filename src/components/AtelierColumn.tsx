@@ -84,6 +84,7 @@ const CATEGORIES: Category[] = [
 const NATIVE_ENGINES: Array<{ id: NativeEngineId; label: string }> = [
   { id: 'mutable-plaits', label: 'Plaits (Mutable)' },
   { id: 'mutable-rings', label: 'Rings (Mutable)' },
+  { id: 'mutable-clouds', label: 'Clouds (Mutable)' },
 ];
 
 const OPEN_KEY = 'resonance-atelier-tree-v2';
@@ -428,6 +429,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
                 id={engine.id}
                 label={engine.label}
                 note={(player.octave + 1) * 12}
+                sampleBuffer={sample?.audioBuffer}
                 onRendered={handleEngineRendered}
               />
             ))}

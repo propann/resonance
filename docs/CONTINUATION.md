@@ -121,6 +121,27 @@ Candidats suivants dans `vendor/mutable-eurorack` : Clouds (granulaire — mais
 il traite un flux entrant, le contrat n'a pas encore de notion d'entree),
 Elements, Braids.
 
+### Clouds : le premier moteur qui *traite* au lieu de fabriquer
+
+Clouds ne produit aucun son propre — il granule ce qu'on lui donne. C'est le
+plus utile des trois pour une bibliotheque de samples, et il a demande
+d'etendre le contrat : `EngineBridge.process?(input): Promise<AudioBuffer>`,
+absent des voix qui n'ont rien a transformer. `NativeEngineFolder` bascule
+tout seul : si le pont expose `process`, cliquer un mode passe le sample
+charge dedans au lieu de rendre depuis rien.
+
+**Clouds tourne en 32 kHz**, pas 48. Le pont reechantillonne des deux cotes ;
+sans ca le sample revenait une quinte trop bas. Verifie : 48 kHz en entree,
+48 kHz en sortie, duree 1,000 s preservee.
+
+**Trois modes sur quatre.** Granulaire (RMS 0,178), delai boucle (0,144) et
+spectral (0,192) transforment bien la source (0,25). **L'etirement temporel
+rend du silence** — RMS 0,003, et exactement 0 a la deuxieme passe. Hypothese
+testee et fausse : Clouds recarve ses tampons dans `Prepare` lors d'un
+changement de mode, mais ajouter 64 cycles de prechauffage n'y change rien.
+Le mode est **retire de la liste** plutot qu'expose muet ; `MODE_INDEX` mappe
+nos trois entrees sur les index 0, 2 et 3 du firmware. A reprendre.
+
 ### Dexed
 
 Toujours pas fait : JUCE, autrement plus lourd que Plaits. Le contrat

@@ -19,7 +19,7 @@ set -euo pipefail
 
 ENGINE="${1:-}"
 if [ -z "$ENGINE" ]; then
-  echo "usage: $0 <plaits|rings>" >&2
+  echo "usage: $0 <plaits|rings|clouds>" >&2
   exit 2
 fi
 
@@ -45,6 +45,11 @@ case "$ENGINE" in
     OUT_ID="mutable-rings"
     EXTRA_SOURCES="$VENDOR/rings/resources.cc"
     EXPORTS="['_rings_init','_rings_set_model','_rings_set_polyphony','_rings_set_patch','_rings_strum','_rings_render','_rings_sample_rate','_malloc','_free']"
+    ;;
+  clouds)
+    OUT_ID="mutable-clouds"
+    EXTRA_SOURCES="$VENDOR/clouds/resources.cc"
+    EXPORTS="['_clouds_init','_clouds_set_mode','_clouds_set_params','_clouds_set_freeze','_clouds_process','_clouds_sample_rate','_malloc','_free']"
     ;;
   *)
     echo "moteur inconnu : $ENGINE" >&2

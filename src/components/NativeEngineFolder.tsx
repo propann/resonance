@@ -20,6 +20,11 @@ export interface NativeEngineFolderProps {
   label: string;
   /** MIDI note to render at — the keyboard's current octave. */
   note: number;
+  /**
+   * The sound currently on the wave. Engines that transform rather than make
+   * sound work on this; without one they have nothing to do.
+   */
+  sampleBuffer?: AudioBuffer;
   /** How long a model is rendered for, in seconds. */
   seconds?: number;
   /** Hand the rendered buffer over; the column turns it into a sample. */
@@ -30,6 +35,7 @@ export const NativeEngineFolder: React.FC<NativeEngineFolderProps> = ({
   id,
   label,
   note,
+  sampleBuffer,
   seconds = 2,
   onRendered,
 }) => {
@@ -51,26 +57,40 @@ export const NativeEngineFolder: React.FC<NativeEngineFolderProps> = ({
     }
   }, [bridge, id, label]);
 
-  const renderModel = useCallback(
+  /** Engines that transform a sound need one on the wave to work from. */
+  const isProcessor = Boolean(bridge?.process);
+
+  /** Each engine names its model parameter differently; the list is the same. */
+  const modelParam = id === 'mutable-plaits' ? 'engine' : 'model';
+
+  const runModel = useCallback(
     async (index: number) => {
       if (!bridge) return;
+      const name = bridge.models?.[index] ?? `modele-${index}`;
+      if (bridge.process && !sampleBuffer) {
+        toast.info(`${label} transforme un son : choisis d'abord un sample.`);
+        return;
+      }
       setBusy(true);
       try {
-        // Every engine exposes its model list the same way, whatever it calls
-        // the parameter underneath.
-        bridge.setParameter(id === 'mutable-rings' ? 'model' : 'engine', index);
-        bridge.noteOn(note, 110);
-        const buffer = await bridge.render(seconds, 48000);
-        bridge.noteOff(note);
-        onRendered(id, bridge.models?.[index] ?? `modele-${index}`, buffer);
+        bridge.setParameter(modelParam, index);
+        const buffer = bridge.process
+          ? await bridge.process(sampleBuffer!)
+          : await (async () => {
+              bridge.noteOn(note, 110);
+              const rendered = await bridge.render(seconds, 48000);
+              bridge.noteOff(note);
+              return rendered;
+            })();
+        onRendered(id, name, buffer);
       } catch (error) {
-        console.error(`Rendu ${id} impossible`, error);
+        console.error(`Moteur ${id} : traitement impossible`, error);
         toast.error('Le rendu du moteur a échoué.');
       } finally {
         setBusy(false);
       }
     },
-    [bridge, id, note, seconds, onRendered]
+    [bridge, id, label, modelParam, note, sampleBuffer, seconds, onRendered]
   );
 
   return (
@@ -95,9 +115,13 @@ export const NativeEngineFolder: React.FC<NativeEngineFolderProps> = ({
           {(bridge.models ?? []).map((name, index) => (
             <button
               key={name}
-              onClick={() => void renderModel(index)}
+              onClick={() => void runModel(index)}
               disabled={busy}
-              title={`Rendre ${seconds} s de ce modèle sur l'onde`}
+              title={
+                isProcessor
+                  ? 'Passer le sample chargé dans ce mode'
+                  : `Rendre ${seconds} s de ce modèle sur l'onde`
+              }
               className="flex w-full items-center gap-1.5 border border-[#14141E] bg-[#0A0A0F] px-2 py-0.5 text-left text-[#A5A5B5] transition hover:border-[#222230] hover:text-[#00F0FF] disabled:opacity-40 pixel-btn"
             >
               <span className="text-[9px] text-[#8E8E93]">•</span>
