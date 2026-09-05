@@ -38,7 +38,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 ## 2026-09-05 — L'application était bloquée 97 % du temps
 
-Branche `worktree-trieuse-coherence`, quatorze commits, non fusionnée.
+Branche `worktree-trieuse-coherence`, seize commits, non fusionnée.
 
 Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
 la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
@@ -137,7 +137,7 @@ Lu sur les 768 patches du pack de l'utilisateur (`~/Downloads/OP-1`) :
 l'audio** : `drum_version` → kit, `synth_version` + `type` → patch synthé et
 son moteur. Validé sur les 768 fichiers, zéro désaccord avec les dossiers du
 pack. Les patches synthé ont leur dossier :
-`03_HARDWARE/OP-1_SYNTH_PATCHES` (avant, tout allait dans le dossier drum).
+`03_HARDWARE/OP-1/synth` (avant, tout allait dans le dossier drum).
 
 **Piège des marqueurs de pads** : ce ne sont pas des positions d'échantillon.
 Ils sont sur une **timeline fixe de 12 s** (fin = 2147483646) quelle que soit
@@ -151,6 +151,34 @@ v3 jamais. Les fins sont bornées à l'audio, comme le fait la machine.
 constructeur compresse ses sons pour tenir dans 12 s, donc le composite est
 toujours ≤ 12 s et une jauge qui le lirait n'afficherait jamais de
 dépassement. Vérifié dans l'app : `29.12s / 12.00s — 17.12s de trop`.
+
+### L'arborescence OP-1, et le rack dans la fenêtre de création
+
+L'arborescence copie **le disque de la machine** : `03_HARDWARE/OP-1/drum` et
+`03_HARDWARE/OP-1/synth`, rien d'autre. Ce n'est pas inventé — c'est la forme
+du pack de 768 patches. Un dossier fini se glisse donc tel quel sur l'OP-1 ;
+toute autre disposition demanderait de réorganiser à la main au transfert,
+c'est-à-dire exactement le travail qu'on veut éviter. (Les anciens
+`OP-1_DRUM_PATCHES` / `OP-1_SYNTH_PATCHES` étaient vides ; le balayage des
+dossiers vides les emporte.)
+
+`components/ToolTree.tsx` : les lignes de dossier (`FolderRow`, `LeafRow`,
+`GroupLabel`) sortent de `AtelierColumn` pour être partagées. La colonne
+d'atelier se lit comme l'arbre de bibliothèque en face d'elle ; tout panneau
+qui propose des outils doit se lire pareil, et partager les lignes est ce qui
+l'empêche de dériver vers un « presque, mais pas tout à fait » pareil.
+
+`components/Op1RackPanel.tsx` : troisième colonne du constructeur de kit. Même
+chaîne, même store que la colonne d'atelier — une chaîne construite d'un côté
+est celle que l'autre voit. **Un seul rack sonne à la fois** : la colonne se
+retire (`useLiveRack(..., !op1Studio)`) pendant que la fenêtre est devant, sinon
+les deux tiendraient chacun un nœud source et se les disputeraient.
+`APPLIQUER AU PAD` rend la chaîne, la pose sur le pad et **recompile la bande** :
+le son traité n'a pas la même longueur que celui qu'il remplace, donc les
+marqueurs et la jauge doivent suivre.
+
+Vérifié dans l'app : fenêtre ouverte en 4 ms, `RACK · C1 · <nom du pad>`,
+dossier EFFETS avec ses 24 effets par famille, jauge `29.12s / 12.00s`.
 
 ### Trois régressions attrapées sur le build installé
 
