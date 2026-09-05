@@ -15,7 +15,7 @@ cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
-# doit tout passer : 0 erreur, 308 tests
+# doit tout passer : 0 erreur, 318 tests
 ```
 
 - `main` @ `0317b52` (2026-09-05), poussé. Build installé depuis
@@ -38,7 +38,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 ## 2026-09-05 — L'application était bloquée 97 % du temps
 
-Branche `worktree-trieuse-coherence`, trois commits, non fusionnée.
+Branche `worktree-trieuse-coherence`, six commits, non fusionnée.
 
 Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
 la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
@@ -94,22 +94,48 @@ Deux hypothèses tombées sur les chiffres : la latence de sortie (10 ms) et le
 | Clic sur une ligne | bloqué derrière 4,4 s | **3 ms** |
 | Bouton play d'une ligne | ne faisait rien | joue |
 
+### Puis, dans la foulée — la même cause, trois fois de plus
+
+Le bouton play était la pointe d'un motif : partout où le code lisait
+`sample.audioBuffer` sur un sample venu de la bibliothèque, il trouvait
+`undefined` et abandonnait en silence.
+
+4. **Les exports par lot n'exportaient presque rien** (`de89f03`).
+   `exportEp133ProjectPack`, `processBatchConvert`, `exportMultipleWavsAsZip`,
+   `exportSlicesZip` et les kits OP-1 faisaient tous
+   `if (!sample.audioBuffer) continue`. Ils passent par `loadSampleAudio` ; le
+   chemin OP-1 résout ses 24 pads en un seul endroit, `withLoadedSlices`.
+   `loadSampleAudio` **perd son argument dossier de travail** : il ne servait à
+   rien (`readLibraryAudioFile` ignore la racine qu'on lui passe — le processus
+   principal résout contre le dossier adopté) et l'aurait fallu faire traverser
+   cinq composants pour atteindre les exports.
+5. **Les modales DSP et calibrage ouvraient le vide** (`de89f03`). Câblées aux
+   boutons de chaque ligne, montées nulle part. Montées, avec un effet qui lit
+   l'audio de leur cible à l'ouverture — le bouton DSP d'une ligne ne pointe pas
+   forcément sur le sample sélectionné. Au passage, câblage mort de
+   `LayerSynthRackModal` retiré (fenêtre volontairement fondue dans la colonne
+   d'atelier ; le fichier du composant reste, le supprimer est une décision
+   produit).
+6. **0,0 LUFS partout** (`208b8f7`), trouvé en ouvrant la modale enfin
+   accessible. `sampleItem?.lufs ?? estimation` — or un sample hydraté porte
+   `lufs: 0` (le manifeste ne stocke pas la loudness, seulement dans les tags),
+   et `??` ne s'efface que devant `null`. Rien de réel ne mesure 0 LUFS : le
+   silence numérique donne −70. Vérifié dans l'app : **−22,2 LUFS**.
+
 ### Reste à faire
 
 - `audioBuffer` vit encore dans `SampleItem` : deux mécanismes coexistent pour
-  trouver un buffer. Les exports qui itèrent tout le tableau
-  (`exportEp133ProjectPack`, `processBatchConvert`, `exportMultipleWavsAsZip`,
-  `batchGenerateOp1Kits`) font tous `if (!sample.audioBuffer) continue` — donc
-  **ils exportent presque rien** pour une bibliothèque venue du disque. Même
-  bug de fond que le bouton play, à plus grande échelle.
-- `LoudnessStandardModal` et `AudioAnalysisModal` ne sont **montés nulle part** :
-  les boutons DSP / calibrage de `SampleRow` n'ouvrent rien.
+  trouver un buffer (le champ, et le cache via `loadSampleAudio`). Les trois
+  bugs ci-dessus sont des symptômes de cette dualité. Le nettoyer est l'étape 5
+  du plan de perf — 164 références, 12 fichiers.
+- Les modales ne se ferment pas avec Échap (constaté, pas corrigé).
+- `src/components/LayerSynthRackModal.tsx` n'est plus référencé nulle part.
 
 ## État actuel
 
 Application desktop **Electron** (React 19 / Vite 6 / Tailwind 4 / Tone.js).
 Portes de vérification à chaque commit : `tsc --noEmit` · `eslint .` (0 erreur) ·
-`vitest run` (269 tests) · `vite build`.
+`vitest run` (318 tests) · `vite build`.
 
 ### Fait — phases 0 à 5 de la refonte
 
