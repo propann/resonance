@@ -51,6 +51,19 @@ const PARAMS = {
   lpgColour: { min: 0, max: 1, value: 0.5 },
 };
 
+/**
+ * The knobs, as the interface should show them. Picking a model is only half
+ * of Plaits: all sixteen run through the same three controls, and without them
+ * the engine offers sixteen fixed sounds instead of sixteen instruments.
+ */
+export const PLAITS_PARAM_SPECS = [
+  { key: 'harmonics', label: 'Harmoniques', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'timbre', label: 'Timbre', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'morph', label: 'Morph', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'decay', label: 'Décroissance', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'lpgColour', label: 'Couleur LPG', min: 0, max: 1, step: 0.01, value: 0.5 },
+];
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 class PlaitsBridge {
@@ -58,6 +71,7 @@ class PlaitsBridge {
     this.id = 'mutable-plaits';
     this.version = '1.0.0';
     this.models = PLAITS_MODELS;
+    this.paramSpecs = PLAITS_PARAM_SPECS;
     this.module = null;
     this.params = Object.fromEntries(
       Object.entries(PARAMS).map(([key, spec]) => [key, spec.value])

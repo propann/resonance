@@ -51,6 +51,21 @@ const PARAMS = {
   reverb: { min: 0, max: 1, value: 0 },
 };
 
+/**
+ * The knobs, as the interface should show them. Density is first among equals:
+ * below about 0.7 the cloud is too sparse to hear at all.
+ */
+export const CLOUDS_PARAM_SPECS = [
+  { key: 'density', label: 'Densité', min: 0, max: 1, step: 0.01, value: 0.8 },
+  { key: 'position', label: 'Position', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'size', label: 'Taille', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'texture', label: 'Texture', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'pitch', label: 'Hauteur', min: -24, max: 24, step: 1, value: 0, unit: 'demi-tons' },
+  { key: 'dryWet', label: 'Sec / traité', min: 0, max: 1, step: 0.01, value: 0.75 },
+  { key: 'feedback', label: 'Réinjection', min: 0, max: 1, step: 0.01, value: 0 },
+  { key: 'reverb', label: 'Réverbération', min: 0, max: 1, step: 0.01, value: 0 },
+];
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const OfflineCtx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
@@ -72,6 +87,7 @@ class CloudsBridge {
     this.id = 'mutable-clouds';
     this.version = '1.0.0';
     this.models = CLOUDS_MODES;
+    this.paramSpecs = CLOUDS_PARAM_SPECS;
     this.module = null;
     this.params = Object.fromEntries(
       Object.entries(PARAMS).map(([key, spec]) => [key, spec.value])

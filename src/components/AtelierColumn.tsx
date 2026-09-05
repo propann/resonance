@@ -58,7 +58,7 @@ import { buildOp1QuickKit } from '../services/op1QuickKit';
 
 registerBuiltinModules();
 
-type CategoryId = 'engines' | 'effects' | 'patches' | 'arp' | 'seq';
+type CategoryId = 'engines' | 'effects' | 'arp' | 'seq';
 
 interface Category {
   id: CategoryId;
@@ -73,7 +73,6 @@ interface Category {
 const CATEGORIES: Category[] = [
   { id: 'engines', label: 'MOTEURS', color: '#A855F7' },
   { id: 'effects', label: 'EFFETS', color: '#00F0FF' },
-  { id: 'patches', label: 'PATCHES', color: '#10B981' },
   { id: 'arp', label: 'ARPÉGIATEUR', color: '#FFE600' },
   { id: 'seq', label: 'SÉQUENCEUR', color: '#FF7A00' },
 ];
@@ -89,7 +88,7 @@ const NATIVE_ENGINES: Array<{ id: NativeEngineId; label: string }> = [
   { id: 'mutable-elements', label: 'Elements (Mutable)' },
 ];
 
-const OPEN_KEY = 'resonance-atelier-tree-v2';
+const OPEN_KEY = 'resonance-atelier-tree-v3';
 
 /** Fields a chain that made its own sound needs to become a sample. */
 const SYNTH_SAMPLE_BASE = {
@@ -210,7 +209,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
     } catch {
       /* first run */
     }
-    return { engines: true, effects: false, patches: false, arp: false, seq: false };
+    return { engines: true, effects: false, arp: false, seq: false };
   });
   useEffect(() => {
     try {
@@ -325,9 +324,9 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   const [patches, setPatches] = useState<RackPatch[]>([]);
   const [patchName, setPatchName] = useState('');
   useEffect(() => {
-    if (!open.patches) return;
+    if (!open.effects) return;
     void listRackPatches().then(setPatches).catch(() => setPatches([]));
-  }, [open.patches]);
+  }, [open.effects]);
 
   const handleSavePatch = async () => {
     const name = cleanPatchName(patchName);
@@ -541,19 +540,9 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
                   ? `Banc : ${selfTest.filter((r) => r.ok).length}/${selfTest.length} OK`
                   : 'Tester tous les effets')}
             </button>
-          </div>
-        )}
-
-        {/* ---------------------------------------------------------- PATCHES */}
-        <FolderRow
-          label="PATCHES"
-          color={colorOf('patches')}
-          open={open.patches}
-          count={patches.length}
-          onToggle={() => toggle('patches')}
-        />
-        {open.patches && (
-          <div className="ml-2 space-y-0.5 border-l border-[#22222E] pl-2">
+            <div className="px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-[#55556A]">
+              Patches enregistrés{patches.length > 0 ? ` (${patches.length})` : ''}
+            </div>
             <div className="flex gap-1 py-0.5">
               <input
                 value={patchName}

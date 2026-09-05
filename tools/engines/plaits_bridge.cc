@@ -90,10 +90,18 @@ EMSCRIPTEN_KEEPALIVE void plaits_set_trigger(int on) {
   modulations.trigger_patched = true;
 }
 
-/** Level, 0..1. Dropping it to zero is how a note is released. */
+/**
+ * Level, 0..1 — how hard the voice is played.
+ *
+ * `level_patched` stays false on purpose. Telling Plaits the level input is
+ * patched puts its low-pass gate into VCA mode, following the level rather
+ * than being struck and allowed to fall — which is exactly the fall that
+ * `decay` and `lpg_colour` shape. Patched, those two controls do nothing at
+ * all, which is how they were found to be inert.
+ */
 EMSCRIPTEN_KEEPALIVE void plaits_set_level(float level) {
   modulations.level = level;
-  modulations.level_patched = true;
+  modulations.level_patched = false;
 }
 
 /**
@@ -111,6 +119,12 @@ EMSCRIPTEN_KEEPALIVE void plaits_render(float* out, float* aux, int size) {
                           ? (size - done)
                           : static_cast<int>(plaits::kMaxBlockSize);
     voice.Render(patch, modulations, frames, static_cast<size_t>(block));
+    // The trigger is an edge, not a gate. Held high for the whole render the
+    // low-pass gate never reaches its decay phase, which makes `decay` and
+    // `lpg_colour` — the two controls that only shape that gate — do nothing
+    // at all. Lowering it after the first block is what strikes the voice and
+    // then lets it fall.
+    modulations.trigger = 0.0f;
     for (int i = 0; i < block; ++i) {
       // Plaits speaks signed 16-bit; Web Audio speaks floats.
       out[done + i] = static_cast<float>(frames[i].out) / 32768.0f;

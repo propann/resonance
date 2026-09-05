@@ -36,6 +36,24 @@ const PARAMS = {
   chord: { min: 0, max: 10, value: 0 },
 };
 
+/**
+ * The knobs, as the interface should show them.
+ *
+ * `polyphony` is deliberately absent. Rings accepts one to four strings, but
+ * anything above one renders exact silence here — measured at every setting —
+ * while one string gives 0.054 RMS. Rather than offer a control that mutes the
+ * engine, it stays at one string until the cause is found. `position` is kept
+ * even though it does nothing on the Modal resonator: where a string is
+ * plucked has no meaning there, and it is clearly audible on the string
+ * models (0.0125 to 0.0384 RMS across its range).
+ */
+export const RINGS_PARAM_SPECS = [
+  { key: 'structure', label: 'Structure', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'brightness', label: 'Brillance', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'damping', label: 'Amortissement', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'position', label: 'Position', min: 0, max: 1, step: 0.01, value: 0.5 },
+];
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 class RingsBridge {
@@ -43,6 +61,7 @@ class RingsBridge {
     this.id = 'mutable-rings';
     this.version = '1.0.0';
     this.models = RINGS_MODELS;
+    this.paramSpecs = RINGS_PARAM_SPECS;
     this.module = null;
     this.params = Object.fromEntries(
       Object.entries(PARAMS).map(([key, spec]) => [key, spec.value])

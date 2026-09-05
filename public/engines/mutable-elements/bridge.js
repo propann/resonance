@@ -39,6 +39,27 @@ const PARAMS = {
   strength: { min: 0, max: 1, value: 0.7 },
 };
 
+/**
+ * The knobs, as the interface should show them. The three exciters blend
+ * rather than switch: a bowed string can be breathed on at the same time.
+ *
+ * Seven of the eight change the sound on every model. `position` is the
+ * exception: measured across the full range it moves nothing on Modal, Corde
+ * or Cordes, and only bites on the ominous voice (0.114 to 0.139 RMS). It is
+ * kept rather than hidden — a control that matters on one model out of four is
+ * how the hardware behaves too — but it is not a control to reach for first.
+ */
+export const ELEMENTS_PARAM_SPECS = [
+  { key: 'strike', label: 'Frappe', min: 0, max: 1, step: 0.01, value: 0.8 },
+  { key: 'bow', label: 'Archet', min: 0, max: 1, step: 0.01, value: 0 },
+  { key: 'blow', label: 'Souffle', min: 0, max: 1, step: 0.01, value: 0 },
+  { key: 'geometry', label: 'Géométrie', min: 0, max: 1, step: 0.01, value: 0.3 },
+  { key: 'brightness', label: 'Brillance', min: 0, max: 1, step: 0.01, value: 0.5 },
+  { key: 'damping', label: 'Amortissement', min: 0, max: 1, step: 0.01, value: 0.7 },
+  { key: 'position', label: 'Position', min: 0, max: 1, step: 0.01, value: 0.3 },
+  { key: 'space', label: 'Espace', min: 0, max: 1, step: 0.01, value: 0.3 },
+];
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const OfflineCtx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
 
@@ -59,6 +80,7 @@ class ElementsBridge {
     this.id = 'mutable-elements';
     this.version = '1.0.0';
     this.models = ELEMENTS_MODELS;
+    this.paramSpecs = ELEMENTS_PARAM_SPECS;
     this.module = null;
     this.params = Object.fromEntries(
       Object.entries(PARAMS).map(([key, spec]) => [key, spec.value])

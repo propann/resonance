@@ -48,13 +48,19 @@ export const NativeEngineFolder: React.FC<NativeEngineFolderProps> = ({
   const [bridge, setBridge] = useState<EngineBridge | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Knob positions, mirrored here so the sliders have somewhere to live. */
+  const [knobs, setKnobs] = useState<Record<string, number>>({});
 
   const toggle = useCallback(async () => {
     setOpen((was) => !was);
     if (bridge) return;
     setBusy(true);
     try {
-      setBridge(await loadEngineBridge(id));
+      const loaded = await loadEngineBridge(id);
+      setKnobs(
+        Object.fromEntries((loaded.paramSpecs ?? []).map((spec) => [spec.key, spec.value]))
+      );
+      setBridge(loaded);
     } catch (error) {
       console.error(`Moteur ${id} indisponible`, error);
       toast.error(`${label} n'est pas compilé pour cette version (tools/build-engine.sh).`);
@@ -128,6 +134,14 @@ export const NativeEngineFolder: React.FC<NativeEngineFolderProps> = ({
     }
   }, [bridge, id, label, modelParam, note, onKit]);
 
+  const setKnob = useCallback(
+    (key: string, value: number) => {
+      setKnobs((prev) => ({ ...prev, [key]: value }));
+      bridge?.setParameter(key, value);
+    },
+    [bridge]
+  );
+
   return (
     <>
       <button
@@ -157,6 +171,35 @@ export const NativeEngineFolder: React.FC<NativeEngineFolderProps> = ({
               <span className="text-[9px]">▤</span>
               <span className="truncate text-[10px]">→ Kit OP-1 ({bridge.models?.length ?? 0} pads)</span>
             </button>
+          )}
+          {(bridge.paramSpecs ?? []).length > 0 && (
+            <details className="mb-0.5">
+              <summary className="cursor-pointer px-1 py-0.5 font-mono text-[8px] uppercase tracking-widest text-[#55556A]">
+                Réglages
+              </summary>
+              <div className="space-y-0.5 py-0.5">
+                {(bridge.paramSpecs ?? []).map((spec) => (
+                  <label
+                    key={spec.key}
+                    className="flex items-center gap-1 px-1 text-[9px] text-[#A5A5B5]"
+                  >
+                    <span className="w-16 shrink-0 truncate">{spec.label}</span>
+                    <input
+                      type="range"
+                      min={spec.min}
+                      max={spec.max}
+                      step={spec.step}
+                      value={knobs[spec.key] ?? spec.value}
+                      onChange={(e) => setKnob(spec.key, Number(e.target.value))}
+                      className="min-w-0 flex-1"
+                    />
+                    <span className="w-8 shrink-0 text-right font-mono text-[8px]">
+                      {(knobs[spec.key] ?? spec.value).toFixed(spec.step < 1 ? 2 : 0)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </details>
           )}
           {(bridge.models ?? []).map((name, index) => (
             <button

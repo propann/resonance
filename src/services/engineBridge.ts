@@ -6,6 +6,18 @@ export type NativeEngineId =
   | 'mutable-rings'
   | 'mutable-elements';
 
+/** One knob: what to call it, what it spans, and where it starts. */
+export interface EngineParamSpec {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  /** Shown after the value, when the number means something on its own. */
+  unit?: string;
+}
+
 export interface EngineBridge {
   readonly id: NativeEngineId;
   readonly version: string;
@@ -15,6 +27,15 @@ export interface EngineBridge {
    * name rather than by index.
    */
   readonly models?: readonly string[];
+  /**
+   * The knobs this engine answers to, with the range each one lives in.
+   *
+   * Picking a model is only half of an engine: Plaits' sixteen models all run
+   * through the same harmonics / timbre / morph, and without them the engine
+   * offers sixteen fixed sounds instead of sixteen instruments. The interface
+   * reads this rather than knowing anything about a particular engine.
+   */
+  readonly paramSpecs?: readonly EngineParamSpec[];
   load(): Promise<void>;
   setParameter(name: string, value: number): void;
   noteOn(note: number, velocity: number): void;
