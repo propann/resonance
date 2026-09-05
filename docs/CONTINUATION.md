@@ -15,7 +15,7 @@ cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
-# doit tout passer : 0 erreur, 318 tests
+# doit tout passer : 0 erreur, 351 tests
 ```
 
 - `main` @ `0317b52` (2026-09-05), poussé. Build installé depuis
@@ -38,7 +38,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 ## 2026-09-05 — L'application était bloquée 97 % du temps
 
-Branche `worktree-trieuse-coherence`, six commits, non fusionnée.
+Branche `worktree-trieuse-coherence`, quatorze commits, non fusionnée.
 
 Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
 la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
@@ -122,6 +122,58 @@ Le bouton play était la pointe d'un motif : partout où le code lisait
    et `??` ne s'efface que devant `null`. Rien de réel ne mesure 0 LUFS : le
    silence numérique donne −70. Vérifié dans l'app : **−22,2 LUFS**.
 
+### OP-1 : lire les patches, les distinguer, les ranger
+
+Lu sur les 768 patches du pack de l'utilisateur (`~/Downloads/OP-1`) :
+
+| genre | n | durée | format | ce que c'est |
+|---|---|---|---|---|
+| drum | 173 | 1,57–12,00 s | 44,1 kHz | kit 24 pads |
+| sampler | 458 | 2,00–6,00 s | 44,1 kHz | un son au clavier |
+| moteur | 100 | **1,31 s pile** | 22,05 kHz | réglages, **aucun son** |
+| audio brut | 36 | — | — | pas de bloc `APPL` |
+
+`services/op1PatchFile.ts` (`readOp1PatchInfo`) lit tout ça **sans décoder
+l'audio** : `drum_version` → kit, `synth_version` + `type` → patch synthé et
+son moteur. Validé sur les 768 fichiers, zéro désaccord avec les dossiers du
+pack. Les patches synthé ont leur dossier :
+`03_HARDWARE/OP-1_SYNTH_PATCHES` (avant, tout allait dans le dossier drum).
+
+**Piège des marqueurs de pads** : ce ne sont pas des positions d'échantillon.
+Ils sont sur une **timeline fixe de 12 s** (fin = 2147483646) quelle que soit
+la durée réelle — lus comme des ticks, le dernier pad d'un kit de 10,8 s
+tombait à 84 s. `drumMarkerToSeconds` (dans `hardware/op1og.ts`) est la bonne
+conversion. Ensuite, 19 des 153 kits `drum_version: 1` portent des marqueurs
+**au-delà de leur propre audio** (un à 22,6 s pour 11,3 s de son) ; les v2 et
+v3 jamais. Les fins sont bornées à l'audio, comme le fait la machine.
+
+`Op1FillGauge` lit la durée **brute** du kit, pas celle du composite : le
+constructeur compresse ses sons pour tenir dans 12 s, donc le composite est
+toujours ≤ 12 s et une jauge qui le lirait n'afficherait jamais de
+dépassement. Vérifié dans l'app : `29.12s / 12.00s — 17.12s de trop`.
+
+### Trois régressions attrapées sur le build installé
+
+Le refactor `audioBuffer` en a produit deux, la troisième dormait depuis
+toujours. Toutes trouvées en installant et en mesurant, pas en relisant.
+
+1. **Fuite de 6 Go** (`7395893`). `cacheSampleAudio` épinglait tout ce qui
+   n'avait pas de `diskPath` — ce qui semble prudent, mais l'ingestion crée
+   des samples sans chemin par milliers et les écrit sur disque juste après.
+   Le rendu montait à 6,1 Go et ne répondait plus. Défaut inversé :
+   évinçable, sauf si l'appelant dit tenir la seule copie (une prise non
+   sauvegardée, un rendu avant écriture). Plafond de 300 s d'audio épinglé,
+   avec avertissement, comme filet.
+2. **Le kit se reconstruisait tout seul** (`b0dcc69`). L'effet du
+   constructeur dépendait de `availableSamples`, dont l'identité change à
+   chaque lot d'ingestion : il repiochait 24 pads, relisait 24 fichiers et
+   recompilait, en boucle. Mauvais aussi par principe — ça efface
+   l'arrangement en cours d'édition.
+3. **Le sélecteur dessinait une ligne DOM par sample** (`a2e3634`), soit
+   283 000. Antérieur à tout ça, fatal seulement à cette taille. Il en montre
+   200, le compte réel reste affiché : `Base de Samples (298 873 · 200
+   affichés)`. Ouverture : **7 ms**.
+
 ### Reste à faire
 
 - `audioBuffer` vit encore dans `SampleItem` : deux mécanismes coexistent pour
@@ -135,7 +187,7 @@ Le bouton play était la pointe d'un motif : partout où le code lisait
 
 Application desktop **Electron** (React 19 / Vite 6 / Tailwind 4 / Tone.js).
 Portes de vérification à chaque commit : `tsc --noEmit` · `eslint .` (0 erreur) ·
-`vitest run` (318 tests) · `vite build`.
+`vitest run` (351 tests) · `vite build`.
 
 ### Fait — phases 0 à 5 de la refonte
 
