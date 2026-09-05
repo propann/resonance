@@ -85,6 +85,7 @@ const NATIVE_ENGINES: Array<{ id: NativeEngineId; label: string }> = [
   { id: 'mutable-plaits', label: 'Plaits (Mutable)' },
   { id: 'mutable-rings', label: 'Rings (Mutable)' },
   { id: 'mutable-clouds', label: 'Clouds (Mutable)' },
+  { id: 'mutable-elements', label: 'Elements (Mutable)' },
 ];
 
 const OPEN_KEY = 'resonance-atelier-tree-v2';

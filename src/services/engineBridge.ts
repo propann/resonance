@@ -1,4 +1,10 @@
-export type NativeEngineId = 'dexed' | 'mutable-plaits' | 'mutable-braids' | 'mutable-clouds' | 'mutable-rings';
+export type NativeEngineId =
+  | 'dexed'
+  | 'mutable-plaits'
+  | 'mutable-braids'
+  | 'mutable-clouds'
+  | 'mutable-rings'
+  | 'mutable-elements';
 
 export interface EngineBridge {
   readonly id: NativeEngineId;

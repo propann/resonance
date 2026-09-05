@@ -142,6 +142,40 @@ changement de mode, mais ajouter 64 cycles de prechauffage n'y change rien.
 Le mode est **retire de la liste** plutot qu'expose muet ; `MODE_INDEX` mappe
 nos trois entrees sur les index 0, 2 et 3 du firmware. A reprendre.
 
+### Elements : modelisation physique, quatrieme moteur
+
+Un exciteur — archet, souffle, maillet — contre un resonateur. Trois
+resonateurs, plus la synthese alternative que le firmware cache derriere
+`set_easter_egg` : c'est un quatrieme caractere, offert plutot que masque.
+32 kHz, rechantillonne a la sortie. 559 Ko.
+
+Les mesures collent a la physique : la frappe donne une crete forte
+(0,96-0,98) avec un RMS bas — un transitoire qui decroit ; l'archet donne une
+crete basse mais un RMS soutenu. Les quatre modeles sonnent a la frappe.
+
+**« Voix ominous » + archet est muet**, et c'est normal : cette synthese
+n'utilise pas l'exciteur archet. Le modele est garde puisqu'il sonne a la
+frappe.
+
+Le gate est relache au tiers du rendu : sinon un modele archete donnerait deux
+secondes d'un seul son tenu au lieu d'une note qui resonne.
+
+### Etat des moteurs natifs
+
+| Moteur | Taille | Modeles | Type |
+|---|---|---|---|
+| Plaits | 293 Ko | 16 | voix |
+| Rings | 95 Ko | 6 | resonateur |
+| Clouds | 150 Ko | 3 (sur 4) | **processeur** |
+| Elements | 559 Ko | 4 | modelisation physique |
+
+29 modeles, aucun dans le bundle. Ajouter un moteur : un shim C sous
+`tools/engines/`, un `case` dans `build-engine.sh`, un `bridge.js` sous
+`public/engines/`, une ligne dans `NATIVE_ENGINES`.
+
+Restent dans `vendor/` : Braids (proche de Plaits), Marbles (generateur de CV,
+peu d'interet ici), Warps, Tides.
+
 ### Dexed
 
 Toujours pas fait : JUCE, autrement plus lourd que Plaits. Le contrat
