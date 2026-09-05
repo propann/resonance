@@ -36,6 +36,8 @@ interface HeaderProps {
   /** More files wait behind `incomingCount` (the scan is bounded). */
   incomingIsPartial?: boolean;
   failedIncomingCount?: number;
+  /** What went wrong, grouped, shown when the count is hovered. */
+  failedIncomingReason?: string;
   onOpenDspAnalyzer?: () => void;
   onAutoOrganizeLibrary?: () => void;
   isPlaying?: boolean;
@@ -58,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   incomingCount = 0,
   incomingIsPartial = false,
   failedIncomingCount = 0,
+  failedIncomingReason = '',
   onOpenDspAnalyzer,
   onAutoOrganizeLibrary,
   isPlaying = false,
@@ -260,7 +263,20 @@ export const Header: React.FC<HeaderProps> = ({
                 {incomingIsPartial ? '+' : ''}
               </span>
             )}
-            {failedIncomingCount > 0 && <span className="min-w-4 px-1 bg-[#FF3366] text-[8px] text-white">!{failedIncomingCount}</span>}
+            {failedIncomingCount > 0 && (
+              <span
+                className="min-w-4 px-1 bg-[#FF3366] text-[8px] text-white"
+                // The number alone said nothing, and 400 files failed behind
+                // it for hours. The reason belongs where the count already is.
+                title={
+                  failedIncomingReason
+                    ? `${failedIncomingCount} son(s) en échec — ${failedIncomingReason}`
+                    : `${failedIncomingCount} son(s) en échec`
+                }
+              >
+                !{failedIncomingCount}
+              </span>
+            )}
           </button>
         )}
 

@@ -72,7 +72,9 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const arrayBuf = await audioBlob.arrayBuffer();
         try {
-          const decoded = await ctx.decodeAudioData(arrayBuf);
+          // Through the engine, like everywhere else: it is the one place that
+          // knows what the browser will and will not decode.
+          const decoded = await audioEngine.decodeAudioData(arrayBuf);
           setRecordedBuffer(decoded);
         } catch (err) {
           console.error('Error decoding recorded audio:', err);

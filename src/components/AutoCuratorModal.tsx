@@ -130,7 +130,8 @@ interface AutoCuratorModalProps {
   onLibraryRootChange?: (root: DirectoryHandle) => void;
   onLibraryChanged?: () => void;
   onProcessingChange?: (isProcessing: boolean) => void;
-  onQueueResult?: (result: { ready: number; errors: number }) => void;
+  /** `reason` groups what went wrong, for the failure badge to show on hover. */
+  onQueueResult?: (result: { ready: number; errors: number; reason?: string }) => void;
   autoTransfer?: boolean;
   onApplyCuration: (curatedSamples: NewSample[]) => void;
 }
@@ -185,6 +186,8 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
   const [notification, setNotification] = useState<string | null>(null);
   const workFolderOnly = true;
   const autoTransferredSignature = useRef<string | null>(null);
+  /** What the last batch's failures were, so the badge can say more than a number. */
+  const failureSummaryRef = useRef<string | undefined>(undefined);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -380,10 +383,29 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     return { buffer, op1Kind: null };
   };
 
-  // DSP Study & Processing Pipeline
+  /**
+   * DSP study and processing pipeline.
+   *
+   * Everything after the flag is raised sits in a `try/finally`. It did not,
+   * and the flag is not a cosmetic one: while it is up, the reception scan
+   * puts back neither its watcher nor its timer, so one escaped exception —
+   * or one `await` that never settles — stopped the ingestion for good, in
+   * silence. Lowering it in a `finally` is what makes that recoverable.
+   */
   const processQueue = async (queue: CuratorItem[]) => {
     setIsProcessing(true);
     onProcessingChange?.(true);
+    try {
+      await runQueue(queue);
+    } catch (error) {
+      console.error('[curator] la file a échoué en cours de route', error);
+    } finally {
+      setIsProcessing(false);
+      onProcessingChange?.(false);
+    }
+  };
+
+  const runQueue = async (queue: CuratorItem[]) => {
     const updatedQueue = [...queue];
 
     // Decoding happens off the main thread, so keep a few files decoding ahead
@@ -437,6 +459,11 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
     for (let i = 0; i < updatedQueue.length; i++) {
       const item = updatedQueue[i];
       if (item.status === 'ready' && item.audioBuffer && item.sampleItem) continue;
+      // A file that has already failed is not retried on every later batch.
+      // Failures were never dropped from the queue and every new batch merged
+      // itself onto them, so the same broken files were re-decoded again and
+      // again and each batch cost more than the last.
+      if (item.status === 'error') continue;
 
       item.status = 'analyzing';
       item.progress = 20;
@@ -653,12 +680,36 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         `(${Math.round(totalMs / Math.max(1, done))} ms/son — décodage ${Math.round(decodeMs)} ms, ` +
         `analyse ${Math.round(analyseMs)} ms, encodage ${Math.round(encodeMs)} ms)`
     );
-    setIsProcessing(false);
-    onProcessingChange?.(false);
+    reportFailures(updatedQueue);
     onQueueResult?.({
       ready: updatedQueue.filter((item) => item.status === 'ready').length,
       errors: updatedQueue.filter((item) => item.status === 'error').length,
+      reason: failureSummaryRef.current,
     });
+  };
+
+  /**
+   * Say what failed, and why, grouped.
+   *
+   * A file that could not be read became a small red number in a corner and
+   * nothing else — no reason, anywhere. Four hundred files failed to decode
+   * for hours behind that number.
+   */
+  const reportFailures = (queue: CuratorItem[]) => {
+    const failed = queue.filter((item) => item.status === 'error');
+    if (failed.length === 0) return;
+
+    const byReason = new Map<string, number>();
+    for (const item of failed) {
+      const reason = item.errorMessage || 'raison inconnue';
+      byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+    }
+    const summary = [...byReason.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason, n]) => `${n} × ${reason}`)
+      .join(' · ');
+    console.warn(`[curator] ${failed.length} échec(s) — ${summary}`);
+    failureSummaryRef.current = summary;
   };
 
   const handleTogglePlay = (item: CuratorItem) => {

@@ -315,8 +315,14 @@ export async function parseOp1AiffPatch(
     arrayBuffer = data;
   }
 
-  // 1. Decode Audio Buffer via Web Audio
-  const audioBuffer = await audioEngine.getAudioContext().decodeAudioData(arrayBuffer.slice(0));
+  // 1. Decode through the engine, never the raw context.
+  //
+  // This called `getAudioContext().decodeAudioData` directly, so it skipped
+  // the engine's AIFF fallback — and this is the function every `.aif` in the
+  // drop folder goes through. Chrome refuses AIFF here, so all 400 files in
+  // the ingest window failed, one batch after another, and the app said only
+  // "!400" in a corner.
+  const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer);
 
   // 2. Parse AIFF Chunks manually to find 'APPL' op-1 metadata chunk
   const u8 = new Uint8Array(arrayBuffer);

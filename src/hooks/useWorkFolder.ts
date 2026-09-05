@@ -66,6 +66,9 @@ export interface WorkFolderApi {
   incomingIsPartial: boolean;
   failedIncomingCount: number;
   setFailedIncomingCount: (count: number) => void;
+  /** Why they failed, grouped, for the badge to show on hover. */
+  failedIncomingReason: string;
+  setFailedIncomingReason: (reason: string) => void;
   /** Adopt a root the curator already connected, without re-scanning here. */
   adoptExternalRoot: (root: DirectoryHandle) => void;
   chooseLibrary: () => Promise<void>;
@@ -89,6 +92,7 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   const [incomingCount, setIncomingCount] = useState(0);
   const [incomingIsPartial, setIncomingIsPartial] = useState(false);
   const [failedIncomingCount, setFailedIncomingCount] = useState(0);
+  const [failedIncomingReason, setFailedIncomingReason] = useState('');
 
   const scanInFlightRef = useRef(false);
   /**
@@ -284,9 +288,23 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
         if (freshEntries.length === 0) return;
         const freshFiles = await readWorkFolderAudioFiles(freshEntries);
         if (cancelled) return;
-        // Only mark them once the bytes are in hand: a failed read must leave
-        // the entry pending so the next scan retries it.
-        for (const entry of freshEntries) queuedSourceKeysRef.current.add(workFolderEntryKey(entry));
+
+        // Only what the bytes actually came back for. `readWorkFolderAudioFiles`
+        // swallows a failed read and returns a shorter list, so marking every
+        // entry we asked for — which is what this did — retired files that were
+        // never handed on, and the next scan skipped them for the rest of the
+        // session. The comment said this; the code did not.
+        const readPaths = new Set(freshFiles.map((file) => file.sourcePath));
+        const missed = freshEntries.length - readPaths.size;
+        if (missed > 0) {
+          console.warn(`[réception] ${missed} fichier(s) illisibles, laissés en attente`);
+        }
+        for (const entry of freshEntries) {
+          if (readPaths.has(entry.sourcePath)) {
+            queuedSourceKeysRef.current.add(workFolderEntryKey(entry));
+          }
+        }
+        if (freshFiles.length === 0) return;
         optionsRef.current.onReceptionFilesReady(freshFiles, false);
       } catch (error) {
         console.error('Surveillance de réception indisponible', error);
@@ -316,6 +334,8 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
     incomingCount,
     incomingIsPartial,
     failedIncomingCount,
+    failedIncomingReason,
+    setFailedIncomingReason,
     setFailedIncomingCount,
     adoptExternalRoot,
     chooseLibrary,

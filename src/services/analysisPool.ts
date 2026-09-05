@@ -22,6 +22,16 @@ export function workerCount(cores = navigator.hardwareConcurrency || 4): number 
   return Math.max(1, Math.min(6, cores - 1));
 }
 
+/**
+ * How long to wait for a worker before doing the work here instead.
+ *
+ * Generous: a long loop on a slow machine should not be given up on. It is
+ * there for the case that has no other way out — a worker that answers
+ * neither with a result nor with an error — because the promise it leaves
+ * unsettled takes the whole ingestion down with it.
+ */
+const ANALYSIS_TIMEOUT_MS = 30_000;
+
 type Pending = {
   resolve: (result: AnalysisResult) => void;
   reject: (error: Error) => void;
@@ -110,7 +120,23 @@ export class AnalysisPool {
     const transfer = channels.map((c) => c.buffer);
 
     return new Promise<AnalysisResult>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      // A worker that never answers used to leave this promise unsettled for
+      // ever. Its caller holds the "curation in progress" flag, and while that
+      // is up the reception scan puts back neither its watcher nor its timer —
+      // so one silent worker stopped the whole ingestion, with nothing said.
+      // Rejecting hands the work back to the main thread, which is slower and
+      // always finishes.
+      const giveUp = setTimeout(() => {
+        if (!this.pending.delete(id)) return;
+        console.warn(`[analyse] worker sans réponse après ${ANALYSIS_TIMEOUT_MS} ms — reprise sur le thread principal`);
+        reject(new Error('worker sans réponse'));
+      }, ANALYSIS_TIMEOUT_MS);
+
+      const settle = <T,>(done: (value: T) => void) => (value: T) => {
+        clearTimeout(giveUp);
+        done(value);
+      };
+      this.pending.set(id, { resolve: settle(resolve), reject: settle(reject) });
       this.queue.push({ request, transfer });
       this.drain();
     });

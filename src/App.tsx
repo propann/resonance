@@ -159,6 +159,8 @@ export default function App() {
     incomingCount,
     incomingIsPartial,
     failedIncomingCount,
+    failedIncomingReason,
+    setFailedIncomingReason,
     setFailedIncomingCount,
     adoptExternalRoot,
     chooseLibrary,
@@ -1098,6 +1100,7 @@ export default function App() {
         incomingCount={incomingCount}
         incomingIsPartial={incomingIsPartial}
         failedIncomingCount={failedIncomingCount}
+        failedIncomingReason={failedIncomingReason}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenAutoSlicer={() => handleOpenSlicer()}
         onSaveWaveAsOp1={() => void handleSaveWaveAsOp1()}
@@ -1281,7 +1284,10 @@ export default function App() {
         onLibraryRootChange={adoptExternalRoot}
         onLibraryChanged={() => void refreshLibrary()}
         onProcessingChange={setIsCuratorProcessing}
-        onQueueResult={({ errors }) => setFailedIncomingCount(errors)}
+        onQueueResult={({ errors, reason }) => {
+          setFailedIncomingCount(errors);
+          setFailedIncomingReason(reason ?? '');
+        }}
         autoTransfer
         onApplyCuration={handleApplyCuration}
         onOpenBatchNaming={() => openModal('batchNaming')}
