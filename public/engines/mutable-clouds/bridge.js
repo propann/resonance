@@ -19,10 +19,12 @@ const NATIVE_SAMPLE_RATE = 32000;
  * What Clouds can do with a buffer, and what the firmware calls each one.
  *
  * The module has a fourth mode, time-stretch (firmware index 1). It is left
- * out because it returns silence here — measured at RMS 0.003 against 0.18 for
- * granular, and going to exactly zero on a second pass. Running extra `Prepare`
- * cycles after the mode change, which is where Clouds re-carves its buffers,
- * did not help. Better absent than present and mute; see docs/CONTINUATION.md.
+ * out because it returns silence here, and two hypotheses have been ruled out
+ * with measurements: extra `Prepare` cycles after a mode change (where Clouds
+ * re-carves its buffers), and restoring the hardware's many-Prepares-per-block
+ * ratio, which is what feeds the WSOLA correlator. Neither moved it off
+ * 0.0015 RMS, at any density or position. Better absent than present and mute;
+ * see docs/CONTINUATION.md.
  */
 export const CLOUDS_MODES = ['Granulaire', 'Délai bouclé', 'Spectral'];
 
@@ -38,7 +40,10 @@ const PARAMS = {
   position: { min: 0, max: 1, value: 0.5 },
   size: { min: 0, max: 1, value: 0.5 },
   pitch: { min: -48, max: 48, value: 0 },
-  density: { min: 0, max: 1, value: 0.5 },
+  // Granular is gated by density, steeply: at 0.5 the cloud is so sparse it
+  // measures 0.0015 RMS against a 0.25 source — silence, to the ear. 0.8 is
+  // where grains actually overlap into a texture.
+  density: { min: 0, max: 1, value: 0.8 },
   texture: { min: 0, max: 1, value: 0.5 },
   dryWet: { min: 0, max: 1, value: 0.75 },
   stereoSpread: { min: 0, max: 1, value: 0.5 },

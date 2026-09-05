@@ -20,6 +20,13 @@ namespace {
 
 // The firmware's own two buffers: the large one holds the audio Clouds grains
 // from, the small one its working state.
+/**
+ * How many `Prepare` cycles run per audio block, matching what the module's
+ * main loop manages between interrupts. Stretch mode needs them; the others
+ * are indifferent, and the cost offline is nothing.
+ */
+constexpr int kPreparePerBlock = 16;
+
 constexpr size_t kLargeBufferSize = 118784;
 constexpr size_t kSmallBufferSize = 65536 - 128;
 uint8_t large_buffer[kLargeBufferSize];
@@ -135,7 +142,14 @@ EMSCRIPTEN_KEEPALIVE void clouds_process(
       in_block[i].l = toShort(in_left[done + i]);
       in_block[i].r = toShort(in_right[done + i]);
     }
-    processor.Prepare();
+    // On the module `Prepare` runs in a tight main loop while `Process` is
+    // driven by the audio interrupt — so it runs many times per block, not
+    // once. That ratio matters: in stretch mode Prepare calls
+    // `correlator_.EvaluateSomeCandidates()`, which walks the WSOLA splice
+    // candidates a few at a time. Called once per block it never finds enough,
+    // the player has nowhere to splice, and the mode returns silence. Here the
+    // interrupt does not exist, so the ratio is restored by hand.
+    for (int p = 0; p < kPreparePerBlock; ++p) processor.Prepare();
     processor.Process(in_block, out_block, static_cast<size_t>(block));
     for (int i = 0; i < block; ++i) {
       out_left[done + i] = static_cast<float>(out_block[i].l) / 32768.0f;

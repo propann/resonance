@@ -136,11 +136,33 @@ sans ca le sample revenait une quinte trop bas. Verifie : 48 kHz en entree,
 
 **Trois modes sur quatre.** Granulaire (RMS 0,178), delai boucle (0,144) et
 spectral (0,192) transforment bien la source (0,25). **L'etirement temporel
-rend du silence** — RMS 0,003, et exactement 0 a la deuxieme passe. Hypothese
-testee et fausse : Clouds recarve ses tampons dans `Prepare` lors d'un
-changement de mode, mais ajouter 64 cycles de prechauffage n'y change rien.
-Le mode est **retire de la liste** plutot qu'expose muet ; `MODE_INDEX` mappe
-nos trois entrees sur les index 0, 2 et 3 du firmware. A reprendre.
+rend du silence.** Le mode est retire de la liste plutot qu'expose muet ;
+`MODE_INDEX` mappe nos trois entrees sur les index 0, 2 et 3 du firmware.
+
+**Deux hypotheses ecartees, avec mesures** — a ne pas re-tenter :
+
+1. *Rechargement des tampons.* Clouds recarve ses tampons dans `Prepare` lors
+   d'un changement de mode. Ajouter 64 cycles de prechauffage apres
+   `set_playback_mode` : aucun effet.
+2. *Ratio Prepare/Process.* Sur le module, `Prepare` tourne dans la boucle
+   principale et `Process` sous interruption : Prepare s'execute donc bien plus
+   d'une fois par bloc. Et en mode etirement, `Prepare` appelle
+   `correlator_.EvaluateSomeCandidates()`, qui evalue les points de raccord
+   WSOLA quelques-uns a la fois — l'explication semblait tenir. Passe a 16
+   `Prepare` par bloc (`kPreparePerBlock`, garde parce que plus fidele au
+   materiel) : l'etirement reste a 0,0015 RMS, a **toutes** les densites et
+   toutes les positions testees. Les trois autres modes sont inchanges au
+   chiffre pres.
+
+Piste restante : la taille du tampon. `large_buffer` fait 118 784 octets, soit
+~0,93 s a 32 kHz en stereo 16 bits ; WSOLA a peut-etre besoin de plus de
+matiere que ca pour trouver un raccord.
+
+**Effet de bord utile de l'enquete.** Le granulaire est pilote par la densite,
+et brutalement : a 0,5 le nuage est si clairsemé qu'il mesure 0,0015 RMS
+contre 0,25 pour la source — inaudible. A 0,8 il donne 0,390, a 1,0 il donne
+0,766. La valeur par defaut passe de 0,5 a 0,8, sinon le mode semble casse
+alors qu'il attend juste qu'on tourne un bouton.
 
 ### Elements : modelisation physique, quatrieme moteur
 
