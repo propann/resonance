@@ -557,6 +557,15 @@ export async function removeReceptionFiles(_root: LibraryRoot, fileNames: string
   return removed;
 }
 
+/**
+ * Remove the folders left standing empty once their sounds have been filed.
+ *
+ * `00_RECEPTION` is walked too, and that is the point: a pack dropped there
+ * ends up with every file transferred and a tree of empty directories behind
+ * it, which reads as work still to do. The reception folder itself is spared,
+ * along with every other folder the library creates at startup — they are
+ * expected to be there whether or not they hold anything.
+ */
 export async function removeEmptyManagedFolders(_root: LibraryRoot): Promise<number> {
   const fs = desktopFS();
   const protectedFolders = new Set<string>(LIBRARY_FOLDERS);
@@ -587,7 +596,7 @@ export async function removeEmptyManagedFolders(_root: LibraryRoot): Promise<num
     return !hasEntries;
   };
 
-  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) await clean(top);
+  for (const top of ['00_RECEPTION', '01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) await clean(top);
   return removed;
 }
 

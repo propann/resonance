@@ -33,6 +33,12 @@ const RECEPTION_FALLBACK_INTERVAL_MS = 8000;
 const RECEPTION_BATCH_SIZE = 64;
 /** How deep a scan looks to fill a batch. Bounded: the backlog can be huge. */
 const RECEPTION_SCAN_WINDOW = 400;
+/**
+ * How often the emptied folders are swept while an import is running. The
+ * sweep walks every managed directory, so it is deliberately rare; folders
+ * disappearing a few minutes after their last sound leaves is soon enough.
+ */
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 export interface UseWorkFolderOptions {
   /** The curator modal is open — pause the background reception scan. */
@@ -85,6 +91,13 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
   const [failedIncomingCount, setFailedIncomingCount] = useState(0);
 
   const scanInFlightRef = useRef(false);
+  /**
+   * Whether the empty folders left behind have been swept since the reception
+   * last held anything. Without it the sweep would run on every idle tick.
+   */
+  const sweptSinceDrainRef = useRef(false);
+  /** When the folders were last swept, for the periodic sweep during ingest. */
+  const lastSweepRef = useRef(0);
   const queuedSourceKeysRef = useRef(new Set<string>());
 
   const optionsRef = useRef(options);
@@ -243,6 +256,24 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
         if (cancelled) return;
         setIncomingCount(entries.length);
         setIncomingIsPartial(truncated);
+
+        // A transferred pack leaves its directory tree standing, empty, which
+        // reads as work still to do. Sweeping only at a full drain would never
+        // fire on a large import — a quarter of a million files take days — so
+        // it also runs on a slow timer while the ingest works through them.
+        const drained = entries.length === 0;
+        if (!drained) sweptSinceDrainRef.current = false;
+        const due = Date.now() - lastSweepRef.current >= SWEEP_INTERVAL_MS;
+        if ((drained && !sweptSinceDrainRef.current) || due) {
+          if (drained) sweptSinceDrainRef.current = true;
+          lastSweepRef.current = Date.now();
+          const swept = await removeEmptyManagedFolders(libraryRoot).catch((error) => {
+            console.error('Nettoyage des dossiers vides impossible', error);
+            return 0;
+          });
+          if (cancelled) return;
+          if (swept > 0) toast.info(`${swept} dossier(s) vide(s) supprimé(s).`);
+        }
         const currentKeys = new Set(entries.map(workFolderEntryKey));
         for (const knownKey of queuedSourceKeysRef.current) {
           if (!currentKeys.has(knownKey)) queuedSourceKeysRef.current.delete(knownKey);
