@@ -238,9 +238,9 @@ describe('op1Fill — the gauge', () => {
 
 describe('op1FolderPathFor', () => {
   it('keeps kits and synth patches apart', () => {
-    expect(op1FolderPathFor('drum')).toBe('/03_HARDWARE/OP-1/drum');
-    expect(op1FolderPathFor('sampler')).toBe('/03_HARDWARE/OP-1/synth');
-    expect(op1FolderPathFor('engine')).toBe('/03_HARDWARE/OP-1/synth');
+    expect(op1FolderPathFor('drum')).toBe('/03_OP-1/drum');
+    expect(op1FolderPathFor('sampler')).toBe('/03_OP-1/synth');
+    expect(op1FolderPathFor('engine')).toBe('/03_OP-1/synth');
   });
 
   it('sends a plain sample to the library, not to the patch folders', () => {

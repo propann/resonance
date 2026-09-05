@@ -358,6 +358,36 @@ export default function App() {
    * The transport used to check `sample.audioBuffer` and do nothing when it was
    * missing — which, for anything from the manifest, was always.
    */
+  /**
+   * How tall the middle of the window is, so the wave can fill it while a
+   * sound is being edited. Measured rather than assumed: the window is
+   * resizable and the panels around it are draggable.
+   */
+  const centerPaneRef = useRef<HTMLElement>(null);
+  const [centerPaneHeight, setCenterPaneHeight] = useState(0);
+  useEffect(() => {
+    const pane = centerPaneRef.current;
+    if (!pane) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setCenterPaneHeight(entry.contentRect.height)
+    );
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, []);
+
+  /**
+   * Picking a sound is asking to work on it, so the middle of the window
+   * becomes the editor. Nothing new opens: it is the same page showing the
+   * other thing, and the LISTE tab goes back.
+   */
+  const openSampleForEditing = useCallback(
+    (sample: SampleItem) => {
+      setSelectedSampleId(sample.id);
+      setActiveView('edit');
+    },
+    [setSelectedSampleId, setActiveView]
+  );
+
   const playSample = useCallback(async (sample: SampleItem) => {
     const buffer = await loadSampleAudio(sample);
     if (buffer) audioEngine.play(buffer, sample.id, sample.loudnessGainDb);
@@ -1111,13 +1141,20 @@ export default function App() {
         </div>
 
         {/* Center Content Pane */}
-        <main className="flex-1 flex flex-col p-2.5 overflow-hidden gap-2 bg-[#060609] min-w-0">
-          {activeView === 'library' ? (
+        <main
+          ref={centerPaneRef}
+          className="flex-1 flex flex-col p-2.5 overflow-hidden gap-2 bg-[#060609] min-w-0"
+        >
+          {activeView !== 'timbre' ? (
             <>
               {/* Top Waveform Visualizer with Compact Transport Bar on Top & Draggable Markers */}
               {selectedSample ? (
                 <WaveformCanvas
-                  height={waveformHeight}
+                  height={
+                    activeView === 'edit' && centerPaneHeight > 0
+                      ? centerPaneHeight - 20
+                      : waveformHeight
+                  }
                   sample={selectedSample}
                   onUpdateSlices={handleUpdateSampleSlices}
                   onAddExtractedSamples={handleAddExtractedSamples}
@@ -1144,6 +1181,9 @@ export default function App() {
                 </div>
               )}
 
+              {/* The list is set aside while a sound is being worked on. */}
+              {activeView === 'library' && (
+                <>
               {/* Horizontal Splitter Handle (Resize Waveform Height with Mouse Drag) */}
               <div
                 onMouseDown={startWaveformResize}
@@ -1159,7 +1199,7 @@ export default function App() {
               <SampleTable
                 samples={filteredSamples}
                 selectedSampleId={selectedSampleId}
-                onSelectSample={(s) => setSelectedSampleId(s.id)}
+                onSelectSample={openSampleForEditing}
                 onToggleFavorite={handleToggleFavorite}
                 onDeleteSample={handleDeleteSample}
                 filterState={filterState}
@@ -1168,13 +1208,15 @@ export default function App() {
                 onToggleSelectSample={handleToggleSelectSample}
                 onSelectAllSamples={handleSelectAllSamples}
               />
+                </>
+              )}
             </>
           ) : (
             /* 2D Timbre Galaxy View */
             <TimbreMap
               samples={filteredSamples}
               selectedSampleId={selectedSampleId}
-              onSelectSample={(s) => setSelectedSampleId(s.id)}
+              onSelectSample={openSampleForEditing}
             />
           )}
         </main>

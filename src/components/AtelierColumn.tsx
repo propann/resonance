@@ -121,7 +121,7 @@ interface AtelierColumnProps {
   /** Empty the edit window, to build an engine sound on a clean wave. */
   onClearSample: () => void;
   /**
-   * Write a finished OP-1 patch into 03_HARDWARE/OP-1_DRUM_PATCHES. The
+   * Write a finished OP-1 patch into 03_OP-1/drum. The
    * column builds the kit; only App knows how to reach the disk.
    */
   onSaveOp1Kit: (name: string, aiff: Blob) => void;

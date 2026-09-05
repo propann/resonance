@@ -22,7 +22,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { FolderItem, SampleType, FilterState, SampleItem, MusicGenre } from '../types/sample';
-import { useUiStore } from '../stores/uiStore';
+import { useUiStore, type WorkspaceView } from '../stores/uiStore';
 import { diskPathForFolder } from '../services/libraryFolders';
 import { countInFolder, countLibrary, countOfType } from '../services/libraryCounts';
 
@@ -35,8 +35,8 @@ interface SidebarProps {
   onCreateFolder: (name: string, color: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onAutoOrganizeLibrary?: () => void;
-  activeView: 'library' | 'timbre';
-  onViewChange: (view: 'library' | 'timbre') => void;
+  activeView: WorkspaceView;
+  onViewChange: (view: WorkspaceView) => void;
   physicalSampleCount?: number;
   diskFolderCounts?: Record<string, number>;
 }
@@ -161,8 +161,9 @@ export const Sidebar = React.memo(function Sidebar({
           </span>
         </div>
 
-        {/* View Switcher Tabs: Library vs 2D Timbre */}
-        <div className="grid grid-cols-2 gap-1.5">
+        {/* What the middle of the window shows. Picking a sound goes to ÉDITION
+            on its own; this is how you come back. */}
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             id="view-library-tab"
             onClick={() => onViewChange('library')}
@@ -174,6 +175,18 @@ export const Sidebar = React.memo(function Sidebar({
           >
             <Layers className="w-3 h-3" />
             <span>LISTE</span>
+          </button>
+          <button
+            id="view-edit-tab"
+            onClick={() => onViewChange('edit')}
+            className={`py-1 px-2 text-[10px] font-pixel tracking-wider flex items-center justify-center gap-1.5 transition pixel-btn ${
+              activeView === 'edit'
+                ? 'bg-[#FFE600] text-black font-bold border-[#D6C400]'
+                : 'bg-[#14141A] text-[#8E8E93] hover:text-white border-[#22222C]'
+            }`}
+          >
+            <Scissors className="w-3 h-3" />
+            <span>ÉDITION</span>
           </button>
           <button
             id="view-timbre-tab"

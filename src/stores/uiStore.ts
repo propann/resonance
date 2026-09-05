@@ -17,7 +17,14 @@ export type ModalKey =
   | 'dedupe'
   | 'loudnessModal';
 
-export type WorkspaceView = 'library' | 'timbre';
+/**
+ * What the middle of the window is showing.
+ *
+ * `edit` is where a sound is worked on, and picking one from the list goes
+ * straight there — that is what you wanted it for. Everything stays on this
+ * one page; nothing here opens a second.
+ */
+export type WorkspaceView = 'library' | 'edit' | 'timbre';
 
 const ALL_CLOSED: Record<ModalKey, boolean> = {
   batchConverter: false,

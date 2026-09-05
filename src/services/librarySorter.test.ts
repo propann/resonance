@@ -126,14 +126,23 @@ describe('sortLibrary', () => {
     expect(lib.sounds()).toEqual(['01_ONE_SHOTS/01_DRUMS/01_KICKS/1-004_01.wav']);
   });
 
-  it('never touches the hardware patches', async () => {
-    const lib = fakeLibrary(['03_HARDWARE/OP-1_DRUM_PATCHES/AZ_Kick_Kit.aif']);
+  // A patch is not a sample: re-filing one by what its name sounds like would
+  // put a drum kit called "AZ_Kick_Kit" in with the kicks, where the device
+  // will never find it.
+  it('never touches the OP-1 patches', async () => {
+    const lib = fakeLibrary([
+      '03_OP-1/drum/AZ_Kick_Kit.aif',
+      '03_OP-1/synth/AZ_Bass_Patch.aif',
+    ]);
     const sortLibrary = await loadSorter();
 
     const result = await sortLibrary(root);
 
     expect(result.scanned).toBe(0);
-    expect(lib.sounds()).toEqual(['03_HARDWARE/OP-1_DRUM_PATCHES/AZ_Kick_Kit.aif']);
+    expect(lib.sounds()).toEqual([
+      '03_OP-1/drum/AZ_Kick_Kit.aif',
+      '03_OP-1/synth/AZ_Bass_Patch.aif',
+    ]);
   });
 
   it('never overwrites a namesake at the destination', async () => {

@@ -53,7 +53,7 @@ describe('listWorkFolderAudioEntries', () => {
         dir('00_RECEPTION'),
         dir('01_ONE_SHOTS'),
         dir('02_LOOPS'),
-        dir('03_HARDWARE'),
+        dir('03_OP-1'),
         dir('_MANIFEST'),
         dir('mon_pack'),
       ],

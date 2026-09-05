@@ -30,7 +30,7 @@ export interface Op1QuickKit {
   buffer: AudioBuffer;
   /** One region per pad, drawn and draggable in the editor. */
   slices: SliceRegion[];
-  /** The patch itself, ready to write into 03_HARDWARE/OP-1_DRUM_PATCHES. */
+  /** The patch itself, ready to write into 03_OP-1/drum. */
   aiff: Blob;
   /** File-safe kit name, without extension. */
   name: string;

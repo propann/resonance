@@ -24,7 +24,7 @@ describe('entryFromPath', () => {
   });
 
   it('marks OP-1 patches by their extension', () => {
-    expect(entryFromPath('03_HARDWARE/OP-1_DRUM_PATCHES/kit.aif').format).toBe('op-1-aiff');
+    expect(entryFromPath('03_OP-1/drum/kit.aif').format).toBe('op-1-aiff');
     expect(entryFromPath('01_ONE_SHOTS/01_DRUMS/01_KICKS/kick.wav').format).toBe('wav');
   });
 

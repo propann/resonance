@@ -48,8 +48,8 @@ export const LIBRARY_FOLDERS = [
   '02_LOOPS/03_VOCAL_LOOPS',
   '02_LOOPS/04_TEXTURES',
   // Shaped like the device's own disk, so the folder can go straight across.
-  '03_HARDWARE/OP-1/drum',
-  '03_HARDWARE/OP-1/synth',
+  '03_OP-1/drum',
+  '03_OP-1/synth',
   '_MANIFEST',
 ] as const;
 
@@ -57,6 +57,9 @@ const MANAGED_TOP_LEVEL_FOLDERS = new Set([
   '00_RECEPTION',
   '01_ONE_SHOTS',
   '02_LOOPS',
+  '03_OP-1',
+  // Kept only so the empty-folder sweep can carry it away: the OP-1 used to
+  // live under it and nothing else ever did. It is no longer created.
   '03_HARDWARE',
   '_MANIFEST',
 ]);
@@ -431,7 +434,7 @@ export async function scanManagedLibrary(_root: LibraryRoot): Promise<LibrarySca
     return count;
   };
 
-  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) {
+  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_OP-1']) {
     totalSamples += await scan(top);
   }
   return { totalSamples, folderCounts };
@@ -468,7 +471,7 @@ export async function listManagedLibraryFiles(_root?: LibraryRoot): Promise<Mana
     }
   };
 
-  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) await walk(top);
+  for (const top of ['01_ONE_SHOTS', '02_LOOPS', '03_OP-1']) await walk(top);
   return out;
 }
 
@@ -598,7 +601,7 @@ export async function removeEmptyManagedFolders(_root: LibraryRoot): Promise<num
     return !hasEntries;
   };
 
-  for (const top of ['00_RECEPTION', '01_ONE_SHOTS', '02_LOOPS', '03_HARDWARE']) await clean(top);
+  for (const top of ['00_RECEPTION', '01_ONE_SHOTS', '02_LOOPS', '03_OP-1', '03_HARDWARE']) await clean(top);
   return removed;
 }
 

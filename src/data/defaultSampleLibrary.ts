@@ -25,17 +25,18 @@ export const DEFAULT_FOLDERS: FolderItem[] = [
   { id: 'f-lp-melodic', name: '02_MELODIC_LOOPS', path: '/02_LOOPS/02_MELODIC_LOOPS', color: '#06B6D4', icon: 'Music', count: 0, parentId: 'f-root-loops' },
   { id: 'f-lp-vocals', name: '03_VOCAL_LOOPS', path: '/02_LOOPS/03_VOCAL_LOOPS', color: '#EC4899', icon: 'Mic', count: 0, parentId: 'f-root-loops' },
   { id: 'f-lp-atmo', name: '04_TEXTURES', path: '/02_LOOPS/04_TEXTURES', color: '#6366F1', icon: 'Layers', count: 0, parentId: 'f-root-loops' },
-  { id: 'f-root-hardware', name: '03_HARDWARE', path: '/03_HARDWARE', color: '#FF7A00', icon: 'Cpu', count: 0 },
-  // The OP-1 branch is shaped like the machine's own disk — `drum/` beside
-  // `synth/`, nothing else — so a finished folder can be dropped onto the
-  // device as it stands. Anything else would have to be rearranged by hand on
-  // the way over, which is exactly what this is meant to save.
-  { id: 'f-op1-root', name: 'OP-1', path: '/03_HARDWARE/OP-1', color: '#FF7A00', icon: 'Cpu', count: 0, parentId: 'f-root-hardware' },
-  { id: 'f-op1-patches', name: 'drum', path: '/03_HARDWARE/OP-1/drum', color: '#FF7A00', icon: 'Disc', count: 0, parentId: 'f-op1-root' },
+  // The OP-1 sits beside the one-shots and the loops rather than under a
+  // "hardware" heading that held nothing else. Below it, `drum/` beside
+  // `synth/` and nothing more — the shape of the machine's own disk, so a
+  // finished folder can be dropped onto the device as it stands. Anything
+  // else would have to be rearranged by hand on the way over, which is
+  // exactly what this is meant to save.
+  { id: 'f-op1-root', name: '03_OP-1', path: '/03_OP-1', color: '#FF7A00', icon: 'Cpu', count: 0 },
+  { id: 'f-op1-patches', name: 'drum', path: '/03_OP-1/drum', color: '#FF7A00', icon: 'Disc', count: 0, parentId: 'f-op1-root' },
   // A synth patch is a different animal: it loads into the OP-1's synth
   // engines, not its drum pads, and the two are never interchangeable. A
   // sampler patch holds one sound (6 s); an engine patch holds none at all.
-  { id: 'f-op1-synth', name: 'synth', path: '/03_HARDWARE/OP-1/synth', color: '#FFB000', icon: 'Sliders', count: 0, parentId: 'f-op1-root' },
+  { id: 'f-op1-synth', name: 'synth', path: '/03_OP-1/synth', color: '#FFB000', icon: 'Sliders', count: 0, parentId: 'f-op1-root' },
 ];
 
 /**

@@ -31,7 +31,7 @@ import type { SampleItem, SampleType } from '../types/sample';
  * sound like: an OP-1 drum kit is an OP-1 drum kit wherever the classifier
  * would otherwise put it.
  */
-const UNTOUCHED_ROOTS = ['03_HARDWARE'];
+const UNTOUCHED_ROOTS = ['03_OP-1'];
 
 /** Types that actually say something. `other` is the absence of an answer. */
 const REAL_TYPES = new Set<SampleType>([
