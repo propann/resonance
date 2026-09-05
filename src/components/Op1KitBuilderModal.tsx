@@ -125,14 +125,26 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // Initialize or re-populate 24 slots on open
+  /** Read at open time only — see the effect below. */
+  const availableSamplesRef = useRef(availableSamples);
+  availableSamplesRef.current = availableSamples;
+
+  /**
+   * Fill the 24 pads when the window opens, and only then.
+   *
+   * This used to run whenever `availableSamples` changed identity, which is
+   * every few seconds while an import is running. Each run re-picked all 24
+   * pads, read their 24 files and rebuilt the composite — so the kit kept
+   * rebuilding itself under the user and the window would not respond. It was
+   * wrong twice over: an arrangement being edited must not be thrown away
+   * because the library grew by sixty-four files.
+   */
   useEffect(() => {
-    if (isOpen) {
-      const initialSlots = autoPopulate24Op1Slots(availableSamples);
-      setSlices(initialSlots);
-      rebuildCompositeBuffer(initialSlots);
-    }
-  }, [isOpen, availableSamples]);
+    if (!isOpen) return;
+    const initialSlots = autoPopulate24Op1Slots(availableSamplesRef.current);
+    setSlices(initialSlots);
+    void rebuildCompositeBuffer(initialSlots);
+  }, [isOpen]);
 
   // Rebuild the stitched 12.0s buffer whenever slices or audio settings change
   const rebuildCompositeBuffer = async (currentSlices: Op1DrumSlice[]) => {
