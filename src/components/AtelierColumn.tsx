@@ -229,7 +229,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
 
   // The engines are playable while their folder is open. Closed, they release
   // the keyboard, so typing a sample name stays typing.
-  const player = usePlayableEngine(open.engines);
+  const player = usePlayableEngine(open.engines, live);
 
   // What plays the engines when your hands are elsewhere.
   const drivers = useNoteDrivers(player.heldNotes, (player.octave + 1) * 12);

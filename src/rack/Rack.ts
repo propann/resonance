@@ -148,6 +148,25 @@ export class Rack {
     }
     this.live = [];
   }
+
+  /**
+   * Play a note on every module that answers to one.
+   *
+   * The sources are silent at rest, so this is what makes them sound at all.
+   * Effects leave `noteOn` undefined and are simply skipped.
+   */
+  noteOn(note: number, velocity: number): void {
+    for (const m of this.live) m.node.noteOn?.(note, velocity);
+  }
+
+  noteOff(note: number): void {
+    for (const m of this.live) m.node.noteOff?.(note);
+  }
+
+  /** True when the chain holds something that has to be played to be heard. */
+  hasPlayableSource(): boolean {
+    return this.live.some((m) => typeof m.node.noteOn === 'function');
+  }
 }
 
 /**
@@ -173,6 +192,17 @@ export async function renderRackOffline(
   src.connect(rack.input);
   rack.output.connect(ctx.destination);
   src.start();
+
+  // The sources are gated now, so a bounce has to play them: without a note
+  // the envelopes stay shut and the render comes back silent.
+  //
+  // The note is struck and left held. Releasing it would need a timer, and a
+  // timer means nothing here — an OfflineAudioContext's clock does not advance
+  // with the wall clock, so a `setTimeout` fires while the context still reads
+  // time zero and cuts the note it was meant to end. Held, the envelope
+  // reaches its sustain and stays there for the whole render, which is what a
+  // bounce wants anyway.
+  if (rack.hasPlayableSource()) rack.noteOn(60, 110);
 
   const rendered = await ctx.startRendering();
   rack.dispose();

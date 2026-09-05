@@ -34,6 +34,16 @@ export interface RackNode {
   readonly output: AudioNode;
   /** Apply new parameter values without rebuilding the graph. */
   update(params: ParamValues): void;
+  /**
+   * Play a note, for the modules that make sound.
+   *
+   * Sources without one are oscillators with the power on: adding a module to
+   * the chain used to put a raw tone in your ears and keep it there. A source
+   * that implements these is silent at rest and articulates from the keyboard
+   * instead. Everything else — the effects — leaves them undefined.
+   */
+  noteOn?(note: number, velocity: number): void;
+  noteOff?(note: number): void;
   /** Detach and release everything this instance created. */
   dispose(): void;
 }

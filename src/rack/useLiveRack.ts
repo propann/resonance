@@ -62,6 +62,9 @@ export interface LiveRack {
   render: (tailSec?: number) => Promise<AudioBuffer | null>;
   /** Seconds since the audition started, for a playhead. */
   elapsed: () => number;
+  /** Play the chain's sound sources, which are silent until struck. */
+  noteOn: (note: number, velocity: number) => void;
+  noteOff: (note: number) => void;
 }
 
 /**
@@ -216,5 +219,23 @@ export function useLiveRack(
     []
   );
 
-  return { isPlaying, toggle, stop, loop, setLoop, hasSourceModule, isSilent, render, elapsed };
+  const noteOn = useCallback(
+    (note: number, velocity: number) => rackRef.current?.noteOn(note, velocity),
+    []
+  );
+  const noteOff = useCallback((note: number) => rackRef.current?.noteOff(note), []);
+
+  return {
+    isPlaying,
+    toggle,
+    stop,
+    loop,
+    setLoop,
+    hasSourceModule,
+    isSilent,
+    render,
+    elapsed,
+    noteOn,
+    noteOff,
+  };
 }

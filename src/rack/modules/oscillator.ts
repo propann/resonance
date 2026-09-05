@@ -1,4 +1,5 @@
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
+import { createAmpEnvelope, ENVELOPE_PARAMS } from '../envelope';
 
 /** Semitones → frequency, A4 = 440 Hz. */
 const noteHz = (semitones: number): number => 440 * Math.pow(2, semitones / 12);
@@ -24,13 +25,19 @@ export const oscillatorModule: RackModuleDef = {
     { key: 'note', label: 'Note', type: 'int', min: -36, max: 24, step: 1, unit: 'demi-tons', default: -12 },
     { key: 'detune', label: 'Détune', type: 'float', min: 0, max: 50, step: 0.5, unit: 'cents', default: 12 },
     { key: 'level', label: 'Niveau', type: 'float', min: 0, max: 1, step: 0.01, default: 0.35 },
+    ...ENVELOPE_PARAMS,
   ],
   createNode(ctx: BaseAudioContext, params: ParamValues): RackNode {
-    const output = ctx.createGain();
+    // level -> envelope -> out: the oscillators run continuously, the
+    // envelope decides whether any of it is heard.
+    const level = ctx.createGain();
     const a = ctx.createOscillator();
     const b = ctx.createOscillator();
-    a.connect(output);
-    b.connect(output);
+    a.connect(level);
+    b.connect(level);
+    const envelope = createAmpEnvelope(ctx, params);
+    level.connect(envelope.node);
+    const output = envelope.node;
 
     const apply = (p: ParamValues) => {
       const wave = p.wave as OscillatorType;
@@ -42,7 +49,8 @@ export const oscillatorModule: RackModuleDef = {
       a.detune.value = -(p.detune as number);
       b.detune.value = p.detune as number;
       // Two voices sum, so halve the level to keep the module unity-ish.
-      output.gain.value = (p.level as number) * 0.5;
+      level.gain.value = (p.level as number) * 0.5;
+      envelope.update(p);
     };
     apply(params);
     a.start();
@@ -52,6 +60,13 @@ export const oscillatorModule: RackModuleDef = {
       input: null,
       output,
       update: apply,
+      noteOn: (note, velocity) => {
+        const hz = noteHz(note - 60);
+        a.frequency.setValueAtTime(hz, ctx.currentTime);
+        b.frequency.setValueAtTime(hz, ctx.currentTime);
+        envelope.noteOn(velocity / 127);
+      },
+      noteOff: () => envelope.noteOff(),
       dispose: () => {
         for (const osc of [a, b]) {
           try {

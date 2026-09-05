@@ -1,4 +1,5 @@
 import type { ParamValues, RackModuleDef, RackNode } from '../types';
+import { createAmpEnvelope, ENVELOPE_PARAMS } from '../envelope';
 
 /** Two seconds of noise, looped: enough not to hear the seam. */
 function buildNoise(ctx: BaseAudioContext, colour: 'white' | 'pink'): AudioBuffer {
@@ -37,14 +38,18 @@ export const noiseSourceModule: RackModuleDef = {
     { key: 'tone', label: 'Tonalité', type: 'float', min: 100, max: 18000, step: 50, unit: 'Hz', default: 6000 },
     { key: 'resonance', label: 'Résonance', type: 'float', min: 0.1, max: 12, step: 0.1, default: 1 },
     { key: 'level', label: 'Niveau', type: 'float', min: 0, max: 1, step: 0.01, default: 0.25 },
+    ...ENVELOPE_PARAMS,
   ],
   createNode(ctx: BaseAudioContext, params: ParamValues): RackNode {
-    const output = ctx.createGain();
+    const level = ctx.createGain();
     const tone = ctx.createBiquadFilter();
     tone.type = 'lowpass';
     const source = ctx.createBufferSource();
     source.loop = true;
-    source.connect(tone).connect(output);
+    source.connect(tone).connect(level);
+    const envelope = createAmpEnvelope(ctx, params);
+    level.connect(envelope.node);
+    const output = envelope.node;
 
     let colour = '';
     const apply = (p: ParamValues) => {
@@ -55,7 +60,8 @@ export const noiseSourceModule: RackModuleDef = {
       }
       tone.frequency.value = p.tone as number;
       tone.Q.value = p.resonance as number;
-      output.gain.value = p.level as number;
+      level.gain.value = p.level as number;
+      envelope.update(p);
     };
     apply(params);
     source.start();
@@ -64,6 +70,9 @@ export const noiseSourceModule: RackModuleDef = {
       input: null,
       output,
       update: apply,
+      // Noise has no pitch: a note only opens and closes the envelope.
+      noteOn: (_note, velocity) => envelope.noteOn(velocity / 127),
+      noteOff: () => envelope.noteOff(),
       dispose: () => {
         try {
           source.stop();

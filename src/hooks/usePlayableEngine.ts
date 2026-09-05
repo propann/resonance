@@ -43,7 +43,15 @@ export interface PlayableEngine {
  * Nothing is bound when inactive, so the space bar and the library shortcuts
  * keep working normally with the engines folded away.
  */
-export function usePlayableEngine(active: boolean): PlayableEngine {
+export function usePlayableEngine(
+  active: boolean,
+  /**
+   * The live rack, when there is one. Its sources are gated, so the keyboard
+   * has to reach them too — otherwise adding an oscillator to the chain gives
+   * a module that can be seen but never played.
+   */
+  rack?: { noteOn: (note: number, velocity: number) => void; noteOff: (note: number) => void }
+): PlayableEngine {
   // One keyboard at a time: a controller plugged in should not double every
   // note with the typing keys, and vice versa.
   const [input, setInput] = useState<PlayInput>('pc');
@@ -55,8 +63,14 @@ export function usePlayableEngine(active: boolean): PlayableEngine {
   // stops the note that was actually sounded.
   const keyNotesRef = useRef(new Map<string, number>());
 
+  // Kept in a ref so binding the keyboard does not depend on the rack object
+  // being stable across renders.
+  const rackRef = useRef(rack);
+  rackRef.current = rack;
+
   const press = useCallback((note: number, velocity = 100) => {
     synthRackEngine.noteOn(note, velocity);
+    rackRef.current?.noteOn(note, velocity);
     setHeldNotes((prev) => {
       if (prev.has(note)) return prev;
       const next = new Set(prev);
@@ -67,6 +81,7 @@ export function usePlayableEngine(active: boolean): PlayableEngine {
 
   const release = useCallback((note: number) => {
     synthRackEngine.noteOff(note);
+    rackRef.current?.noteOff(note);
     setHeldNotes((prev) => {
       if (!prev.has(note)) return prev;
       const next = new Set(prev);
