@@ -10,7 +10,12 @@ vi.mock('./audioEngine', () => ({
   audioEngine: { decodeAudioData: (...args: unknown[]) => decodeAudioData(...args) },
 }));
 
-import { cacheSampleAudio, loadSampleAudio, peekSampleAudio } from './sampleAudio';
+import {
+  cacheSampleAudio,
+  loadSampleAudio,
+  peekSampleAudio,
+  releaseSampleAudio,
+} from './sampleAudio';
 import { cacheBuffer, clearBufferCache } from './audioBufferCache';
 import type { SampleItem } from '../types/sample';
 
@@ -40,12 +45,32 @@ describe('loadSampleAudio', () => {
     expect(readLibraryAudioFile).not.toHaveBeenCalled();
   });
 
-  it('keeps such a sound however much else is cached over it', async () => {
+  // Ingestion creates samples with no disk path by the thousand and writes
+  // them out moments later. Holding on to each of those filled 6 GB, so the
+  // default has to be the evictable one.
+  it('lets go of a cached sound like any other unless told otherwise', async () => {
     const take = item({ id: 'take-1' });
     cacheSampleAudio(take, sound(30));
     for (let i = 0; i < 20; i++) cacheBuffer(`loop${i}.wav`, sound(100));
 
+    expect(await loadSampleAudio(take)).toBeUndefined();
+  });
+
+  it('keeps a sound the caller says is the only copy', async () => {
+    const take = item({ id: 'take-1' });
+    cacheSampleAudio(take, sound(30), true);
+    for (let i = 0; i < 20; i++) cacheBuffer(`loop${i}.wav`, sound(100));
+
     expect(await loadSampleAudio(take)).toBeDefined();
+  });
+
+  it('lets that one go once it has been written somewhere', async () => {
+    const take = item({ id: 'take-1' });
+    cacheSampleAudio(take, sound(30), true);
+    releaseSampleAudio(take);
+    for (let i = 0; i < 20; i++) cacheBuffer(`loop${i}.wav`, sound(100));
+
+    expect(await loadSampleAudio(take)).toBeUndefined();
   });
 
   it('files a sample that has a file under its path, not its id', async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cacheBuffer,
   cacheStats,
@@ -113,6 +113,32 @@ describe('pinned entries', () => {
   it('ignores an unpin for something it never held', () => {
     expect(() => unpinBuffer('nowhere')).not.toThrow();
     expect(cacheStats().count).toBe(0);
+  });
+
+  // Pinning everything without a disk path filled 6 GB in twenty minutes and
+  // left the app unresponsive. The ceiling is the net under that mistake.
+  it('drops the oldest pinned sound rather than growing without limit', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 12; i++) cacheBuffer(`take-${i}`, sound(60), true);
+
+    expect(cacheStats().seconds).toBe(0);
+    // 300 s of ceiling at 60 s each: the five most recent survive.
+    expect(cacheStats().pinned).toBeLessThanOrEqual(5);
+    expect(getCachedBuffer('take-0')).toBeUndefined();
+    expect(getCachedBuffer('take-11')).toBeDefined();
+  });
+
+  it('says so when it has to drop one', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 8; i++) cacheBuffer(`take-${i}`, sound(60), true);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('leaves an ordinary pinned sound well alone', () => {
+    const take = sound(20);
+    cacheBuffer('take-1', take, true);
+    for (let i = 0; i < 40; i++) cacheBuffer(`kick${i}.wav`, sound(2));
+    expect(getCachedBuffer('take-1')).toBe(take);
   });
 
   it('stops pinning when the same key is cached again unpinned', () => {

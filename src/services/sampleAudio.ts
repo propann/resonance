@@ -38,16 +38,21 @@ export const audioKeyFor = (sample: Pick<SampleItem, 'id' | 'diskPath'>): string
 /**
  * Hand a sound to the cache on a sample's behalf.
  *
- * Pinned by default when the sample has no file, since the cache would
- * otherwise be free to evict the only copy there is. Pass `onlyCopy` explicitly
- * for a sample that does have a file but whose sound no longer matches it — a
- * normalisation or a DSP render held in memory — because evicting that one
- * would silently bring the original back.
+ * `onlyCopy` says the cache is holding the sole copy — an unsaved take, a
+ * render not yet written, a levelling that the file on disk does not reflect —
+ * and must not evict it.
+ *
+ * It defaults to `false`, and deliberately so. Pinning everything that lacked a
+ * `diskPath` looked reasonable and was a memory leak: ingestion creates samples
+ * with no path by the thousand, and pinning each one filled 6 GB in twenty
+ * minutes. Those all get written to disk moments later and can be read back, so
+ * the default must be the evictable one and callers holding something
+ * irreplaceable say so.
  */
 export function cacheSampleAudio(
   sample: Pick<SampleItem, 'id' | 'diskPath'>,
   buffer: AudioBuffer,
-  onlyCopy = !sample.diskPath
+  onlyCopy = false
 ): void {
   cacheBuffer(audioKeyFor(sample), buffer, onlyCopy);
 }

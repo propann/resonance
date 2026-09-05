@@ -13,6 +13,18 @@
 /** Roughly how much decoded audio to keep. 48 kHz stereo float is 384 kB/s. */
 const MAX_SECONDS = 600;
 
+/**
+ * A ceiling on sound the cache is holding as the only copy.
+ *
+ * Pinned entries are exempt from eviction, which makes them a way to leak the
+ * whole machine: pinning every ingested sample once filled 6 GB in twenty
+ * minutes and left the renderer unresponsive. Only a handful of things should
+ * ever be pinned — an unsaved take, a render that has not been written yet —
+ * so anything past this is a mistake, and dropping the oldest of them is a far
+ * better failure than taking the app down.
+ */
+const MAX_PINNED_SECONDS = 300;
+
 interface Entry {
   buffer: AudioBuffer;
   /** Bumped on every hit, so the least recently wanted goes first. */
@@ -66,6 +78,8 @@ export function cacheBuffer(key: string, buffer: AudioBuffer, pinned = false): v
   entries.set(key, { buffer, used: ++clock, pinned });
   if (!pinned) heldSeconds += buffer.duration;
 
+  if (pinned) dropOldestPinnedOverCeiling();
+
   let evictable = 0;
   for (const entry of entries.values()) if (!entry.pinned) evictable++;
 
@@ -83,6 +97,35 @@ export function cacheBuffer(key: string, buffer: AudioBuffer, pinned = false): v
     heldSeconds -= entries.get(oldestKey)!.buffer.duration;
     entries.delete(oldestKey);
     evictable--;
+  }
+}
+
+/**
+ * Keep the pinned set within its ceiling, oldest first.
+ *
+ * Reaching this means something is pinning far more than it should; the drop
+ * is announced rather than done quietly, because a sound is being lost.
+ */
+function dropOldestPinnedOverCeiling(): void {
+  let held = 0;
+  for (const entry of entries.values()) if (entry.pinned) held += entry.buffer.duration;
+  if (held <= MAX_PINNED_SECONDS) return;
+
+  const oldestFirst = [...entries.entries()]
+    .filter(([, entry]) => entry.pinned)
+    .sort((a, b) => a[1].used - b[1].used);
+
+  // Never down to nothing: the ceiling is against many pins piling up, not
+  // against one long sound, and the last pinned entry is someone's only copy.
+  let remaining = oldestFirst.length;
+  for (const [key, entry] of oldestFirst) {
+    if (held <= MAX_PINNED_SECONDS || remaining <= 1) break;
+    remaining--;
+    console.warn(
+      `[audio] ${Math.round(held)}s d'audio épinglé dépasse le plafond de ${MAX_PINNED_SECONDS}s — abandon de « ${key} ». Quelque chose épingle trop.`
+    );
+    held -= entry.buffer.duration;
+    entries.delete(key);
   }
 }
 

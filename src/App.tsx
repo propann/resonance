@@ -770,15 +770,21 @@ export default function App() {
    * else looks for it.
    *
    * The library array never holds audio: `SampleItem` has no field for it, so
-   * nothing downstream can read one and quietly find nothing. Anything without
-   * a file behind it yet is pinned, because the cache would otherwise be free
-   * to evict the only copy in existence.
+   * nothing downstream can read one and quietly find nothing.
+   *
+   * `onlyCopy` is for the callers holding something irreplaceable — a take that
+   * has not been written anywhere yet. It is off by default: ingestion creates
+   * samples with no disk path by the thousand and writes them out moments
+   * later, and pinning each of those filled 6 GB in twenty minutes.
    */
-  const adoptNewSamples = useCallback((incoming: NewSample[]): SampleItem[] =>
-    incoming.map(({ audioBuffer, ...sample }) => {
-      if (audioBuffer) cacheSampleAudio(sample, audioBuffer);
-      return sample;
-    }), []);
+  const adoptNewSamples = useCallback(
+    (incoming: NewSample[], onlyCopy = false): SampleItem[] =>
+      incoming.map(({ audioBuffer, ...sample }) => {
+        if (audioBuffer) cacheSampleAudio(sample, audioBuffer, onlyCopy);
+        return sample;
+      }),
+    []
+  );
 
   const handleUpdateSampleFromDsp = (updated: NewSample) => {
     const { audioBuffer, ...sample } = updated;
@@ -894,7 +900,9 @@ export default function App() {
 
   const handleSaveProcessedAsNew = async (incoming: NewSample) => {
     const rendered = incoming.audioBuffer;
-    const [newSample] = adoptNewSamples([incoming]);
+    // Nothing has written the render yet, and the write below can fail — the
+    // cache holds the only copy until it succeeds, and is released there.
+    const [newSample] = adoptNewSamples([incoming], true);
     setSamples((prev) => [newSample, ...prev]);
     setSelectedSampleId(newSample.id);
     if (rendered) {
@@ -1286,7 +1294,9 @@ export default function App() {
         isOpen={modals.recorder}
         onClose={() => closeModal('recorder')}
         onSaveRecordedSample={(newS) => {
-          const [adopted] = adoptNewSamples([newS]);
+          // Nothing has written this take anywhere: the cache holds the only
+          // copy of it until the user files it.
+          const [adopted] = adoptNewSamples([newS], true);
           setSamples((prev) => [adopted, ...prev]);
           setSelectedSampleId(adopted.id);
         }}
