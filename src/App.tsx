@@ -29,6 +29,7 @@ import { SampleTable } from './components/SampleTable';
 import { WaveformCanvas } from './components/WaveformCanvas';
 import { AtelierColumn } from './components/AtelierColumn';
 import { TimbreMap } from './components/TimbreMap';
+import { Op1PatchEditor } from './components/Op1PatchEditor';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { AutoCuratorModal } from './components/AutoCuratorModal';
 const AudioAnalysisModal = lazy(() => import('./components/AudioAnalysisModal').then((m) => ({ default: m.AudioAnalysisModal })));
@@ -1180,6 +1181,10 @@ export default function App() {
                   CHOISISSEZ UN SAMPLE POUR INSPECTER L&apos;ONDE ET LE TRANSPORT
                 </div>
               )}
+
+              {/* A patch lays its settings open under its wave; an ordinary
+                  sample shows nothing here. */}
+              {activeView === 'edit' && <Op1PatchEditor sample={selectedSample} />}
 
               {/* The list is set aside while a sound is being worked on. */}
               {activeView === 'library' && (

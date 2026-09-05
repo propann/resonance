@@ -5,6 +5,7 @@ import {
   op1FolderPathFor,
   padIsUsed,
   readOp1PatchInfo,
+  writeOp1PatchMetadata,
 } from './op1PatchFile';
 import { secondsToDrumMarker } from './hardware/op1og';
 
@@ -233,6 +234,98 @@ describe('op1Fill — the gauge', () => {
   it('never claims more than 24 pads are free', () => {
     expect(op1Fill('drum', 0, 0).padsFree).toBe(24);
     expect(op1Fill('drum', 0, 30).padsFree).toBe(0);
+  });
+});
+
+/** The bytes of one chunk, for checking the audio survived untouched. */
+function chunkBytes(data: ArrayBuffer, wanted: string): Uint8Array | null {
+  const view = new DataView(data);
+  const bytes = new Uint8Array(data);
+  const tag = (at: number) =>
+    String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  let offset = 12;
+  while (offset + 8 <= data.byteLength) {
+    const size = view.getUint32(offset + 4, false);
+    if (tag(offset) === wanted) return bytes.slice(offset + 8, offset + 8 + size);
+    offset += 8 + size + (size % 2);
+  }
+  return null;
+}
+
+/** The chunk ids in the order they appear, which is what the firmware cares about. */
+function chunkOrder(data: ArrayBuffer): string[] {
+  const view = new DataView(data);
+  const bytes = new Uint8Array(data);
+  const ids: string[] = [];
+  let offset = 12;
+  while (offset + 8 <= data.byteLength) {
+    const size = view.getUint32(offset + 4, false);
+    ids.push(String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]));
+    offset += 8 + size + (size % 2);
+  }
+  return ids;
+}
+
+describe('writeOp1PatchMetadata', () => {
+  it('reads back the settings it was given', () => {
+    const before = aiff({ frames: 44100, sampleRate: 44100, meta: drumMeta() });
+    const after = writeOp1PatchMetadata(before, drumMeta({ name: 'renamed', octave: 2 }))!;
+
+    const info = readOp1PatchInfo(after)!;
+    expect(info.kind).toBe('drum');
+    expect(info.name).toBe('renamed');
+    expect(info.octave).toBe(2);
+  });
+
+  // The whole point: renaming a patch must not re-encode what it plays.
+  it('leaves the audio byte for byte as it was', () => {
+    const before = aiff({ frames: 4000, sampleRate: 44100, meta: drumMeta() });
+    const after = writeOp1PatchMetadata(before, drumMeta({ name: 'x' }))!;
+
+    expect(chunkBytes(after, 'SSND')).toEqual(chunkBytes(before, 'SSND'));
+    expect(chunkBytes(after, 'COMM')).toEqual(chunkBytes(before, 'COMM'));
+  });
+
+  it('keeps the audio shape the file declared', () => {
+    const before = aiff({ frames: 22050, sampleRate: 22050, meta: drumMeta() });
+    const info = readOp1PatchInfo(writeOp1PatchMetadata(before, drumMeta())!)!;
+
+    expect(info.sampleRate).toBe(22050);
+    expect(info.frames).toBe(22050);
+    expect(info.durationSec).toBeCloseTo(1, 5);
+  });
+
+  it('declares a FORM size that matches what it wrote', () => {
+    const after = writeOp1PatchMetadata(
+      aiff({ frames: 1000, sampleRate: 44100, meta: drumMeta() }),
+      drumMeta({ name: 'a much longer name than the one before' })
+    )!;
+    expect(new DataView(after).getUint32(4, false)).toBe(after.byteLength - 8);
+  });
+
+  // The firmware will not read a patch whose settings come after its audio.
+  it('puts the settings before the audio when the file had none', () => {
+    const plain = aiff({ frames: 1000, sampleRate: 44100 });
+    const after = writeOp1PatchMetadata(plain, drumMeta())!;
+
+    const order = chunkOrder(after);
+    expect(order).toContain('APPL');
+    expect(order.indexOf('APPL')).toBeLessThan(order.indexOf('SSND'));
+    expect(readOp1PatchInfo(after)!.kind).toBe('drum');
+  });
+
+  it('survives settings much longer or shorter than what was there', () => {
+    const before = aiff({ frames: 1000, sampleRate: 44100, meta: drumMeta() });
+    const long = writeOp1PatchMetadata(before, drumMeta({ name: 'z'.repeat(500) }))!;
+    const short = writeOp1PatchMetadata(long, { drum_version: 2, type: 'drum', name: 'a' })!;
+
+    expect(readOp1PatchInfo(long)!.name).toHaveLength(500);
+    expect(readOp1PatchInfo(short)!.name).toBe('a');
+    expect(chunkBytes(short, 'SSND')).toEqual(chunkBytes(before, 'SSND'));
+  });
+
+  it('refuses something that is not an AIFF', () => {
+    expect(writeOp1PatchMetadata(new Uint8Array(ascii('RIFFxxxxWAVE')).buffer, {})).toBeNull();
   });
 });
 

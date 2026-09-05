@@ -185,6 +185,92 @@ export function readOp1PatchInfo(data: ArrayBuffer): Op1PatchInfo | null {
 }
 
 /**
+ * Write a patch back with different settings, leaving its sound alone.
+ *
+ * Only the `APPL`/`op-1` chunk is rebuilt; every other chunk — above all
+ * `SSND`, which is the audio — is copied across byte for byte. Editing a
+ * patch's name or its envelope has no business re-encoding what it plays, and
+ * a round trip through a decoder would quietly change the samples.
+ *
+ * A file with no OP-1 chunk gets one, inserted **before** `SSND`: the firmware
+ * expects it there and will not read a patch that carries it afterwards.
+ *
+ * Returns `null` if the source is not an AIFF at all.
+ */
+export function writeOp1PatchMetadata(
+  source: ArrayBuffer,
+  meta: Record<string, unknown>
+): ArrayBuffer | null {
+  const view = new DataView(source);
+  const bytes = new Uint8Array(source);
+  const tag = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  if (source.byteLength < 12 || tag(0) !== 'FORM') return null;
+
+  const json = new TextEncoder().encode(JSON.stringify(meta));
+  const applPayload = new Uint8Array(4 + json.length);
+  applPayload.set([0x6f, 0x70, 0x2d, 0x31]); // 'op-1'
+  applPayload.set(json, 4);
+
+  /** Chunks in file order, with the OP-1 one swapped for the new payload. */
+  const chunks: Array<{ id: string; payload: Uint8Array }> = [];
+  let replaced = false;
+  let offset = 12;
+
+  while (offset + 8 <= source.byteLength) {
+    const id = tag(offset);
+    const size = view.getUint32(offset + 4, false);
+    const start = offset + 8;
+    const end = Math.min(start + size, source.byteLength);
+
+    const isOp1Appl = id === 'APPL' && start + 4 <= source.byteLength && tag(start) === 'op-1';
+    if (isOp1Appl) {
+      chunks.push({ id: 'APPL', payload: applPayload });
+      replaced = true;
+    } else {
+      if (!replaced && id === 'SSND') {
+        chunks.push({ id: 'APPL', payload: applPayload });
+        replaced = true;
+      }
+      chunks.push({ id, payload: bytes.subarray(start, end) });
+    }
+
+    const next = offset + 8 + size + (size % 2);
+    if (next <= offset) break;
+    offset = next;
+  }
+
+  // No SSND either: put the settings at the end rather than lose them.
+  if (!replaced) chunks.push({ id: 'APPL', payload: applPayload });
+
+  const bodySize = chunks.reduce(
+    (total, chunk) => total + 8 + chunk.payload.length + (chunk.payload.length % 2),
+    0
+  );
+  const out = new Uint8Array(12 + bodySize);
+  const outView = new DataView(out.buffer);
+  const write = (text: string, at: number) => {
+    for (let i = 0; i < 4; i++) out[at + i] = text.charCodeAt(i);
+  };
+
+  write('FORM', 0);
+  // The size a FORM declares covers everything after it, its own four-byte
+  // type included, but not the eight bytes of its own header.
+  outView.setUint32(4, 4 + bodySize, false);
+  write(tag(8), 8); // AIFF or AIFC, whichever the source was
+
+  let at = 12;
+  for (const chunk of chunks) {
+    write(chunk.id, at);
+    outView.setUint32(at + 4, chunk.payload.length, false);
+    out.set(chunk.payload, at + 8);
+    at += 8 + chunk.payload.length;
+    if (chunk.payload.length % 2) out[at++] = 0;
+  }
+
+  return out.buffer;
+}
+
+/**
  * Pad markers are not sample positions.
  *
  * They sit on a **fixed 12-second timeline** — the end of 12 s is 2147483646
