@@ -276,8 +276,15 @@ export function analyzeFullDspReport(buffer: AudioBuffer, sampleItem?: SampleIte
   peakList.sort((a, b) => b.magDb - a.magDb);
   const topPeaks = peakList.slice(0, 5);
 
-  // EBU R128 Loudness approximation
-  const lufs = sampleItem?.lufs ?? Math.max(-70, Math.min(0, rmsDb - 1.2));
+  // EBU R128 Loudness approximation.
+  //
+  // A sample hydrated from the manifest carries `lufs: 0` — the manifest keeps
+  // no loudness field — and `??` let that through as if it were a reading, so
+  // the DSP report announced 0.0 LUFS for every sample on disk. Nothing real
+  // measures 0: digital silence reads -70, and a full-scale square wave is the
+  // only way to approach it. A literal zero means "never measured".
+  const stored = sampleItem?.lufs;
+  const lufs = stored ? stored : Math.max(-70, Math.min(0, rmsDb - 1.2));
   const momentaryMaxLufs = Math.max(-70, Math.min(0, peakDb - 0.8));
   const shortTermMaxLufs = Math.max(-70, Math.min(0, lufs + 1.5));
 
