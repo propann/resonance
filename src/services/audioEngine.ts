@@ -4,6 +4,7 @@
  */
 
 import { audioGraph } from './audioGraph';
+import { decodeAiff, looksLikeAiff } from './aiffDecoder';
 
 export interface PlaybackState {
   isPlaying: boolean;
@@ -146,11 +147,34 @@ class AudioEngine {
     this.stateListeners.forEach((l) => l({ ...this.state }));
   }
 
+  /**
+   * Decode a file, falling back to our own reader for AIFF.
+   *
+   * Chrome refuses AIFF outright on this platform — plain `AIFF` as readily as
+   * `AIFC` — and that silently stranded 78 000 files in the drop folder: each
+   * one failed to decode, so none ever became something the library could
+   * file, and nothing said why. The browser is asked first regardless, so if a
+   * platform ever does support it, that path is the one taken.
+   */
   public async decodeAudioData(arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
     const ctx = this.getAudioContext();
     // Use clone if needed to prevent detachment
     const copy = arrayBuffer.slice(0);
-    return await ctx.decodeAudioData(copy);
+    try {
+      return await ctx.decodeAudioData(copy);
+    } catch (error) {
+      if (!looksLikeAiff(arrayBuffer)) throw error;
+      const decoded = decodeAiff(arrayBuffer);
+      if (!decoded) throw error;
+
+      const buffer = ctx.createBuffer(
+        decoded.channels.length,
+        Math.max(1, decoded.frames),
+        decoded.sampleRate
+      );
+      decoded.channels.forEach((data, channel) => buffer.copyToChannel(data, channel));
+      return buffer;
+    }
   }
 
   /**
