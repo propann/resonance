@@ -51,18 +51,22 @@ import {
   sortGainPoints,
   type GainPoint,
 } from './waveform/gainEnvelope';
+import {
+  clampZoom,
+  hitTest,
+  normaliseZone,
+  timeToX as timeToXOf,
+  xToTime,
+  GRAB_SLOP_PX,
+  MIN_ZONE_SEC,
+  PLAYHEAD_HANDLE_PX,
+  ZONE_HANDLE_PX,
+  type WaveView,
+} from './waveform/waveGeometry';
 import { audioBufferToWavBlob } from '../services/audioConverter';
 
 export type { WaveformColorTheme };
 
-/** Shorter alt-drags are treated as a stray click, not a zone. */
-const MIN_ZONE_SEC = 0.01;
-/** Side of the square grab handles drawn at the top of the zone edges. */
-const ZONE_HANDLE_PX = 11;
-/** Side of the square grab handle drawn at the top of the playhead. */
-const PLAYHEAD_HANDLE_PX = 11;
-/** Click slop, in pixels, for grabbing a handle or an envelope point. */
-const GRAB_SLOP_PX = 7;
 
 interface WaveformCanvasProps {
   height?: number;
@@ -670,7 +674,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     // 8c. LAYER: VOLUME ENVELOPE (shown once it has points, editable on demand)
     if (isVolumeEditing || gainPoints.length > 0) {
       const gainToY = (gain: number) => height * (1 - gain / MAX_ENVELOPE_GAIN);
-      const timeToX = (t: number) => ((t / duration) * width * zoomLevel) - scrollOffset;
+      const timeToX = (t: number) =>
+        timeToXOf(t, { durationSec: duration, width, zoom: zoomLevel, scrollOffset });
       ctx.save();
 
       // Unity reference (0 dB)
@@ -801,15 +806,20 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedPointId]);
 
+  /** The view as the geometry helpers describe it. */
+  const viewOf = (rect: DOMRect): WaveView => ({
+    durationSec: sample.audioBuffer?.duration ?? 0,
+    width: rect.width,
+    zoom: zoomLevel,
+    scrollOffset,
+  });
+
   // Convert client X to buffer time in seconds
   const getCanvasTimeFromEvent = (e: React.MouseEvent<HTMLCanvasElement>): number => {
     const canvas = canvasRef.current;
     if (!canvas || !sample.audioBuffer) return 0;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const duration = sample.audioBuffer.duration;
-    const time = ((x + scrollOffset) / (rect.width * zoomLevel)) * duration;
-    return Math.max(0, Math.min(duration, time));
+    return xToTime(e.clientX - rect.left, viewOf(rect));
   };
 
   // Mouse Interaction: Click & Drag Slice Boundaries
@@ -823,7 +833,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
     const localX = e.clientX - rect.left;
     const localY = e.clientY - rect.top;
-    const timeToX = (t: number) => ((t / duration) * rect.width * zoomLevel) - scrollOffset;
+    const timeToX = (t: number) => timeToXOf(t, viewOf(rect));
 
     // Alt-drag draws a free zone; it must win over every other gesture.
     if (e.altKey) {
@@ -832,53 +842,40 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       return;
     }
 
-    // Zone grab handles, along the top strip: the squares resize an edge, the
-    // bar between them slides the whole zone.
-    if (zone && localY <= ZONE_HANDLE_PX + 2) {
-      const startX = timeToX(zone.startSec);
-      const endX = timeToX(zone.endSec);
-      if (Math.abs(localX - startX) <= ZONE_HANDLE_PX) {
+    // Which gesture this press belongs to is decided by `hitTest`, where the
+    // order between overlapping targets is written down and tested. Acting on
+    // the answer is all that is left here.
+    const grab = hitTest(localX, localY, {
+      view: viewOf(rect),
+      height: rect.height,
+      zone,
+      playheadSec: isCurrentSample ? currentTime : cursorSec,
+      isVolumeEditing,
+      envelopePoints: gainPoints,
+      gainAt: (t) => envelopeGainAt(gainPoints, t),
+      maxEnvelopeGain: MAX_ENVELOPE_GAIN,
+      slices: sample.slices ?? [],
+    });
+
+    switch (grab.kind) {
+      case 'zone-start':
         setZoneDrag('start');
         return;
-      }
-      if (Math.abs(localX - endX) <= ZONE_HANDLE_PX) {
+      case 'zone-end':
         setZoneDrag('end');
         return;
-      }
-      // The playhead handle sits in the same strip: let it be grabbed inside
-      // the zone rather than sliding the band out from under it.
-      const headSec = isCurrentSample ? currentTime : cursorSec;
-      const overHead = headSec !== null && Math.abs(localX - timeToX(headSec)) <= PLAYHEAD_HANDLE_PX;
-      if (!overHead && localX > startX && localX < endX) {
-        bandDragRef.current = { grabSec: rawTime, startSec: zone.startSec, endSec: zone.endSec };
+      case 'zone-band':
+        bandDragRef.current = { grabSec: rawTime, startSec: zone!.startSec, endSec: zone!.endSec };
         setZoneDrag('band');
         return;
-      }
-    }
-
-    // Playhead grab handle: drag it along the top strip to park the head.
-    if (localY <= PLAYHEAD_HANDLE_PX + 2) {
-      const headSec = isCurrentSample ? currentTime : cursorSec;
-      if (headSec === null || Math.abs(localX - timeToX(headSec)) <= PLAYHEAD_HANDLE_PX) {
+      case 'playhead':
         setScrubSec(rawTime);
         return;
-      }
-    }
-
-    // Volume envelope editing: grab a point, or click the line to create one.
-    if (isVolumeEditing) {
-      const gainToY = (gain: number) => rect.height * (1 - gain / MAX_ENVELOPE_GAIN);
-      const hit = gainPoints.find(
-        (point) =>
-          Math.hypot(localX - timeToX(point.timeSec), localY - gainToY(point.gain)) <= GRAB_SLOP_PX + 2
-      );
-      if (hit) {
-        setSelectedPointId(hit.id);
-        setDraggingPointId(hit.id);
+      case 'envelope-point':
+        setSelectedPointId(grab.id);
+        setDraggingPointId(grab.id);
         return;
-      }
-      const lineY = gainToY(envelopeGainAt(gainPoints, rawTime));
-      if (Math.abs(localY - lineY) <= GRAB_SLOP_PX + 3) {
+      case 'envelope-line': {
         const point: GainPoint = {
           id: `gp-${Date.now().toString(36)}-${Math.round(rawTime * 1000)}`,
           timeSec: rawTime,
@@ -889,25 +886,18 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
         setDraggingPointId(point.id);
         return;
       }
-      // A click away from the line just clears the selection, it never plays:
-      // in edit mode the wave is a canvas, not a transport.
-      setSelectedPointId(null);
-      return;
-    }
-
-    // Check if clicked near an existing slice start boundary
-    if (sample.slices && sample.slices.length > 0) {
-      for (let i = 0; i < sample.slices.length; i++) {
-        const slice = sample.slices[i];
-        const markerX = ((slice.startSec / duration) * rect.width * zoomLevel) - scrollOffset;
-        const clickX = e.clientX - rect.left;
-
-        if (Math.abs(clickX - markerX) <= 8 || (clickX >= markerX && clickX <= markerX + 28 && e.clientY - rect.top <= 18)) {
-          setDraggingSliceIndex(i);
-          setSelectedSlice(slice);
+      case 'slice-marker':
+        setDraggingSliceIndex(grab.index);
+        setSelectedSlice(sample.slices![grab.index]);
+        return;
+      case 'none':
+        // While editing the volume line the wave is a canvas, not a transport:
+        // a press that grabbed nothing clears the selection and stops there.
+        if (isVolumeEditing) {
+          setSelectedPointId(null);
           return;
         }
-      }
+        break;
     }
 
     // Normal click: select slice or play from clicked point
@@ -1039,10 +1029,11 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     zoneAnchorRef.current = null;
     setZone((current) => {
       if (!current) return null;
-      if (current.endSec - current.startSec < MIN_ZONE_SEC) return null;
+      const settled = normaliseZone(current, sample.audioBuffer?.duration ?? 0);
+      if (!settled) return null;
       return {
-        startSec: findZeroCrossing(current.startSec),
-        endSec: findZeroCrossing(current.endSec),
+        startSec: findZeroCrossing(settled.startSec),
+        endSec: findZeroCrossing(settled.endSec),
       };
     });
   };
@@ -1294,7 +1285,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   useAudition(zone ? 'Zone sélectionnée' : 'Sample', handlePlayToggle);
 
   const handleZoom = (delta: number) => {
-    setZoomLevel((prev) => Math.max(1, Math.min(30, prev + delta)));
+    setZoomLevel((prev) => clampZoom(prev + delta));
   };
 
   // Preset Layer Combinations
