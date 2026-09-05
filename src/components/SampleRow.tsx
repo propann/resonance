@@ -7,6 +7,12 @@ import { ROW_HEIGHT, TYPE_BADGES, type ColumnWidths } from './sampleTableColumns
 
 interface SampleRowProps {
   sample: SampleItem;
+  /**
+   * The row's decoded audio when it happens to be cached — the manifest gives
+   * rows no audio of their own. Passed in rather than read here so that a
+   * decode landing changes a prop, which is what gets past `React.memo`.
+   */
+  audioBuffer?: AudioBuffer;
   colWidths: ColumnWidths;
   isSelected: boolean;
   isPlaying: boolean;
@@ -27,6 +33,7 @@ interface SampleRowProps {
  */
 export const SampleRow = React.memo(function SampleRow({
   sample,
+  audioBuffer,
   colWidths,
   isSelected,
   isPlaying,
@@ -88,7 +95,7 @@ export const SampleRow = React.memo(function SampleRow({
         className="px-2 py-1.5 flex-shrink-0"
       >
         <MiniWaveform
-          audioBuffer={sample.audioBuffer}
+          audioBuffer={audioBuffer}
           sampleId={sample.id}
           type={sample.type}
           isPlaying={isPlaying}

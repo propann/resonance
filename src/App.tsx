@@ -11,12 +11,8 @@ import { activeAudition } from './stores/transportStore';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortLibrary } from './services/librarySorter';
-import {
-  cacheBlobUrl,
-  cacheBuffer,
-  getCachedBlobUrl,
-  getCachedBuffer,
-} from './services/audioBufferCache';
+import { getCachedBlobUrl, getCachedBuffer } from './services/audioBufferCache';
+import { loadSampleAudio, peekSampleAudio } from './services/sampleAudio';
 import { folderIdForPath, folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
@@ -73,7 +69,6 @@ import {
   getDirectoryForPath,
   writeUniqueFile,
   writeLibraryManifest,
-  readLibraryAudioFile,
   getLastSampleId,
   setLastSampleId,
   type WorkFolderAudioFile,
@@ -208,33 +203,24 @@ export default function App() {
     const selected = useLibraryStore
       .getState()
       .samples.find((sample) => sample.id === selectedSampleId);
-    if (!selected || getCachedBuffer(selected.diskPath ?? '') || selected.audioBuffer || !selected.diskPath) return;
+    // Going back to a sample used to read its file over IPC and decode it
+    // again, every time. The cache makes a return trip free, which is what
+    // moving through a folder mostly consists of.
+    if (!selected || peekSampleAudio(selected)) return;
     let cancelled = false;
-    const loadSelectedAudio = async () => {
-      try {
-        // Going back to a sample used to read its file over IPC and decode it
-        // again, every time. The cache makes a return trip free, which is what
-        // moving through a folder mostly consists of.
-        const file = await readLibraryAudioFile(libraryRoot, selected.diskPath!);
-        const audioBuffer = await audioEngine.decodeAudioData(await file.arrayBuffer());
-        if (cancelled) return;
-        cacheBuffer(selected.diskPath!, audioBuffer);
-        cacheBlobUrl(selected.diskPath!, URL.createObjectURL(file), file.size);
-        // Deliberately NOT written into `samples`.
-        //
-        // Doing so replaced the array, which invalidated the filtered-and-
-        // sorted memo, which re-sorted 283 000 items — 113 ms by date, 374 ms
-        // by name — on every single selection. That is what made the playhead
-        // jump: it is painted from requestAnimationFrame, and a main thread
-        // busy for a third of a second skips it forward instead of advancing
-        // it. The buffer reaches the interface through `withLoadedAudio`
-        // below, on the one sample that needs it.
-        setLoadedAudioVersion((version) => version + 1);
-      } catch (error) {
-        console.error('Impossible de charger le sample sélectionné depuis le dossier de travail', error);
-      }
-    };
-    void loadSelectedAudio();
+    void loadSampleAudio(libraryRoot, selected).then((buffer) => {
+      if (cancelled || !buffer) return;
+      // Deliberately NOT written into `samples`.
+      //
+      // Doing so replaced the array, which invalidated the filtered-and-
+      // sorted memo, which re-sorted 283 000 items — 113 ms by date, 374 ms
+      // by name — on every single selection. That is what made the playhead
+      // jump: it is painted from requestAnimationFrame, and a main thread
+      // busy for a third of a second skips it forward instead of advancing
+      // it. The buffer reaches the interface through `withLoadedAudio`
+      // below, on the one sample that needs it.
+      setLoadedAudioVersion((version) => version + 1);
+    });
     return () => { cancelled = true; };
   }, [selectedSampleId, libraryRoot]);
 
@@ -1127,6 +1113,7 @@ export default function App() {
                 selectedSampleIds={selectedSampleIds}
                 onToggleSelectSample={handleToggleSelectSample}
                 onSelectAllSamples={handleSelectAllSamples}
+                libraryRoot={libraryRoot}
               />
             </>
           ) : (

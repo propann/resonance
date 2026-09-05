@@ -8,6 +8,8 @@ import {
 import { SampleItem, FilterState } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { audioBufferToWavBlob, triggerFileDownload } from '../services/audioConverter';
+import { loadSampleAudio, peekSampleAudio } from '../services/sampleAudio';
+import type { LibraryRoot } from '../services/localLibrary';
 import { SampleRow } from './SampleRow';
 import { openSampleModal } from '../stores/sampleTargetStore';
 import {
@@ -29,6 +31,8 @@ interface SampleTableProps {
   selectedSampleIds: string[];
   onToggleSelectSample: (sampleId: string) => void;
   onSelectAllSamples: (select: boolean) => void;
+  /** Needed to read a row's file: rows arrive from the manifest without audio. */
+  libraryRoot: LibraryRoot | null;
 }
 
 export const SampleTable: React.FC<SampleTableProps> = ({
@@ -42,6 +46,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   selectedSampleIds,
   onToggleSelectSample,
   onSelectAllSamples,
+  libraryRoot,
 }) => {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
@@ -174,31 +179,40 @@ export const SampleTable: React.FC<SampleTableProps> = ({
   }, []);
 
   const handlePlaySample = useCallback(
-    (e: React.MouseEvent, sample: SampleItem) => {
+    async (e: React.MouseEvent, sample: SampleItem) => {
       e.stopPropagation();
-      if (!sample.audioBuffer) return;
 
       if (audioEngine.getState().isPlaying && audioEngine.getState().sampleId === sample.id) {
         audioEngine.stop();
         setPlayingId(null);
-      } else {
-        onSelectSample(sample);
-        audioEngine.play(sample.audioBuffer, sample.id);
+        return;
       }
+
+      onSelectSample(sample);
+      // A row almost never carries its own audio — library entries are hydrated
+      // from the manifest without any. This used to be `if (!sample.audioBuffer)
+      // return`, so the button silently did nothing for every sample on disk.
+      const buffer = await loadSampleAudio(libraryRoot, sample);
+      if (!buffer) return;
+      audioEngine.play(buffer, sample.id);
     },
-    [onSelectSample]
+    [onSelectSample, libraryRoot]
   );
 
-  const handleDownloadSingleWav = useCallback((e: React.MouseEvent, sample: SampleItem) => {
-    e.stopPropagation();
-    if (!sample.audioBuffer) return;
-    const blob = audioBufferToWavBlob(sample.audioBuffer, {
-      bitDepth: 24,
-      normalize: true,
-      targetPeakDb: -0.2,
-    });
-    triggerFileDownload(blob, `${sample.name}_24bit.wav`);
-  }, []);
+  const handleDownloadSingleWav = useCallback(
+    async (e: React.MouseEvent, sample: SampleItem) => {
+      e.stopPropagation();
+      const buffer = await loadSampleAudio(libraryRoot, sample);
+      if (!buffer) return;
+      const blob = audioBufferToWavBlob(buffer, {
+        bitDepth: 24,
+        normalize: true,
+        targetPeakDb: -0.2,
+      });
+      triggerFileDownload(blob, `${sample.name}_24bit.wav`);
+    },
+    [libraryRoot]
+  );
 
   const isAllSelected = samples.length > 0 && selectedSampleIds.length === samples.length;
 
@@ -418,6 +432,7 @@ export const SampleTable: React.FC<SampleTableProps> = ({
               <SampleRow
                 key={sample.id}
                 sample={sample}
+                audioBuffer={peekSampleAudio(sample)}
                 colWidths={colWidths}
                 isSelected={selectedSampleId === sample.id}
                 isPlaying={playingId === sample.id}
