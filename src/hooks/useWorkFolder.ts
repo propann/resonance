@@ -100,8 +100,17 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
    * last held anything. Without it the sweep would run on every idle tick.
    */
   const sweptSinceDrainRef = useRef(false);
-  /** When the folders were last swept, for the periodic sweep during ingest. */
-  const lastSweepRef = useRef(0);
+  /**
+   * When the folders were last swept, for the periodic sweep during ingest.
+   *
+   * Starts at launch rather than at zero. At zero the sweep is due on the very
+   * first scan of every run, and it walks every managed folder — half a
+   * million files here, one IPC round trip per directory — before any file is
+   * ingested. Restarting the app therefore meant waiting through it again.
+   */
+  const lastSweepRef = useRef(Date.now());
+  /** The sweep is housekeeping; it must never hold up the ingest. */
+  const sweepInFlightRef = useRef(false);
   const queuedSourceKeysRef = useRef(new Set<string>());
 
   const optionsRef = useRef(options);
@@ -268,15 +277,22 @@ export function useWorkFolder(options: UseWorkFolderOptions): WorkFolderApi {
         const drained = entries.length === 0;
         if (!drained) sweptSinceDrainRef.current = false;
         const due = Date.now() - lastSweepRef.current >= SWEEP_INTERVAL_MS;
-        if ((drained && !sweptSinceDrainRef.current) || due) {
+        if (((drained && !sweptSinceDrainRef.current) || due) && !sweepInFlightRef.current) {
           if (drained) sweptSinceDrainRef.current = true;
           lastSweepRef.current = Date.now();
-          const swept = await removeEmptyManagedFolders(libraryRoot).catch((error) => {
-            console.error('Nettoyage des dossiers vides impossible', error);
-            return 0;
-          });
-          if (cancelled) return;
-          if (swept > 0) toast.info(`${swept} dossier(s) vide(s) supprimé(s).`);
+          sweepInFlightRef.current = true;
+          // Deliberately not awaited. The sweep walks every managed folder,
+          // which on a large library takes minutes, and it used to do that
+          // inside the scan's critical section — so no file could be ingested
+          // while it ran. It is housekeeping; the ingest goes first.
+          void removeEmptyManagedFolders(libraryRoot)
+            .then((swept) => {
+              if (!cancelled && swept > 0) toast.info(`${swept} dossier(s) vide(s) supprimé(s).`);
+            })
+            .catch((error) => console.error('Nettoyage des dossiers vides impossible', error))
+            .finally(() => {
+              sweepInFlightRef.current = false;
+            });
         }
         const currentKeys = new Set(entries.map(workFolderEntryKey));
         for (const knownKey of queuedSourceKeysRef.current) {
