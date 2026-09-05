@@ -15,7 +15,7 @@ cd C:\Users\azoth\resonance
 git pull                       # dernier état sur origin/main
 npm ci                         # si node_modules absent
 npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
-# doit tout passer : 0 erreur, 370 tests
+# doit tout passer : 0 erreur, 371 tests
 ```
 
 - `main` @ `0317b52` (2026-09-05), poussé. Build installé depuis
@@ -38,7 +38,7 @@ npx tsc --noEmit && npx eslint . && npx vitest run && npx vite build
 
 ## 2026-09-05 — L'application était bloquée 97 % du temps
 
-Branche `worktree-trieuse-coherence`, vingt-trois commits, non fusionnée.
+Branche `worktree-trieuse-coherence`, vingt-six commits, non fusionnée.
 
 Symptômes signalés : chargement long, « la lecture démarre quand elle veut »,
 la barre de lecture **saute**. C'étaient deux problèmes distincts, et aucun des
@@ -179,6 +179,46 @@ marqueurs et la jauge doivent suivre.
 
 Vérifié dans l'app : fenêtre ouverte en 4 ms, `RACK · C1 · <nom du pad>`,
 dossier EFFETS avec ses 24 effets par famille, jauge `29.12s / 12.00s`.
+
+### L'ingestion, débloquée — et pourquoi ça a pris si longtemps
+
+**Résolu, vérifié sur les vrais fichiers.** 767 patches en réception → 383 en
+quelques minutes ; `03_OP-1/drum` 231, `03_OP-1/synth` 539, **zéro échec**. Sur
+50 fichiers vérifiés dans chaque dossier : `drum/` 50 kits et 0 synthé,
+`synth/` 50 synthé et 0 kit. Séparation parfaite.
+
+La cause : **`parseOp1AiffPatch` appelait `getAudioContext().decodeAudioData`
+en direct**, donc ne traversait jamais le repli AIFF branché sur
+`audioEngine.decodeAudioData`. Or c'est la fonction par laquelle passe *chaque*
+`.aif`. Le repli était à un appel de distance, sans rien faire. Un test balaie
+maintenant les sources et échoue sur tout décodage brut hors du moteur
+(`decodeThroughEngine.test.ts`) — l'enregistreur avait le même raccourci.
+
+Trois choses expliquaient pourquoi ça ne repartait jamais, toutes muettes :
+
+- **`processQueue` n'avait pas de `finally`.** Son drapeau empêche le scan de
+  réception de remettre son watcher *et* son timer. Une exception échappée, ou
+  un `await` qui ne se règle jamais, arrêtait l'ingestion **définitivement**.
+- **`analysisPool.analyse` n'avait pas de délai maximal.** Un worker qui ne
+  répond ni par un résultat ni par une erreur laisse sa promesse en suspens —
+  précisément l'`await` ci-dessus. 30 s puis reprise sur le thread principal.
+- **Les échecs ne quittaient jamais la file** et chaque nouveau lot fusionnait
+  par-dessus : les mêmes fichiers cassés redécodés à chaque lot, coût croissant.
+
+Et le scan marquait « en file » toutes les entrées demandées, y compris celles
+dont les octets n'étaient jamais revenus — son propre commentaire disait le
+contraire. Ces fichiers étaient retirés sans avoir été transmis.
+
+Les échecs sont maintenant regroupés par raison, dits une fois par lot, et la
+raison remonte jusqu'au badge qui n'affichait qu'un nombre.
+
+⚠️ **Fausse piste, notée pour ne pas y revenir** : le balayage des dossiers
+vides tourne dans le scan et son horloge démarrait à zéro, donc il partait au
+premier scan de **chaque** démarrage en parcourant un demi-million de fichiers.
+Ça ressemblait beaucoup à la cause. Ce n'en était pas une — il finit. Corrigé
+quand même (horloge au lancement, exécution non bloquante) parce qu'il retarde
+l'ingestion de plusieurs minutes à chaque relance, ce qui a masqué le vrai
+problème pendant tout le diagnostic.
 
 ### Le navigateur ne décode pas l'AIFF — 78 000 fichiers étaient bloqués
 
