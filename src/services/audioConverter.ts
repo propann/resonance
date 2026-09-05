@@ -313,7 +313,7 @@ export async function exportEp133ProjectPack(
     typeCounters[catKey] = (typeCounters[catKey] || 0) + 1;
     const slotNumber = sample.ep133Slot || (sample.category === 'loop' ? 900 + (typeCounters[catKey] % 99) : 1 + (i % 998));
 
-    const wavBlob = audioBufferToWavBlob(sample.audioBuffer, {
+    const wavBlob = audioBufferToWavBlob(audioBuffer, {
       ...ep133WavOptions(sample),
       sampleRate: targetSampleRate,
       monoSum: useMono,

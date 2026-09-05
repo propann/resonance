@@ -30,6 +30,7 @@ import {
   Eraser,
 } from 'lucide-react';
 import { SampleItem } from '../types/sample';
+import { peekSampleAudio } from '../services/sampleAudio';
 import { listModuleDefs } from '../rack/registry';
 import { registerBuiltinModules } from '../rack/modules';
 import { RackModulePanel } from '../rack/RackModulePanel';
@@ -224,7 +225,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
   );
 
   // The chain lives as long as the column does, which is as long as the app.
-  const live = useLiveRack(sample?.audioBuffer, true);
+  const live = useLiveRack(peekSampleAudio(sample), true);
   const [isRendering, setIsRendering] = useState(false);
 
   // The engines are playable while their folder is open. Closed, they release
@@ -481,7 +482,7 @@ export const AtelierColumn: React.FC<AtelierColumnProps> = ({
                 id={engine.id}
                 label={engine.label}
                 note={(player.octave + 1) * 12}
-                sampleBuffer={sample?.audioBuffer}
+                sampleBuffer={peekSampleAudio(sample)}
                 onRendered={handleEngineRendered}
                 onKit={(id, label, sounds) => void handleEngineKit(id, label, sounds)}
               />

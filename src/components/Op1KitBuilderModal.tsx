@@ -27,7 +27,7 @@ import {
   CheckCircle2,
   FileCode2,
 } from 'lucide-react';
-import { SampleItem, SampleType } from '../types/sample';
+import { SampleItem, NewSample, SampleType } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { useAudition } from '../stores/transportStore';
 import {
@@ -41,6 +41,7 @@ import {
   batchGenerateOp1Kits,
 } from '../services/op1PatchEncoder';
 import { triggerFileDownload } from '../services/audioConverter';
+import { loadSampleAudio, peekSampleAudio } from '../services/sampleAudio';
 import { Modal } from './Modal';
 import {
   calculateAudioMetrics,
@@ -58,7 +59,7 @@ interface Op1KitBuilderModalProps {
   onClose: () => void;
   availableSamples: SampleItem[];
   currentSelectedSample?: SampleItem | null;
-  onImportNewSamples?: (samples: SampleItem[]) => void;
+  onImportNewSamples?: (samples: NewSample[]) => void;
 }
 
 // Computer keyboard mappings to 24 OP-1 keys
@@ -357,8 +358,10 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
       reverse: false,
       playmode: 0,
       volume: 8192,
+      // Whatever the cache happens to hold, so the pad can be auditioned right
+      // away; the kit build reads the file for anything still missing.
       sampleItem: sample,
-      audioBuffer: sample.audioBuffer,
+      audioBuffer: peekSampleAudio(sample),
       color: OP1_KEY_COLORS[targetPadIndex],
     };
 
@@ -485,12 +488,16 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
   // Slice a long sample (Drum break / loop) into 24 even slices
   const handleAutoSliceSelectedSample = async () => {
     const targetSample = currentSelectedSample || availableSamples[0];
-    if (!targetSample || !targetSample.audioBuffer) {
+    if (!targetSample) {
       toast.info('Veuillez sélectionner un sample ou une boucle à découper en 24 tranches.');
       return;
     }
 
-    const buf = targetSample.audioBuffer;
+    const buf = await loadSampleAudio(targetSample);
+    if (!buf) {
+      toast.error("Le son de ce sample n'a pas pu être lu depuis le dossier de travail.");
+      return;
+    }
     const dur = buf.duration;
     const sliceDur = dur / 24;
 
@@ -533,7 +540,7 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
     setIsCompiling(true);
     setStatusMessage(`Ingestion & analyse DSP de ${audioFiles.length} samples...`);
 
-    const importedSampleItems: SampleItem[] = [];
+    const importedSampleItems: NewSample[] = [];
 
     for (let i = 0; i < audioFiles.length; i++) {
       const file = audioFiles[i];
@@ -785,11 +792,12 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
                         draggable
                         onDragStart={(e) => handleDragStartFromLibrary(e, sample)}
                         onClick={() => {
-                          if (sample.audioBuffer) {
-                            audioEngine.play(sample.audioBuffer, sample.id, {
+                          void loadSampleAudio(sample).then((buffer) => {
+                            if (!buffer) return;
+                            audioEngine.play(buffer, sample.id, {
                               loudnessGainDb: loudnessMatch ? sample.loudnessGainDb : 0,
                             });
-                          }
+                          });
                         }}
                         className={`group p-2 rounded-lg border flex items-center justify-between cursor-grab active:cursor-grabbing select-none transition-all ${
                           isCurrent
@@ -803,11 +811,12 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (sample.audioBuffer) {
-                                audioEngine.play(sample.audioBuffer, sample.id, {
+                              void loadSampleAudio(sample).then((buffer) => {
+                                if (!buffer) return;
+                                audioEngine.play(buffer, sample.id, {
                                   loudnessGainDb: loudnessMatch ? sample.loudnessGainDb : 0,
                                 });
-                              }
+                              });
                             }}
                             className="w-5 h-5 rounded bg-[#1D2132] hover:bg-[#00F0FF] hover:text-black text-[#8A8F9E] flex items-center justify-center shrink-0 transition-colors"
                           >
@@ -827,7 +836,7 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
 
                         <div className="flex items-center gap-1.5 shrink-0">
                           <MiniWaveform
-                            audioBuffer={sample.audioBuffer}
+                            audioBuffer={peekSampleAudio(sample)}
                             sampleId={sample.id}
                             type={sample.type}
                             width={55}

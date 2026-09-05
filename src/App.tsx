@@ -12,11 +12,16 @@ import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortLibrary } from './services/librarySorter';
 import { getCachedBlobUrl, getCachedBuffer } from './services/audioBufferCache';
-import { loadSampleAudio, peekSampleAudio } from './services/sampleAudio';
+import {
+  cacheSampleAudio,
+  loadSampleAudio,
+  peekSampleAudio,
+  releaseSampleAudio,
+} from './services/sampleAudio';
 import { hydrateNewManifestSamples } from './services/manifestHydration';
 import { folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
-import { SampleItem, FolderItem, SliceRegion } from './types/sample';
+import { SampleItem, NewSample, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -319,13 +324,16 @@ export default function App() {
    */
   const withLoadedAudio = useCallback(
     (sample: SampleItem | null): SampleItem | null => {
-      if (!sample?.diskPath || sample.audioBuffer) return sample;
+      if (!sample?.diskPath) return sample;
       const buffer = getCachedBuffer(sample.diskPath);
       if (!buffer) return sample;
       const blob = getCachedBlobUrl(sample.diskPath);
+      // Not the buffer itself — that is the cache's job now, and a sample that
+      // carried one was how the play button and the exports came to fail
+      // silently. What the manifest could not know: the file's real size, and
+      // the shape the decoder actually found.
       return {
         ...sample,
-        audioBuffer: buffer,
         blobUrl: blob?.url || sample.blobUrl,
         size: blob?.size ?? sample.size,
         duration: buffer.duration,
@@ -342,6 +350,17 @@ export default function App() {
       withLoadedAudio(samples.find((s) => s.id === selectedSampleId) || filteredSamples[0] || null),
     [samples, selectedSampleId, filteredSamples, withLoadedAudio]
   );
+
+  /**
+   * Play a sample, reading its file first if the cache has not got it.
+   *
+   * The transport used to check `sample.audioBuffer` and do nothing when it was
+   * missing — which, for anything from the manifest, was always.
+   */
+  const playSample = useCallback(async (sample: SampleItem) => {
+    const buffer = await loadSampleAudio(sample);
+    if (buffer) audioEngine.play(buffer, sample.id, sample.loudnessGainDb);
+  }, []);
 
   // A sample-scoped modal stores a snapshot of its target sample; re-resolve it
   // against the live library so a later disk-decode (audioBuffer) reaches the modal.
@@ -420,38 +439,31 @@ export default function App() {
     const st = audioEngine.getState();
     if (st.isPlaying) {
       audioEngine.pause();
-    } else if (selectedSample && selectedSample.audioBuffer) {
-      audioEngine.play(selectedSample.audioBuffer, selectedSample.id, selectedSample.loudnessGainDb);
+    } else if (selectedSample) {
+      void playSample(selectedSample);
     } else if (filteredSamples.length > 0) {
       const first = filteredSamples[0];
       setSelectedSampleId(first.id);
-      if (first.audioBuffer) {
-        audioEngine.play(first.audioBuffer, first.id, first.loudnessGainDb);
-      }
+      void playSample(first);
     }
-  }, [selectedSample, filteredSamples]);
+  }, [selectedSample, filteredSamples, playSample]);
 
   const handlePlayNext = useCallback(() => {
     if (filteredSamples.length === 0) return;
     const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
-    const nextIdx = (idx + 1) % filteredSamples.length;
-    const nextSample = filteredSamples[nextIdx];
+    const nextSample = filteredSamples[(idx + 1) % filteredSamples.length];
     setSelectedSampleId(nextSample.id);
-    if (nextSample.audioBuffer) {
-      audioEngine.play(nextSample.audioBuffer, nextSample.id, nextSample.loudnessGainDb);
-    }
-  }, [filteredSamples, selectedSampleId]);
+    void playSample(nextSample);
+  }, [filteredSamples, selectedSampleId, playSample]);
 
   const handlePlayPrev = useCallback(() => {
     if (filteredSamples.length === 0) return;
     const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
-    const prevIdx = (idx - 1 + filteredSamples.length) % filteredSamples.length;
-    const prevSample = filteredSamples[prevIdx];
+    const prevSample =
+      filteredSamples[(idx - 1 + filteredSamples.length) % filteredSamples.length];
     setSelectedSampleId(prevSample.id);
-    if (prevSample.audioBuffer) {
-      audioEngine.play(prevSample.audioBuffer, prevSample.id, prevSample.loudnessGainDb);
-    }
-  }, [filteredSamples, selectedSampleId]);
+    void playSample(prevSample);
+  }, [filteredSamples, selectedSampleId, playSample]);
 
   const handleToggleAutoLoudness = () => {
     const newVal = !autoLoudnessLeveling;
@@ -510,7 +522,7 @@ export default function App() {
 
       const op1Metrics = calculateAudioMetrics(audioBuf);
 
-      const newSample: SampleItem = {
+      const newSample: NewSample = {
         id: `op1-${Date.now()}`,
         name: file.name.replace(/\.[^/.]+$/, ''),
         originalFileName: file.name,
@@ -543,7 +555,7 @@ export default function App() {
         isMultiSound: true,
       };
 
-      setSamples((prev) => [newSample, ...prev]);
+      setSamples((prev) => [...adoptNewSamples([newSample]), ...prev]);
       setSelectedSampleId(newSample.id);
       audioEngine.play(audioBuf, newSample.id, 0);
     } catch (err) {
@@ -633,10 +645,11 @@ export default function App() {
     }
   };
 
-  const handleApplyCuration = (curatedSamples: SampleItem[]) => {
+  const handleApplyCuration = (curatedSamples: NewSample[]) => {
+    const curated = adoptNewSamples(curatedSamples);
     setSamples((current) => {
-      const curatedIds = new Set(curatedSamples.map((sample) => sample.id));
-      return [...curatedSamples, ...current.filter((sample) => !curatedIds.has(sample.id))];
+      const curatedIds = new Set(curated.map((sample) => sample.id));
+      return [...curated, ...current.filter((sample) => !curatedIds.has(sample.id))];
     });
   };
 
@@ -698,7 +711,7 @@ export default function App() {
   const handleAddExtractedSamples = (
     extracted: Array<{ fileName: string; blob: Blob; audioBuffer: AudioBuffer; duration: number }>
   ) => {
-    const newItems: SampleItem[] = extracted.map((ex, i) => {
+    const newItems: NewSample[] = extracted.map((ex, i) => {
       const metrics = calculateAudioMetrics(ex.audioBuffer);
       const pitchKey = detectPitchAndKey(ex.audioBuffer);
       const classification = classifySample(ex.audioBuffer, ex.fileName, metrics, 0);
@@ -738,10 +751,11 @@ export default function App() {
       };
     });
 
-    setSamples((prev) => [...newItems, ...prev]);
-    if (newItems.length > 0) {
-      setSelectedSampleId(newItems[0].id);
-      audioEngine.play(newItems[0].audioBuffer!, newItems[0].id, 0);
+    const adopted = adoptNewSamples(newItems);
+    setSamples((prev) => [...adopted, ...prev]);
+    if (adopted.length > 0) {
+      setSelectedSampleId(adopted[0].id);
+      audioEngine.play(newItems[0].audioBuffer!, adopted[0].id, 0);
     }
   };
 
@@ -749,10 +763,28 @@ export default function App() {
     setSamples(updatedSamples);
   };
 
-  const handleUpdateSampleFromDsp = (updatedSample: SampleItem) => {
-    setSamples((prev) =>
-      prev.map((s) => (s.id === updatedSample.id ? updatedSample : s))
-    );
+  /**
+   * Take in samples that arrive with their sound — a recording, a rack render,
+   * a slice just cut, an imported patch — and put that sound where everything
+   * else looks for it.
+   *
+   * The library array never holds audio: `SampleItem` has no field for it, so
+   * nothing downstream can read one and quietly find nothing. Anything without
+   * a file behind it yet is pinned, because the cache would otherwise be free
+   * to evict the only copy in existence.
+   */
+  const adoptNewSamples = useCallback((incoming: NewSample[]): SampleItem[] =>
+    incoming.map(({ audioBuffer, ...sample }) => {
+      if (audioBuffer) cacheSampleAudio(sample, audioBuffer);
+      return sample;
+    }), []);
+
+  const handleUpdateSampleFromDsp = (updated: NewSample) => {
+    const { audioBuffer, ...sample } = updated;
+    // A DC-offset fix or a levelling: the file on disk still holds the old
+    // sound, so the cache must keep this one rather than re-read the original.
+    if (audioBuffer) cacheSampleAudio(sample, audioBuffer, true);
+    setSamples((prev) => prev.map((s) => (s.id === sample.id ? sample : s)));
   };
 
   // Thin wrappers over the store opener, kept for the internal callers
@@ -762,21 +794,26 @@ export default function App() {
   const handleOpenDspAnalyzer = (targetSample?: SampleItem) => openSampleModal('dsp', targetSample);
   const handleOpenSlicer = (targetSample?: SampleItem) => openSampleModal('slicer', targetSample);
 
-  const handleApplyLoudnessNormalization = (updatedSample: SampleItem, report: LoudnessAuditReport) => {
-    setSamples((prev) =>
-      prev.map((s) => (s.id === updatedSample.id ? updatedSample : s))
-    );
-    if (updatedSample.audioBuffer) {
-      audioEngine.play(updatedSample.audioBuffer, updatedSample.id, 0);
-    }
+  const handleApplyLoudnessNormalization = (updated: NewSample, report: LoudnessAuditReport) => {
+    const { audioBuffer, ...sample } = updated;
+    // The levelled audio is not what the file holds — nothing has rewritten it
+    // — so the cache must not be free to drop it and hand back the original.
+    if (audioBuffer) cacheSampleAudio(sample, audioBuffer, true);
+    setSamples((prev) => prev.map((s) => (s.id === sample.id ? sample : s)));
+    if (audioBuffer) audioEngine.play(audioBuffer, sample.id, 0);
   };
 
   const handleBatchApplyLoudnessNormalization = (
-    updatedList: SampleItem[],
+    updatedList: NewSample[],
     standardKey: LoudnessStandardKey
   ) => {
+    const levelled = updatedList.map(({ audioBuffer, ...sample }) => {
+      // As above: levelled audio no file holds, so the cache keeps it for good.
+      if (audioBuffer) cacheSampleAudio(sample, audioBuffer, true);
+      return sample;
+    });
     setSamples((prev) => {
-      const map = new Map(updatedList.map((item) => [item.id, item]));
+      const map = new Map(levelled.map((item) => [item.id, item]));
       return prev.map((s) => map.get(s.id) || s);
     });
   };
@@ -817,7 +854,7 @@ export default function App() {
    */
   const handleSaveWaveAsOp1 = async () => {
     const target = selectedSample;
-    if (!target?.audioBuffer) {
+    if (!target) {
       toast.info("Choisis un sample : c'est l'onde affichée qui devient le patch.");
       return;
     }
@@ -825,10 +862,15 @@ export default function App() {
       toast.info('Aucune découpe sur cette onde. Découpe-la, ou pars d’un kit de moteur.');
       return;
     }
+    const wave = await loadSampleAudio(target);
+    if (!wave) {
+      toast.error("Le son de ce sample n'a pas pu être lu depuis le dossier de travail.");
+      return;
+    }
     try {
       const { encodeOp1FromWave } = await import('./services/op1QuickKit');
       const { aiff, name, pads } = await encodeOp1FromWave(
-        target.audioBuffer,
+        wave,
         target.slices,
         target.name
       );
@@ -842,17 +884,19 @@ export default function App() {
     }
   };
 
-  const handleSaveProcessedAsNew = async (newSample: SampleItem) => {
+  const handleSaveProcessedAsNew = async (incoming: NewSample) => {
+    const rendered = incoming.audioBuffer;
+    const [newSample] = adoptNewSamples([incoming]);
     setSamples((prev) => [newSample, ...prev]);
     setSelectedSampleId(newSample.id);
-    if (newSample.audioBuffer) {
-      audioEngine.play(newSample.audioBuffer, newSample.id, newSample.loudnessGainDb);
+    if (rendered) {
+      audioEngine.play(rendered, newSample.id, newSample.loudnessGainDb);
     }
-    if (!libraryRoot || !newSample.audioBuffer) return;
+    if (!libraryRoot || !rendered) return;
     try {
       const folder = classifySampleForLibrary(newSample);
       const directory = await getDirectoryForPath(libraryRoot, folder.folderPath);
-      const blob = audioBufferToWavBlob(newSample.audioBuffer, { bitDepth: 24, normalize: false });
+      const blob = audioBufferToWavBlob(rendered, { bitDepth: 24, normalize: false });
       const fileName = await writeUniqueFile(directory, `${newSample.name}.wav`, blob);
       await writeLibraryManifest(libraryRoot, [{
         name: newSample.name,
@@ -871,6 +915,13 @@ export default function App() {
         derivedFrom: newSample.id,
         processing: 'dsp-rack',
       }]);
+      // It has a file now. Point the sample at it and file the audio under its
+      // path, so the copy pinned under the sample's id — pinned because it was
+      // the only one there was — can be let go and evicted like any other.
+      const diskPath = `${folder.folderPath.replace(/^\//, '')}/${fileName}`;
+      cacheSampleAudio({ id: newSample.id, diskPath }, rendered);
+      releaseSampleAudio(newSample);
+      setSamples((prev) => prev.map((s) => (s.id === newSample.id ? { ...s, diskPath } : s)));
       await refreshLibrary();
     } catch (error) {
       console.error('Impossible de sauvegarder le rendu DSP dans la bibliothèque', error);
@@ -1059,7 +1110,7 @@ export default function App() {
                       const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
                       const next = filteredSamples[(idx + 1) % filteredSamples.length];
                       setSelectedSampleId(next.id);
-                      if (next.audioBuffer) audioEngine.play(next.audioBuffer, next.id, next.loudnessGainDb);
+                      void playSample(next);
                     }
                   }}
                   onPrevSample={() => {
@@ -1067,7 +1118,7 @@ export default function App() {
                       const idx = filteredSamples.findIndex((s) => s.id === selectedSampleId);
                       const prev = filteredSamples[(idx - 1 + filteredSamples.length) % filteredSamples.length];
                       setSelectedSampleId(prev.id);
-                      if (prev.audioBuffer) audioEngine.play(prev.audioBuffer, prev.id, prev.loudnessGainDb);
+                      void playSample(prev);
                     }
                   }}
                 />
@@ -1141,16 +1192,11 @@ export default function App() {
           isOpen={modals.smartIngest}
           onClose={() => closeModal('smartIngest')}
           onImportComplete={(newImportedSamples) => {
-            setSamples((prev) => [...newImportedSamples, ...prev]);
-            if (newImportedSamples.length > 0) {
-              setSelectedSampleId(newImportedSamples[0].id);
-              if (newImportedSamples[0].audioBuffer) {
-                audioEngine.play(
-                  newImportedSamples[0].audioBuffer,
-                  newImportedSamples[0].id,
-                  newImportedSamples[0].loudnessGainDb
-                );
-              }
+            const adopted = adoptNewSamples(newImportedSamples);
+            setSamples((prev) => [...adopted, ...prev]);
+            if (adopted.length > 0) {
+              setSelectedSampleId(adopted[0].id);
+              void playSample(adopted[0]);
             }
           }}
         />
@@ -1220,8 +1266,9 @@ export default function App() {
           availableSamples={samples}
           currentSelectedSample={selectedSample}
           onImportNewSamples={(newS) => {
-            setSamples((prev) => [...newS, ...prev]);
-            if (newS.length > 0) setSelectedSampleId(newS[0].id);
+            const adopted = adoptNewSamples(newS);
+            setSamples((prev) => [...adopted, ...prev]);
+            if (adopted.length > 0) setSelectedSampleId(adopted[0].id);
           }}
         />
       </LazyModal>
@@ -1231,8 +1278,9 @@ export default function App() {
         isOpen={modals.recorder}
         onClose={() => closeModal('recorder')}
         onSaveRecordedSample={(newS) => {
-          setSamples((prev) => [newS, ...prev]);
-          setSelectedSampleId(newS.id);
+          const [adopted] = adoptNewSamples([newS]);
+          setSamples((prev) => [adopted, ...prev]);
+          setSelectedSampleId(adopted.id);
         }}
       />
 

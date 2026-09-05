@@ -64,6 +64,7 @@ import {
   type WaveView,
 } from './waveform/waveGeometry';
 import { audioBufferToWavBlob } from '../services/audioConverter';
+import { peekSampleAudio } from '../services/sampleAudio';
 
 export type { WaveformColorTheme };
 
@@ -89,6 +90,14 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   onUpdateSlices,
   onAddExtractedSamples,
 }) => {
+  /**
+   * The sound being drawn, from the cache rather than the sample.
+   *
+   * `SampleItem` carries no audio: the library holds hundreds of thousands of
+   * them. This re-reads on every render, which is what makes the wave appear
+   * when a decode lands — App hands down a new `sample` object then.
+   */
+  const audioBuffer = peekSampleAudio(sample);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -198,9 +207,9 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   // Find nearest zero crossing point in samples to prevent clicks
   const findZeroCrossing = useCallback(
     (targetSec: number): number => {
-      if (!sample.audioBuffer || !snapToZeroCrossing) return targetSec;
-      const data = sample.audioBuffer.getChannelData(0);
-      const sr = sample.audioBuffer.sampleRate;
+      if (!audioBuffer || !snapToZeroCrossing) return targetSec;
+      const data = audioBuffer.getChannelData(0);
+      const sr = audioBuffer.sampleRate;
       const targetSample = Math.floor(targetSec * sr);
       const searchRadius = Math.floor(sr * 0.003); // ±3ms search window
 
@@ -219,14 +228,14 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
       return bestSample / sr;
     },
-    [sample.audioBuffer, snapToZeroCrossing]
+    [audioBuffer, snapToZeroCrossing]
   );
 
   // Acoustic Recognition Analysis Summary
   const acousticAnalysis = useMemo(() => {
-    if (!sample.audioBuffer) return null;
+    if (!audioBuffer) return null;
     return classifySample(
-      sample.audioBuffer,
+      audioBuffer,
       sample.name,
       {
         peakDb: sample.peakDb,
@@ -242,14 +251,14 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   // Compute or get cached Spectrogram & Multi-Band Data
   const spectroData = useMemo<SpectrogramData | null>(() => {
-    if (!sample.audioBuffer || !showSpectrogram) return null;
-    return generateSpectrogram(sample.audioBuffer, 500, 70);
-  }, [sample.audioBuffer, showSpectrogram]);
+    if (!audioBuffer || !showSpectrogram) return null;
+    return generateSpectrogram(audioBuffer, 500, 70);
+  }, [audioBuffer, showSpectrogram]);
 
   const multiBandData = useMemo<MultiBandSampleData | null>(() => {
-    if (!sample.audioBuffer || (!showMultiBand && !showPitchContour && !showRmsEnvelope)) return null;
-    return generateMultiBandData(sample.audioBuffer, 900);
-  }, [sample.audioBuffer, showMultiBand, showPitchContour, showRmsEnvelope]);
+    if (!audioBuffer || (!showMultiBand && !showPitchContour && !showRmsEnvelope)) return null;
+    return generateMultiBandData(audioBuffer, 900);
+  }, [audioBuffer, showMultiBand, showPitchContour, showRmsEnvelope]);
 
   // Theme color palette definitions
   const themeColors = useMemo(() => getWaveformPalette(colorTheme), [colorTheme]);
@@ -259,7 +268,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   // ========================================================
   const drawWaveform = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !sample.audioBuffer) return;
+    if (!canvas || !audioBuffer) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -272,7 +281,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    const buffer = sample.audioBuffer;
+    const buffer = audioBuffer;
     const numChannels = buffer.numberOfChannels;
     const duration = buffer.duration;
     const channelHeight = showChannels === 'both' && numChannels > 1 ? height / 2 : height;
@@ -808,7 +817,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   /** The view as the geometry helpers describe it. */
   const viewOf = (rect: DOMRect): WaveView => ({
-    durationSec: sample.audioBuffer?.duration ?? 0,
+    durationSec: audioBuffer?.duration ?? 0,
     width: rect.width,
     zoom: zoomLevel,
     scrollOffset,
@@ -817,7 +826,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   // Convert client X to buffer time in seconds
   const getCanvasTimeFromEvent = (e: React.MouseEvent<HTMLCanvasElement>): number => {
     const canvas = canvasRef.current;
-    if (!canvas || !sample.audioBuffer) return 0;
+    if (!canvas || !audioBuffer) return 0;
     const rect = canvas.getBoundingClientRect();
     return xToTime(e.clientX - rect.left, viewOf(rect));
   };
@@ -825,10 +834,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   // Mouse Interaction: Click & Drag Slice Boundaries
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas || !sample.audioBuffer) return;
+    if (!canvas || !audioBuffer) return;
 
     const rawTime = getCanvasTimeFromEvent(e);
-    const duration = sample.audioBuffer.duration;
+    const duration = audioBuffer.duration;
     const rect = canvas.getBoundingClientRect();
 
     const localX = e.clientX - rect.left;
@@ -915,10 +924,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       return;
     }
 
-    if (sample.audioBuffer) {
+    if (audioBuffer) {
       setCursorSec(rawTime);
       setPlaybackOffsetSec(0);
-      audioEngine.play(sample.audioBuffer, sample.id, {
+      audioEngine.play(audioBuffer, sample.id, {
         startSec: rawTime,
         endSec: clickedSlice ? clickedSlice.endSec : duration,
       });
@@ -927,11 +936,11 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas || !sample.audioBuffer) return;
+    if (!canvas || !audioBuffer) return;
 
     const rawTime = getCanvasTimeFromEvent(e);
     const rect = canvas.getBoundingClientRect();
-    const duration = sample.audioBuffer.duration;
+    const duration = audioBuffer.duration;
 
     setHoverTime(rawTime);
 
@@ -1029,7 +1038,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     zoneAnchorRef.current = null;
     setZone((current) => {
       if (!current) return null;
-      const settled = normaliseZone(current, sample.audioBuffer?.duration ?? 0);
+      const settled = normaliseZone(current, audioBuffer?.duration ?? 0);
       if (!settled) return null;
       return {
         startSec: findZeroCrossing(settled.startSec),
@@ -1087,7 +1096,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   // Add new slice marker at specific timestamp
   const handleAddNewMarkerAt = (timeSec: number) => {
-    if (!sample.audioBuffer) return;
+    if (!audioBuffer) return;
     const snappedTime = findZeroCrossing(timeSec);
     const existing = sample.slices ? [...sample.slices] : [];
 
@@ -1142,10 +1151,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   // Action: Export Slices to WAV
   const handleExtractSlices = async () => {
-    if (!sample.audioBuffer || !sample.slices || sample.slices.length === 0) return;
+    if (!audioBuffer || !sample.slices || sample.slices.length === 0) return;
     setIsExtracting(true);
     try {
-      const extracted = await extractSlicesToWavBlobs(sample.audioBuffer, sample.slices, sample.name.replace(/\.[^/.]+$/, ''));
+      const extracted = await extractSlicesToWavBlobs(audioBuffer, sample.slices, sample.name.replace(/\.[^/.]+$/, ''));
       if (onAddExtractedSamples) {
         onAddExtractedSamples(extracted);
       }
@@ -1165,7 +1174,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
    */
   const renderProcessedRegion = useCallback(
     (startSec: number, endSec: number): AudioBuffer | null => {
-      const buffer = sample.audioBuffer;
+      const buffer = audioBuffer;
       if (!buffer) return null;
       const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) =>
         buffer.getChannelData(c)
@@ -1183,11 +1192,11 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       rendered.forEach((data, channel) => out.copyToChannel(data, channel));
       return out;
     },
-    [sample.audioBuffer, gainPoints, fadeInMs, fadeOutMs]
+    [audioBuffer, gainPoints, fadeInMs, fadeOutMs]
   );
 
   const handlePlayZone = () => {
-    if (!sample.audioBuffer || !zone) return;
+    if (!audioBuffer || !zone) return;
     const processed = renderProcessedRegion(zone.startSec, zone.endSec);
     if (!processed) return;
     setPlaybackOffsetSec(zone.startSec);
@@ -1196,7 +1205,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   /** Copy the zone out as a brand-new library sample, leaving the source untouched. */
   const handleCopyZoneToNewSample = async () => {
-    if (!sample.audioBuffer || !zone || !onAddExtractedSamples) return;
+    if (!audioBuffer || !zone || !onAddExtractedSamples) return;
     setIsCopyingZone(true);
     try {
       const base = sample.name.replace(/\.[^/.]+$/, '');
@@ -1226,9 +1235,9 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   // Action: Export as OP-1 AIFF Patch
   const handleExportOp1Aiff = () => {
-    if (!sample.audioBuffer || !sample.slices) return;
+    if (!audioBuffer || !sample.slices) return;
     const blob = encodeOp1AiffPatch(
-      sample.audioBuffer,
+      audioBuffer,
       sample.slices.map((s) => ({
         id: s.id,
         name: s.label,
@@ -1256,7 +1265,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
    * highlighted is what you hear, from the button and from the space bar alike.
    */
   const handlePlayToggle = () => {
-    if (!sample.audioBuffer) return;
+    if (!audioBuffer) return;
     if (isPlaying) {
       audioEngine.pause();
       return;
@@ -1267,7 +1276,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     }
     // Envelope set but no zone: audition the whole sample through it.
     if (gainPoints.length > 0) {
-      const processed = renderProcessedRegion(0, sample.audioBuffer.duration);
+      const processed = renderProcessedRegion(0, audioBuffer.duration);
       if (processed) {
         setPlaybackOffsetSec(0);
         audioEngine.play(processed, sample.id);
@@ -1275,9 +1284,9 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       }
     }
     setPlaybackOffsetSec(0);
-    audioEngine.play(sample.audioBuffer, sample.id, {
+    audioEngine.play(audioBuffer, sample.id, {
       startSec: selectedSlice ? selectedSlice.startSec : cursorSec ?? 0,
-      endSec: selectedSlice ? selectedSlice.endSec : sample.audioBuffer.duration,
+      endSec: selectedSlice ? selectedSlice.endSec : audioBuffer.duration,
     });
   };
 
@@ -1895,8 +1904,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
                 onClick={() => {
                   setSelectedSlice(slice);
                   if (onSliceClick) onSliceClick(slice);
-                  if (sample.audioBuffer) {
-                    audioEngine.play(sample.audioBuffer, sample.id, {
+                  if (audioBuffer) {
+                    audioEngine.play(audioBuffer, sample.id, {
                       startSec: slice.startSec,
                       endSec: slice.endSec,
                     });

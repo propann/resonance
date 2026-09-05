@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, ZoomIn, ZoomOut, Maximize2, Filter, Volume2, Info } from 'lucide-react';
 import { SampleItem, SampleType } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
+import { peekSampleAudio } from '../services/sampleAudio';
 
 interface TimbreMapProps {
   samples: SampleItem[];
@@ -190,10 +191,11 @@ export const TimbreMap: React.FC<TimbreMapProps> = ({
 
     if (found !== hoveredSample) {
       setHoveredSample(found);
-      if (found && found.audioBuffer) {
-        // Fast hover audition
-        audioEngine.play(found.audioBuffer, found.id);
-      }
+      // Fast hover audition, but only from what the cache already holds: the
+      // pointer sweeps across hundreds of points and must not start hundreds
+      // of file reads on its way past.
+      const buffer = peekSampleAudio(found);
+      if (buffer) audioEngine.play(buffer, found!.id);
     }
   };
 

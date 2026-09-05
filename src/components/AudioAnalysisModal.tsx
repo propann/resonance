@@ -17,7 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Modal } from './Modal';
-import { SampleItem } from '../types/sample';
+import { SampleItem, NewSample } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { useAudition } from '../stores/transportStore';
 import {
@@ -27,12 +27,13 @@ import {
   normalizeBufferToLufs,
 } from '../services/dspInspector';
 import { triggerFileDownload } from '../services/audioConverter';
+import { peekSampleAudio } from '../services/sampleAudio';
 
 interface AudioAnalysisModalProps {
   isOpen: boolean;
   onClose: () => void;
   sample: SampleItem | null;
-  onUpdateSample?: (updatedSample: SampleItem) => void;
+  onUpdateSample?: (updatedSample: NewSample) => void;
 }
 
 export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
@@ -41,6 +42,7 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
   sample,
   onUpdateSample,
 }) => {
+  const audioBuffer = peekSampleAudio(sample);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [report, setReport] = useState<DetailedDspReport | null>(null);
   const [activeTab, setActiveTab] = useState<'spectrum' | 'loudness' | 'harmonics' | 'phase'>('spectrum');
@@ -58,8 +60,8 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
 
   // Compute full DSP report when sample changes
   useEffect(() => {
-    if (isOpen && sample && sample.audioBuffer) {
-      const fullReport = analyzeFullDspReport(sample.audioBuffer, sample);
+    if (isOpen && sample && audioBuffer) {
+      const fullReport = analyzeFullDspReport(audioBuffer, sample);
       setReport(fullReport);
     }
   }, [isOpen, sample]);
@@ -191,11 +193,11 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
   // Space auditions the analysed sample while this window is open. Declared
   // before the early return so the hook order stays stable.
   const playToggle = () => {
-    if (!sample?.audioBuffer) return;
+    if (!audioBuffer || !sample) return;
     if (isPlaying) {
       audioEngine.pause();
     } else {
-      audioEngine.play(sample.audioBuffer, sample.id);
+      audioEngine.play(audioBuffer, sample.id);
     }
   };
   useAudition('DSP Lab', playToggle, isOpen && !!sample);
@@ -206,9 +208,9 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
 
   // DSP Fix: Remove DC Offset
   const handleFixDcOffset = () => {
-    if (!sample.audioBuffer) return;
-    const fixedBuffer = removeDcOffsetFromBuffer(sample.audioBuffer);
-    const newReport = analyzeFullDspReport(fixedBuffer, { ...sample, audioBuffer: fixedBuffer });
+    if (!audioBuffer) return;
+    const fixedBuffer = removeDcOffsetFromBuffer(audioBuffer);
+    const newReport = analyzeFullDspReport(fixedBuffer, sample);
     setReport(newReport);
 
     if (onUpdateSample) {
@@ -223,9 +225,9 @@ export const AudioAnalysisModal: React.FC<AudioAnalysisModalProps> = ({
 
   // DSP Fix: EBU R128 Normalize
   const handleFixNormalizeLufs = (target = -14.0) => {
-    if (!sample.audioBuffer) return;
-    const normalizedBuffer = normalizeBufferToLufs(sample.audioBuffer, target);
-    const newReport = analyzeFullDspReport(normalizedBuffer, { ...sample, audioBuffer: normalizedBuffer, lufs: target });
+    if (!audioBuffer) return;
+    const normalizedBuffer = normalizeBufferToLufs(audioBuffer, target);
+    const newReport = analyzeFullDspReport(normalizedBuffer, { ...sample, lufs: target });
     setReport(newReport);
 
     if (onUpdateSample) {

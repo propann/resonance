@@ -26,7 +26,8 @@ import {
   Wand2,
 } from 'lucide-react';
 import { Modal } from './Modal';
-import { SampleItem, SampleCategory, SampleType, MusicGenre } from '../types/sample';
+import { SampleItem, NewSample, SampleCategory, SampleType, MusicGenre } from '../types/sample';
+import { peekSampleAudio } from '../services/sampleAudio';
 import { audioEngine } from '../services/audioEngine';
 import { analysisPool, workerCount } from '../services/analysisPool';
 import { analyseOnThisThread, type AnalysisResult } from '../services/analysisWorker';
@@ -129,7 +130,7 @@ interface AutoCuratorModalProps {
   onProcessingChange?: (isProcessing: boolean) => void;
   onQueueResult?: (result: { ready: number; errors: number }) => void;
   autoTransfer?: boolean;
-  onApplyCuration: (curatedSamples: SampleItem[]) => void;
+  onApplyCuration: (curatedSamples: NewSample[]) => void;
 }
 
 /** Files decoded ahead of the analysis cursor. */
@@ -255,9 +256,12 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         source: 'library',
         originalName: s.originalFileName || s.name,
         cleanName: s.name,
-        status: s.audioBuffer ? 'ready' : 'pending',
-        progress: s.audioBuffer ? 100 : 0,
-        audioBuffer: s.audioBuffer,
+        // Whatever is already decoded; the rest is read when its turn comes.
+        // Reading the whole library here would be hundreds of thousands of
+        // files for a button press.
+        status: peekSampleAudio(s) ? 'ready' : 'pending',
+        progress: peekSampleAudio(s) ? 100 : 0,
+        audioBuffer: peekSampleAudio(s),
         duration: s.duration,
         sampleRate: s.sampleRate,
         bitDepth: s.bitDepth,
@@ -562,7 +566,7 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
         encodeMs += performance.now() - encodeStart;
         const blobUrl = URL.createObjectURL(wavBlob);
 
-        const finalSampleItem: SampleItem = {
+        const finalSampleItem: NewSample = {
           ...dummySample,
           name: isOp1Patch ? `OP1_${standardCleanName}` : standardCleanName,
           size: wavBlob.size,

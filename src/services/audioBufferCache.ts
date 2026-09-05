@@ -17,17 +17,28 @@ interface Entry {
   buffer: AudioBuffer;
   /** Bumped on every hit, so the least recently wanted goes first. */
   used: number;
+  /**
+   * There is no file behind this one.
+   *
+   * Eviction is only safe because the sound can be read again from disk. A
+   * recording, a rack render or a freshly cut slice has no file yet — and may
+   * never get one, if writing it out fails — so the cache holds the only copy
+   * and must not throw it away.
+   */
+  pinned: boolean;
 }
 
 const entries = new Map<string, Entry>();
 let clock = 0;
+/** Only what can be evicted counts against the budget. */
 let heldSeconds = 0;
 
 /** What the cache is holding, for a status line or a test. */
-export const cacheStats = (): { count: number; seconds: number } => ({
-  count: entries.size,
-  seconds: Math.round(heldSeconds),
-});
+export const cacheStats = (): { count: number; seconds: number; pinned: number } => {
+  let pinned = 0;
+  for (const entry of entries.values()) if (entry.pinned) pinned++;
+  return { count: entries.size, seconds: Math.round(heldSeconds), pinned };
+};
 
 /** The decoded audio for a path, if it is still around. */
 export function getCachedBuffer(key: string): AudioBuffer | undefined {
@@ -44,19 +55,25 @@ export function getCachedBuffer(key: string): AudioBuffer | undefined {
  * A buffer longer than the whole budget is not kept at all: caching it would
  * evict everything else to hold one sound that will not fit anyway.
  */
-export function cacheBuffer(key: string, buffer: AudioBuffer): void {
-  if (!key || buffer.duration > MAX_SECONDS) return;
+export function cacheBuffer(key: string, buffer: AudioBuffer, pinned = false): void {
+  // A pinned sound is kept whatever its length: there is nowhere else to read
+  // it from, so refusing it would simply lose it.
+  if (!key || (!pinned && buffer.duration > MAX_SECONDS)) return;
 
   const existing = entries.get(key);
-  if (existing) heldSeconds -= existing.buffer.duration;
+  if (existing && !existing.pinned) heldSeconds -= existing.buffer.duration;
 
-  entries.set(key, { buffer, used: ++clock });
-  heldSeconds += buffer.duration;
+  entries.set(key, { buffer, used: ++clock, pinned });
+  if (!pinned) heldSeconds += buffer.duration;
 
-  while (heldSeconds > MAX_SECONDS && entries.size > 1) {
+  let evictable = 0;
+  for (const entry of entries.values()) if (!entry.pinned) evictable++;
+
+  while (heldSeconds > MAX_SECONDS && evictable > 1) {
     let oldestKey: string | null = null;
     let oldestUse = Infinity;
     for (const [entryKey, entry] of entries) {
+      if (entry.pinned) continue;
       if (entry.used < oldestUse) {
         oldestUse = entry.used;
         oldestKey = entryKey;
@@ -65,7 +82,19 @@ export function cacheBuffer(key: string, buffer: AudioBuffer): void {
     if (!oldestKey) break;
     heldSeconds -= entries.get(oldestKey)!.buffer.duration;
     entries.delete(oldestKey);
+    evictable--;
   }
+}
+
+/**
+ * Let go of a sound the cache was holding as the only copy — once it has been
+ * written to disk, or once the sample it belonged to is gone.
+ */
+export function unpinBuffer(key: string): void {
+  const entry = entries.get(key);
+  if (!entry?.pinned) return;
+  entry.pinned = false;
+  heldSeconds += entry.buffer.duration;
 }
 
 /**

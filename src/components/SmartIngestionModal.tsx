@@ -18,7 +18,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Modal } from './Modal';
-import { SampleItem, SampleCategory, MusicGenre } from '../types/sample';
+import { SampleItem, NewSample, SampleCategory, MusicGenre } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import {
   calculateAudioMetrics,
@@ -56,7 +56,7 @@ interface IngestionItem {
 interface SmartIngestionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportComplete: (samples: SampleItem[]) => void;
+  onImportComplete: (samples: NewSample[]) => void;
   onDirectEp133Export?: (samples: SampleItem[]) => void;
 }
 
@@ -151,7 +151,7 @@ export const SmartIngestionModal: React.FC<SmartIngestionModalProps> = ({
         });
         const blobUrl = URL.createObjectURL(wavBlob);
 
-        const sampleItem: SampleItem = {
+        const sampleItem: NewSample = {
           id: `sample-${Date.now()}-${i}`,
           name: item.name,
           originalFileName: item.file.name,

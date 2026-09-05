@@ -80,8 +80,6 @@ export const OP1_DEFAULT_CATEGORIES: { padIndex: number; suggestedType: SampleTy
 ];
 
 /**
- * Creates a combined 12.0s audio buffer containing up to 24 sounds sequentially arranged.
-/**
  * The same slots, each with its audio to hand.
  *
  * A slot filled from the library carries a `sampleItem` and no buffer — the
@@ -98,6 +96,9 @@ export async function withLoadedSlices(slices: Op1DrumSlice[]): Promise<Op1DrumS
   );
 }
 
+/**
+ * Creates a combined 12.0s audio buffer containing up to 24 sounds sequentially arranged.
+ */
 export async function buildOp1DrumBuffer(
   slices: Op1DrumSlice[],
   options?: {
@@ -117,7 +118,7 @@ export async function buildOp1DrumBuffer(
   const loaded = await withLoadedSlices(slices);
 
   // Filter out active slices
-  const activeSlices = loaded.filter((s) => s.audioBuffer || (s.sampleItem && s.sampleItem.audioBuffer));
+  const activeSlices = loaded.filter((s) => s.audioBuffer);
 
   // Determine duration per slice so total fits within maxSec
   let currentOffsetSec = 0;
@@ -126,7 +127,7 @@ export async function buildOp1DrumBuffer(
   // Calculate total raw duration
   let totalRawDuration = 0;
   for (const s of loaded) {
-    const buf = s.audioBuffer || s.sampleItem?.audioBuffer;
+    const buf = s.audioBuffer;
     if (buf) {
       totalRawDuration += Math.min(buf.duration, 2.5);
     } else {
@@ -150,7 +151,7 @@ export async function buildOp1DrumBuffer(
       volume: 8192,
     };
 
-    const buf = s.audioBuffer || s.sampleItem?.audioBuffer;
+    const buf = s.audioBuffer;
     let sliceDuration = 0.2; // default short pad
 
     if (buf) {
@@ -185,7 +186,7 @@ export async function buildOp1DrumBuffer(
   // Stitch each slice into the composite buffer
   for (let i = 0; i < 24; i++) {
     const s = calculatedSlices[i];
-    const srcBuf = s.audioBuffer || s.sampleItem?.audioBuffer;
+    const srcBuf = s.audioBuffer;
     if (!srcBuf) continue;
 
     const startSample = Math.floor(s.startSec * sampleRate);
@@ -531,8 +532,9 @@ export function autoPopulate24Op1Slots(samples: SampleItem[]): Op1DrumSlice[] {
       reverse: false,
       playmode: def.suggestedType === 'loop' ? 1 : 0,
       volume: 8192,
+      // No audio here: the sample names the file, and `withLoadedSlices` reads
+      // it when the kit is actually assembled.
       sampleItem: matchedItem,
-      audioBuffer: matchedItem?.audioBuffer,
       color: OP1_KEY_COLORS[i],
     });
   }

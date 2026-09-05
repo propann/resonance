@@ -10,7 +10,7 @@ vi.mock('./audioEngine', () => ({
   audioEngine: { decodeAudioData: (...args: unknown[]) => decodeAudioData(...args) },
 }));
 
-import { loadSampleAudio, peekSampleAudio } from './sampleAudio';
+import { cacheSampleAudio, loadSampleAudio, peekSampleAudio } from './sampleAudio';
 import { cacheBuffer, clearBufferCache } from './audioBufferCache';
 import type { SampleItem } from '../types/sample';
 
@@ -30,11 +30,30 @@ beforeEach(() => {
 });
 
 describe('loadSampleAudio', () => {
-  it('hands back audio the sample already carries, touching no disk', async () => {
+  // A recording or a rack render has no file; its sound is filed under its id.
+  it('hands back the audio of a sample that was never written to disk', async () => {
     const recorded = sound();
-    const buffer = await loadSampleAudio(item({ audioBuffer: recorded }));
-    expect(buffer).toBe(recorded);
+    const take = item({ id: 'take-1' });
+    cacheSampleAudio(take, recorded);
+
+    expect(await loadSampleAudio(take)).toBe(recorded);
     expect(readLibraryAudioFile).not.toHaveBeenCalled();
+  });
+
+  it('keeps such a sound however much else is cached over it', async () => {
+    const take = item({ id: 'take-1' });
+    cacheSampleAudio(take, sound(30));
+    for (let i = 0; i < 20; i++) cacheBuffer(`loop${i}.wav`, sound(100));
+
+    expect(await loadSampleAudio(take)).toBeDefined();
+  });
+
+  it('files a sample that has a file under its path, not its id', async () => {
+    const kick = sound();
+    cacheSampleAudio(item({ id: 'disk-x', diskPath: '01_KICKS/k.wav' }), kick);
+
+    expect(peekSampleAudio(item({ id: 'other', diskPath: '01_KICKS/k.wav' }))).toBe(kick);
+    expect(peekSampleAudio(item({ id: 'disk-x' }))).toBeUndefined();
   });
 
   it('hands back a cached buffer, touching no disk', async () => {

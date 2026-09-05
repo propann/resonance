@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { toast } from '../stores/toastStore';
 import { Mic, Square, Play, Pause, Check } from 'lucide-react';
 import { Modal } from './Modal';
-import { SampleItem } from '../types/sample';
+import { NewSample } from '../types/sample';
 import { audioEngine } from '../services/audioEngine';
 import { useAudition } from '../stores/transportStore';
 import {
@@ -20,7 +20,7 @@ import { audioBufferToWavBlob } from '../services/audioConverter';
 interface AudioRecorderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveRecordedSample: (newSample: SampleItem) => void;
+  onSaveRecordedSample: (newSample: NewSample) => void;
 }
 
 export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
@@ -187,7 +187,7 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       removeDc: true,
     });
 
-    const newSample: SampleItem = {
+    const newSample: NewSample = {
       id: `rec-${Date.now().toString(36)}`,
       name: sampleName,
       originalFileName: `${sampleName}.wav`,

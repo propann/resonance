@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, CheckCircle2, AlertTriangle, Zap, Sliders, ShieldCheck, Layers, FileCheck } from 'lucide-react';
 import { Modal } from './Modal';
-import { SampleItem } from '../types/sample';
+import { SampleItem, NewSample } from '../types/sample';
+import { peekSampleAudio } from '../services/sampleAudio';
 import {
   LoudnessStandardKey,
   LOUDNESS_STANDARDS,
@@ -15,8 +16,8 @@ interface LoudnessStandardModalProps {
   onClose: () => void;
   sample: SampleItem | null;
   allSelectedSamples?: SampleItem[];
-  onApplyNormalization: (updatedSample: SampleItem, auditReport: LoudnessAuditReport) => void;
-  onBatchApplyNormalization?: (updatedSamples: SampleItem[], standardKey: LoudnessStandardKey) => void;
+  onApplyNormalization: (updatedSample: NewSample, auditReport: LoudnessAuditReport) => void;
+  onBatchApplyNormalization?: (updatedSamples: NewSample[], standardKey: LoudnessStandardKey) => void;
 }
 
 export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
@@ -27,6 +28,7 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
   onApplyNormalization,
   onBatchApplyNormalization,
 }) => {
+  const audioBuffer = peekSampleAudio(sample);
   const [selectedStandard, setSelectedStandard] = useState<LoudnessStandardKey>('streaming');
   const [auditReport, setAuditReport] = useState<LoudnessAuditReport | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -34,9 +36,9 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
 
   // Auditer le sample sélectionné
   useEffect(() => {
-    if (isOpen && sample?.audioBuffer) {
+    if (isOpen && audioBuffer) {
       try {
-        const report = auditLoudness(sample.audioBuffer, selectedStandard);
+        const report = auditLoudness(audioBuffer, selectedStandard);
         setAuditReport(report);
       } catch (err) {
         console.error('Erreur audit loudness:', err);
@@ -47,15 +49,15 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
   const currentStandard = LOUDNESS_STANDARDS[selectedStandard];
 
   const handleNormalizeSingle = () => {
-    if (!sample?.audioBuffer) return;
+    if (!audioBuffer) return;
     setIsProcessing(true);
     try {
       const { audioBuffer: normalizedBuffer, report } = normalizeAudioBufferToStandard(
-        sample.audioBuffer,
+        audioBuffer,
         selectedStandard
       );
 
-      const updatedSample: SampleItem = {
+      const updatedSample: NewSample = {
         ...sample,
         audioBuffer: normalizedBuffer,
         lufs: report.integratedLufs,
@@ -77,9 +79,12 @@ export const LoudnessStandardModal: React.FC<LoudnessStandardModalProps> = ({
     if (!allSelectedSamples.length || !onBatchApplyNormalization) return;
     setIsProcessing(true);
     try {
-      const updatedList: SampleItem[] = allSelectedSamples.map((s) => {
-        if (!s.audioBuffer) return s;
-        const { audioBuffer: normBuf, report } = normalizeAudioBufferToStandard(s.audioBuffer, selectedStandard);
+      const updatedList: NewSample[] = allSelectedSamples.map((s) => {
+        // Only what is already decoded: levelling a whole selection must not
+        // turn into hundreds of file reads on a button press.
+        const source = peekSampleAudio(s);
+        if (!source) return s;
+        const { audioBuffer: normBuf, report } = normalizeAudioBufferToStandard(source, selectedStandard);
         return {
           ...s,
           audioBuffer: normBuf,

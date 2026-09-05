@@ -81,13 +81,30 @@ export interface SampleItem {
   zeroCrossingRate: number;
   slices: SliceRegion[];
   blobUrl: string;
-  audioBuffer?: AudioBuffer;
   dateAdded: number;
   colorTag?: string;
   isMultiSound?: boolean;
   ep133Slot?: number; // 1 - 999
   /** Relative file path inside the connected working folder, when loaded from manifest. */
   diskPath?: string;
+}
+
+/**
+ * A sample on its way into the library, still carrying its sound.
+ *
+ * `SampleItem` deliberately has no audio: the library holds hundreds of
+ * thousands of them, and code that reached for `sample.audioBuffer` found
+ * nothing and gave up in silence — the row play button, every batch export,
+ * the OP-1 kit builder all failed that way. Audio lives in the buffer cache,
+ * reached through `services/sampleAudio`.
+ *
+ * A recording, a rack render or a freshly cut slice does arrive with its sound
+ * in hand, and this is the shape it has for that one hop. `adoptNewSamples`
+ * hands the audio to the cache and returns plain `SampleItem`s, so nothing
+ * stored in the library can carry a buffer.
+ */
+export interface NewSample extends SampleItem {
+  audioBuffer?: AudioBuffer;
 }
 
 export interface FolderItem {

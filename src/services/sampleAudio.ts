@@ -12,7 +12,7 @@
  * So the decode lives here instead, behind one function everyone can call.
  */
 
-import { getCachedBuffer, cacheBuffer, cacheBlobUrl } from './audioBufferCache';
+import { getCachedBuffer, cacheBuffer, cacheBlobUrl, unpinBuffer } from './audioBufferCache';
 import { readLibraryAudioFile } from './localLibrary';
 import { audioEngine } from './audioEngine';
 import type { SampleItem } from '../types/sample';
@@ -25,6 +25,37 @@ import type { SampleItem } from '../types/sample';
  * second decode costs the same again for nothing.
  */
 const pending = new Map<string, Promise<AudioBuffer | undefined>>();
+
+/**
+ * Where a sample's sound is filed.
+ *
+ * Its path on disk, which two samples can never share — or its id, for one that
+ * has never been written: a recording, a rack render, a slice just cut.
+ */
+export const audioKeyFor = (sample: Pick<SampleItem, 'id' | 'diskPath'>): string =>
+  sample.diskPath || sample.id;
+
+/**
+ * Hand a sound to the cache on a sample's behalf.
+ *
+ * Pinned by default when the sample has no file, since the cache would
+ * otherwise be free to evict the only copy there is. Pass `onlyCopy` explicitly
+ * for a sample that does have a file but whose sound no longer matches it — a
+ * normalisation or a DSP render held in memory — because evicting that one
+ * would silently bring the original back.
+ */
+export function cacheSampleAudio(
+  sample: Pick<SampleItem, 'id' | 'diskPath'>,
+  buffer: AudioBuffer,
+  onlyCopy = !sample.diskPath
+): void {
+  cacheBuffer(audioKeyFor(sample), buffer, onlyCopy);
+}
+
+/** The sound is on disk now; the cache may treat it like any other. */
+export function releaseSampleAudio(sample: Pick<SampleItem, 'id' | 'diskPath'>): void {
+  unpinBuffer(audioKeyFor(sample));
+}
 
 /**
  * The decoded audio for a sample: from the sample itself, from the cache, or
@@ -41,13 +72,12 @@ export async function loadSampleAudio(
   sample: SampleItem | null | undefined
 ): Promise<AudioBuffer | undefined> {
   if (!sample) return undefined;
-  if (sample.audioBuffer) return sample.audioBuffer;
+
+  const cached = getCachedBuffer(audioKeyFor(sample));
+  if (cached) return cached;
 
   const path = sample.diskPath;
   if (!path) return undefined;
-
-  const cached = getCachedBuffer(path);
-  if (cached) return cached;
 
   const inFlight = pending.get(path);
   if (inFlight) return inFlight;
@@ -79,6 +109,5 @@ export async function loadSampleAudio(
  * thousand rows must not queue a thousand decodes.
  */
 export function peekSampleAudio(sample: SampleItem | null | undefined): AudioBuffer | undefined {
-  if (!sample) return undefined;
-  return sample.audioBuffer ?? (sample.diskPath ? getCachedBuffer(sample.diskPath) : undefined);
+  return sample ? getCachedBuffer(audioKeyFor(sample)) : undefined;
 }

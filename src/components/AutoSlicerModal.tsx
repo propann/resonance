@@ -6,6 +6,7 @@ import { detectAutoSlices } from '../services/audioAnalyzer';
 import { audioEngine } from '../services/audioEngine';
 import { useAudition } from '../stores/transportStore';
 import { exportSlicesZip, triggerFileDownload, audioBufferToWavBlob } from '../services/audioConverter';
+import { peekSampleAudio } from '../services/sampleAudio';
 
 interface AutoSlicerModalProps {
   sample: SampleItem;
@@ -24,6 +25,7 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
   onUpdateSampleSlices,
   onExtractSlicesToLibrary,
 }) => {
+  const audioBuffer = peekSampleAudio(sample);
   const [sensitivity, setSensitivity] = useState<number>(0.6);
   const [minDurationMs, setMinDurationMs] = useState<number>(100);
   const [silenceThresholdDb, setSilenceThresholdDb] = useState<number>(-38);
@@ -36,8 +38,8 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
   useEffect(() => {
     if (sample.slices && sample.slices.length > 0) {
       setSlices(sample.slices);
-    } else if (sample.audioBuffer) {
-      const auto = detectAutoSlices(sample.audioBuffer, {
+    } else if (audioBuffer) {
+      const auto = detectAutoSlices(audioBuffer, {
         sensitivity,
         minSliceDurationMs: minDurationMs,
         silenceThresholdDb,
@@ -48,8 +50,8 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
 
   // Recalculate auto slices on parameter change
   const handleRecalculateSlices = () => {
-    if (!sample.audioBuffer) return;
-    const detected = detectAutoSlices(sample.audioBuffer, {
+    if (!audioBuffer) return;
+    const detected = detectAutoSlices(audioBuffer, {
       sensitivity,
       minSliceDurationMs: minDurationMs,
       silenceThresholdDb,
@@ -59,9 +61,9 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
 
   // Play specific slice
   const handlePlaySlice = (slice: SliceRegion) => {
-    if (!sample.audioBuffer) return;
+    if (!audioBuffer) return;
     setActivePlayingSliceId(slice.id);
-    audioEngine.play(sample.audioBuffer, sample.id, {
+    audioEngine.play(audioBuffer, sample.id, {
       startSec: slice.startSec,
       endSec: slice.endSec,
     });
@@ -74,11 +76,11 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
 
   // Play/pause entire sample
   const handleTogglePlayFull = () => {
-    if (!sample.audioBuffer) return;
+    if (!audioBuffer) return;
     if (audioEngine.getState().isPlaying) {
       audioEngine.pause();
     } else {
-      audioEngine.play(sample.audioBuffer, sample.id, sample.loudnessGainDb);
+      audioEngine.play(audioBuffer, sample.id, sample.loudnessGainDb);
     }
   };
 
@@ -122,12 +124,12 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
 
   // 1-Click Extract Slices to New Library Samples
   const handleExtractToLibrary = () => {
-    if (!sample.audioBuffer) return;
+    if (!audioBuffer) return;
     const newItems: SampleItem[] = [];
 
     slices.forEach((slice, idx) => {
       const sliceDuration = slice.endSec - slice.startSec;
-      const wavBlob = audioBufferToWavBlob(sample.audioBuffer!, {
+      const wavBlob = audioBufferToWavBlob(audioBuffer!, {
         startSec: slice.startSec,
         endSec: slice.endSec,
         bitDepth: 24,
@@ -185,7 +187,7 @@ export const AutoSlicerModal: React.FC<AutoSlicerModalProps> = ({
 
   // 1-Click Export Slices to ZIP Archive
   const handleExportZip = async () => {
-    if (!sample.audioBuffer) return;
+    if (!audioBuffer) return;
     try {
       setIsExportingZip(true);
       const zipBlob = await exportSlicesZip(sample, slices);
