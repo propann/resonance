@@ -13,7 +13,8 @@ import { sampleMatchesQuery } from './services/sampleSearchIndex';
 import { sortLibrary } from './services/librarySorter';
 import { getCachedBlobUrl, getCachedBuffer } from './services/audioBufferCache';
 import { loadSampleAudio, peekSampleAudio } from './services/sampleAudio';
-import { folderIdForPath, folderMatcher } from './services/libraryFolders';
+import { hydrateNewManifestSamples } from './services/manifestHydration';
+import { folderMatcher } from './services/libraryFolders';
 import { usePatchStore } from './stores/patchStore';
 import { SampleItem, FolderItem, SliceRegion } from './types/sample';
 import { AppMenuBar } from './components/AppMenuBar';
@@ -125,42 +126,21 @@ export default function App() {
     audioEngine.isAutoLoudnessEnabled()
   );
 
+  /**
+   * Fold a freshly read manifest into the library.
+   *
+   * The manifest holds the whole library and is re-read on every refresh —
+   * every few seconds while an import runs. Building an item for all 282 000
+   * lines and then keeping the 64 new ones blocked the main thread for 4.4
+   * seconds at a stretch, measured, with nothing being clicked. Only the new
+   * lines are built now, and an unchanged manifest returns the array
+   * untouched so nothing downstream re-sorts or recounts.
+   */
   const hydrateManifestSamples = (entries: Array<Record<string, unknown>>) => {
-    const allowedTypes = new Set(['kick', 'snare', 'hihat', 'clap', 'cymbal', 'percussion', 'bass', '808', 'lead', 'pad', 'vocal', 'fx', 'loop', 'multi-sound', 'other']);
-    const allowedCategories = new Set(['one-shot', 'loop', 'multi-sound']);
-    const allowedGenres = new Set(['Hip-Hop / BoomBap', 'Trap / Drill', 'House / EDM', 'Techno', 'Techno / Industrial', 'Lo-Fi / Chillhop', 'Synthwave / Retro', 'Drum & Bass', 'Drum & Bass / Jungle', 'Afrobeat / Dancehall', 'Ambient / Cinematic', 'Pop / R&B', 'Acoustic / Rock', 'Universal / Multi-Genre']);
-    const hydrated: SampleItem[] = entries.map((entry, index) => {
-      const type = typeof entry.type === 'string' && allowedTypes.has(entry.type) ? entry.type as SampleItem['type'] : 'other';
-      const category = typeof entry.category === 'string' && allowedCategories.has(entry.category) ? entry.category as SampleItem['category'] : 'one-shot';
-      const path = typeof entry.path === 'string' ? entry.path : '/01_ONE_SHOTS/05_FX_TEXTURES';
-      const fileName = typeof entry.fileName === 'string' ? entry.fileName : typeof entry.name === 'string' ? entry.name : `sample-${index}`;
-      return {
-        id: `disk-${path}-${fileName}`,
-        name: typeof entry.name === 'string' ? entry.name : fileName,
-        originalFileName: typeof entry.originalName === 'string' ? entry.originalName : fileName,
-        format: entry.format === 'op-1-aiff' ? 'aiff' : 'wav',
-        size: 0, duration: typeof entry.duration === 'number' ? entry.duration : 0,
-        sampleRate: typeof entry.sampleRate === 'number' ? entry.sampleRate : 48000,
-        bitDepth: typeof entry.bitDepth === 'number' ? entry.bitDepth : 24, channels: 2,
-        bpm: typeof entry.bpm === 'number' ? entry.bpm : undefined,
-        key: typeof entry.key === 'string' ? entry.key : undefined,
-        type, category, isLoop: category === 'loop', genre: allowedGenres.has(entry.genre as string) ? entry.genre as SampleItem['genre'] : 'Universal / Multi-Genre',
-        tags: Array.isArray(entry.tags) ? entry.tags.filter((tag): tag is string => typeof tag === 'string') : [],
-        // Where the file sits on disk is the truth. Re-guessing the folder
-        // from the name would file a "...kick..." found in 06_PERCS under
-        // kicks, and the sidebar count would stop matching the list.
-        folderId:
-          folderIdForPath(path) ??
-          classifySampleForLibrary({ type, category, isLoop: category === 'loop', name: fileName, originalFileName: fileName } as SampleItem).folderId,
-        folderPath: path, favorite: false, rating: 0,
-        spectralCentroid: 0, dynamicRangeDb: 0, peakDb: 0, rmsDb: 0, lufs: 0, loudnessGainDb: 0, zeroCrossingRate: 0,
-        slices: [], blobUrl: '', dateAdded: 0, diskPath: `${path.replace(/^\//, '')}/${fileName}`,
-      };
-    });
     setSamples((previous) => {
-      const byId = new Map(previous.map((sample) => [sample.id, sample]));
-      hydrated.forEach((sample) => { if (!byId.has(sample.id)) byId.set(sample.id, sample); });
-      return [...byId.values()];
+      const knownIds = new Set(previous.map((sample) => sample.id));
+      const fresh = hydrateNewManifestSamples(entries, knownIds);
+      return fresh.length === 0 ? previous : previous.concat(fresh);
     });
   };
 
