@@ -73,7 +73,6 @@ import {
   hashFileContent,
   removeWorkFolderFiles,
   reserveUniqueFileName,
-  resetDirectoryNameCache,
   runWithConcurrency,
   writeFileAt,
   type WorkFolderAudioFile,
@@ -715,8 +714,19 @@ export const AutoCuratorModal: React.FC<AutoCuratorModalProps> = ({
       const pendingWrites: Array<{ relPath: string; blob: Blob }> = [];
       let duplicatesSkipped = 0;
       const transferStart = performance.now();
-      // Destination listings are cached for the batch; start from fresh ones.
-      resetDirectoryNameCache();
+      // The destination listings are deliberately NOT reset here.
+      //
+      // They used to be, to start each batch from a fresh view of the folder.
+      // That cost a full `readDir` of every destination the batch touched, and
+      // 01_KICKS now holds 39 620 files: over IPC that listing was taking some
+      // twenty seconds per batch, dwarfing everything else in the transfer and
+      // growing with the library.
+      //
+      // Nothing is lost by keeping it. The cache learns every name as it is
+      // reserved, so our own writes stay accounted for, and `uniqueFileName`
+      // confirms the one name it settles on with a `stat` before using it —
+      // which is what actually guards against a file appearing behind our
+      // back, not the wholesale reset.
       let hashMs = 0;
       let writeMs = 0;
       let blobMs = 0;
