@@ -788,6 +788,23 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     drawWaveform();
   }, [drawWaveform]);
 
+  /**
+   * Redraw when the canvas actually changes size.
+   *
+   * `drawWaveform` reads the canvas's own `clientWidth`/`clientHeight` and
+   * sizes the backing store from them, but nothing told it when those changed:
+   * the container would resize and the drawing stay at its old resolution,
+   * stretched. That shows up whenever the pane changes — switching between the
+   * list and the editor, dragging a splitter, resizing the window.
+   */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(() => drawWaveform());
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [drawWaveform]);
+
   // A zone and its envelope belong to one sample's timeline.
   useEffect(() => {
     zoneAnchorRef.current = null;
