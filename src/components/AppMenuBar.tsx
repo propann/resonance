@@ -46,6 +46,7 @@ export interface AppMenuBarProps {
   onImportOp1Patch?: () => void;
   onOpenDspAnalyzer: () => void;
   onOpenAutoSlicer?: () => void;
+  onSaveWaveAsOp1?: () => void;
   onOpenLoudnessStandard?: () => void;
   onOpenEp133Export: () => void;
   onSelectAll?: () => void;
@@ -76,6 +77,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onImportOp1Patch,
   onOpenDspAnalyzer,
   onOpenAutoSlicer,
+  onSaveWaveAsOp1,
   onOpenLoudnessStandard,
   onOpenEp133Export,
   onSelectAll,
@@ -326,6 +328,22 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
                   <div className="flex items-center gap-2">
                     <Layers className="w-3.5 h-3.5 text-[#FF7A00]" />
                     <span>Studio Kit OP-1 (.aif APPL)...</span>
+                  </div>
+                  <span className="text-[8px] text-[#FF7A00]">OP-1</span>
+                </button>
+              )}
+              {onSaveWaveAsOp1 && (
+                <button
+                  onClick={() => {
+                    onSaveWaveAsOp1();
+                    closeMenus();
+                  }}
+                  title="Réécrit le patch avec les marqueurs là où ils sont maintenant"
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left text-[#EDEDEE] hover:bg-[#00F0FF] hover:text-black transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-[#FF7A00]" />
+                    <span>Enregistrer l&apos;onde en patch OP-1</span>
                   </div>
                   <span className="text-[8px] text-[#FF7A00]">OP-1</span>
                 </button>

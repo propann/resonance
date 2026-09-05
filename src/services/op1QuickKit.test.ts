@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildOp1QuickKit, kitFileName, OP1_PAD_COUNT } from './op1QuickKit';
+import { buildOp1QuickKit, encodeOp1FromWave, kitFileName, OP1_PAD_COUNT } from './op1QuickKit';
 
 // The encoder renders through an OfflineAudioContext and writes an AIFF; both
 // are browser things. Only the kit's own arithmetic is under test here.
@@ -87,5 +87,67 @@ describe('buildOp1QuickKit', () => {
 
   it('refuses to build a kit out of nothing', async () => {
     await expect(buildOp1QuickKit([], 'K')).rejects.toThrow(/Aucun son/);
+  });
+});
+
+
+describe('encodeOp1FromWave', () => {
+  const wave = (seconds: number, rate = 44100) =>
+    ({
+      duration: seconds,
+      length: Math.round(seconds * rate),
+      sampleRate: rate,
+      numberOfChannels: 1,
+    }) as AudioBuffer;
+
+  const region = (index: number, startSec: number, endSec: number) => ({
+    id: `r${index}`,
+    index,
+    startSec,
+    endSec,
+    label: `Pad ${index}`,
+    color: '#fff',
+  });
+
+  it('encodes the markers where they now sit', async () => {
+    const result = await encodeOp1FromWave(
+      wave(6),
+      [region(0, 0, 1), region(1, 1, 2.5), region(2, 2.5, 6)],
+      'Mon Kit'
+    );
+    expect(result.name).toBe('Mon_Kit');
+    expect(result.pads).toBe(3);
+    expect(result.aiff.type).toBe('audio/aiff');
+  });
+
+  it('refuses an empty wave', async () => {
+    await expect(encodeOp1FromWave(wave(6), [], 'K')).rejects.toThrow(/Aucune découpe/);
+  });
+
+  // The format stops at twelve seconds. A marker dragged past that would
+  // encode as a pad starting after the audio ends — silence on the device.
+  it('clamps a marker that runs past the twelve-second limit', async () => {
+    const { encodeOp1AiffPatch } = await import('./op1PatchEncoder');
+    const spy = vi.mocked(encodeOp1AiffPatch);
+    spy.mockClear();
+    await encodeOp1FromWave(wave(20), [region(0, 0, 5), region(1, 10, 18)], 'K');
+    const slices = spy.mock.calls.at(-1)?.[1] as Array<{ startSec: number; endSec: number }>;
+    expect(slices).toHaveLength(2);
+    expect(slices[1].endSec).toBeLessThanOrEqual(12);
+  });
+
+  it('drops a marker that starts beyond the limit entirely', async () => {
+    const result = await encodeOp1FromWave(wave(20), [region(0, 0, 5), region(1, 15, 18)], 'K');
+    expect(result.pads).toBe(1);
+  });
+
+  it('refuses when every marker is past the limit', async () => {
+    await expect(encodeOp1FromWave(wave(20), [region(0, 13, 18)], 'K')).rejects.toThrow(/au-delà/);
+  });
+
+  it('keeps at most twenty-four pads', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => region(i, i * 0.3, (i + 1) * 0.3));
+    const result = await encodeOp1FromWave(wave(11), many, 'K');
+    expect(result.pads).toBe(OP1_PAD_COUNT);
   });
 });

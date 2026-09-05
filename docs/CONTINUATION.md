@@ -202,6 +202,24 @@ Verifie de bout en bout depuis Plaits : 16 sons -> 16 pads, noms de modeles
 reels, bornes contigues de 0,45 s, derniere a 7,2 s, AIFF `FORM/AIFF` de
 759 Ko en 44,1 kHz mono.
 
+### La boucle OP-1 est fermee
+
+`encodeOp1FromWave()` reecrit le patch avec les marqueurs **la ou ils sont
+maintenant**. Le constructeur de kit en ecrit un en assemblant, mais les
+marqueurs se deplacent ensuite et le fichier sur le disque ne correspondait
+plus a l'ecran. Entree : AUDIO/DSP -> HARDWARE -> « Enregistrer l'onde en
+patch OP-1 ».
+
+Deux pieges du format, tenus par des tests :
+
+- **Rechantillonnage obligatoire.** L'encodeur mono-ise et coupe a 12 s tout
+  seul, mais il lit les temps de marqueur contre 44,1 kHz. Une onde en 48 kHz
+  posait chaque pad ~10 % trop tot. Rechantillonnee en amont.
+- **Marqueurs au-dela de 12 s.** Un marqueur glisse plus loin encodait un pad
+  qui demarre apres la fin de l'audio — du silence sur la machine. Ceux qui
+  depassent sont ramenes a 12 s, ceux qui commencent apres sont ecartes, et si
+  tout est au-dela l'operation refuse plutot que d'ecrire un patch muet.
+
 ### Dexed
 
 Toujours pas fait : JUCE, autrement plus lourd que Plaits. Le contrat

@@ -768,6 +768,38 @@ export default function App() {
     }
   };
 
+  /**
+   * Write what is on the wave as an OP-1 patch, with the markers where they
+   * now are. The kit builder writes one as it assembles it, but the markers
+   * can be dragged afterwards; this is how that gets onto the device.
+   */
+  const handleSaveWaveAsOp1 = async () => {
+    const target = selectedSample;
+    if (!target?.audioBuffer) {
+      toast.info("Choisis un sample : c'est l'onde affichée qui devient le patch.");
+      return;
+    }
+    if (!target.slices || target.slices.length === 0) {
+      toast.info('Aucune découpe sur cette onde. Découpe-la, ou pars d’un kit de moteur.');
+      return;
+    }
+    try {
+      const { encodeOp1FromWave } = await import('./services/op1QuickKit');
+      const { aiff, name, pads } = await encodeOp1FromWave(
+        target.audioBuffer,
+        target.slices,
+        target.name
+      );
+      await handleSaveOp1Kit(name, aiff);
+      toast.success(`${pads} pad(s) écrits dans le patch OP-1.`);
+    } catch (error) {
+      console.error('Patch OP-1 depuis l’onde impossible', error);
+      toast.error(
+        error instanceof Error ? error.message : "Le patch OP-1 n'a pas pu être écrit."
+      );
+    }
+  };
+
   const handleSaveProcessedAsNew = async (newSample: SampleItem) => {
     setSamples((prev) => [newSample, ...prev]);
     setSelectedSampleId(newSample.id);
@@ -946,6 +978,7 @@ export default function App() {
         failedIncomingCount={failedIncomingCount}
         onOpenDspAnalyzer={() => handleOpenDspAnalyzer()}
         onOpenAutoSlicer={() => handleOpenSlicer()}
+        onSaveWaveAsOp1={() => void handleSaveWaveAsOp1()}
         onAutoOrganizeLibrary={() => void handleAutoOrganizeLibrary()}
         isPlaying={isPlaying}
         onTogglePlayPause={handleTogglePlayPause}
