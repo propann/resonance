@@ -498,6 +498,45 @@ rack (FM 2-op, oscillateurs, bruit, resonateur) et un acces au Creator
 
 Tests : 151 -> 157.
 
+## Session 2026-09-05 — l'ingestion en workers
+
+Mesure d'abord, sur l'app en train de tourner (`tools/read-app-console.mjs`,
+qui lit sa console via le protocole DevTools). Lot de 64 sons :
+decodage 2 853 ms, **analyse 8 420 ms**, encodage 109 ms. L'analyse est les
+trois quarts, et c'est de l'arithmetique sur des Float32Array.
+
+**Le portage n'a coute aucune ligne d'`audioAnalyzer`.** Ses fonctions prennent
+un `AudioBuffer` mais n'en lisent que quatre membres (`getChannelData`,
+`duration`, `sampleRate`, `numberOfChannels`) : un objet de meme forme suffit.
+Un test verifie que la reponse du worker est identique a l'appel direct — une
+ingestion qui classerait differemment selon le thread serait pire que lente.
+
+Le parallelisme vient du maintien de plusieurs analyses en vol, en reflechissant
+le prefetch de decodage qui existait deja plutot qu'en inventant un second
+motif. Un worker par cœur moins un, plafonne a six.
+
+Les donnees de canaux sont **copiees**, pas transferees : le thread principal a
+encore besoin du buffer pour encoder le WAV, et un ArrayBuffer detache lui
+ferait ecrire du silence.
+
+### Resultat, et le goulot suivant
+
+| Etape (lot de 64) | Avant | Apres |
+|---|---|---|
+| Decodage | 2 853 ms | 4 284 ms |
+| Analyse | **8 420 ms** | **4 969 ms** |
+| Lot total | 11,7 s | 9,8 s |
+
+Analyse **-41 %**, lot complet **~-20 %**. Moins que les ×4 a ×8 esperes, et la
+mesure dit pourquoi : **le decodage est devenu le goulot**, et il a meme
+augmente — le thread principal copie desormais les canaux pour les workers, et
+les workers attendent des buffers au lieu de tourner a plein.
+
+Le decodage ne peut pas partir en worker (`decodeAudioData` appartient a un
+contexte audio). Le levier suivant est donc `DECODE_AHEAD` (6 aujourd'hui) : en
+lancer davantage en parallele nourrirait les workers. **A mesurer avant de
+changer** — c'est ce qui a evite de paralleliser la mauvaise etape ici.
+
 ## Pistes ouvertes
 
 - Réutiliser la vue riche de `WaveformCanvas` (zoom, slices, spectro, zone, ligne de volume) dans le rack, avec le calque couleur des effets.
