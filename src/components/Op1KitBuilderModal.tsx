@@ -164,19 +164,37 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
     }
   };
 
+  /**
+   * Rows the picker draws at once.
+   *
+   * It used to render one per matching sample. On a library of 283 000 that is
+   * 283 000 DOM rows, and opening this window simply stopped the app. The
+   * drawer is for finding one sound to drag onto a pad, so it shows the first
+   * handful and the search box narrows them; the true count stays on display.
+   */
+  const LIBRARY_ROWS_SHOWN = 200;
+
   // Filter available samples in left drawer
-  const filteredLibrarySamples = useMemo(() => {
-    return availableSamples.filter((sample) => {
-      const matchesSearch =
-        searchQuery.trim() === '' ||
-        sample.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sample.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        sample.genre?.toLowerCase().includes(searchQuery.toLowerCase());
+  const { shownLibrarySamples, matchCount } = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    const shown: SampleItem[] = [];
+    let count = 0;
 
-      const matchesType = selectedTypeFilter === 'all' || sample.type === selectedTypeFilter;
+    for (const sample of availableSamples) {
+      if (selectedTypeFilter !== 'all' && sample.type !== selectedTypeFilter) continue;
+      if (
+        needle &&
+        !sample.name.toLowerCase().includes(needle) &&
+        !sample.tags.some((t) => t.toLowerCase().includes(needle)) &&
+        !sample.genre?.toLowerCase().includes(needle)
+      ) {
+        continue;
+      }
+      count++;
+      if (shown.length < LIBRARY_ROWS_SHOWN) shown.push(sample);
+    }
 
-      return matchesSearch && matchesType;
-    });
+    return { shownLibrarySamples: shown, matchCount: count };
   }, [availableSamples, searchQuery, selectedTypeFilter]);
 
   // Draw 12-second visual waveform with 24 colored slice zones (Compact & crisp)
@@ -751,7 +769,11 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono font-semibold text-white flex items-center gap-1.5">
                     <FolderOpen className="w-3.5 h-3.5 text-[#00F0FF]" />
-                    Base de Samples ({filteredLibrarySamples.length})
+                    Base de Samples ({matchCount.toLocaleString('fr-FR')}
+                    {matchCount > shownLibrarySamples.length
+                      ? ` · ${shownLibrarySamples.length} affichés`
+                      : ''}
+                    )
                   </span>
                   <span className="text-[10px] font-mono text-[#8A8F9E] px-1.5 py-0.5 rounded bg-[#161824]">
                     Glisser vers les pads
@@ -798,12 +820,12 @@ export const Op1KitBuilderModal: React.FC<Op1KitBuilderModalProps> = ({
 
               {/* Sample List (Draggable Items) */}
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                {filteredLibrarySamples.length === 0 ? (
+                {shownLibrarySamples.length === 0 ? (
                   <div className="p-6 text-center text-xs font-mono text-[#5A5F72]">
                     Aucun sample correspondant.
                   </div>
                 ) : (
-                  filteredLibrarySamples.map((sample) => {
+                  shownLibrarySamples.map((sample) => {
                     const badge = TYPE_BADGES[sample.type] || TYPE_BADGES.other;
                     const isCurrent = currentSelectedSample?.id === sample.id;
 
