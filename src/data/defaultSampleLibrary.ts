@@ -27,6 +27,10 @@ export const DEFAULT_FOLDERS: FolderItem[] = [
   { id: 'f-lp-atmo', name: '04_TEXTURES', path: '/02_LOOPS/04_TEXTURES', color: '#6366F1', icon: 'Layers', count: 0, parentId: 'f-root-loops' },
   { id: 'f-root-hardware', name: '03_HARDWARE', path: '/03_HARDWARE', color: '#FF7A00', icon: 'Cpu', count: 0 },
   { id: 'f-op1-patches', name: 'OP-1_DRUM_PATCHES', path: '/03_HARDWARE/OP-1_DRUM_PATCHES', color: '#FF7A00', icon: 'Disc', count: 0, parentId: 'f-root-hardware' },
+  // Synth patches are a different animal: they load into the OP-1's synth
+  // engines, not its drum pads, and the two are never interchangeable. A
+  // sampler patch holds one sound (6 s); an engine patch holds none at all.
+  { id: 'f-op1-synth', name: 'OP-1_SYNTH_PATCHES', path: '/03_HARDWARE/OP-1_SYNTH_PATCHES', color: '#FFB000', icon: 'Sliders', count: 0, parentId: 'f-root-hardware' },
 ];
 
 /**

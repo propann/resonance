@@ -66,6 +66,7 @@ import {
   exportMultipleWavsAsZip,
 } from './services/audioConverter';
 import { parseOp1AiffPatch } from './services/op1PatchEncoder';
+import { readOp1PatchInfo, op1FolderPathFor } from './services/op1PatchFile';
 import {
   autoOrganizeLibrary,
   classifySampleForLibrary,
@@ -828,19 +829,26 @@ export default function App() {
       return;
     }
     try {
-      const directory = await getDirectoryForPath(libraryRoot, '/03_HARDWARE/OP-1_DRUM_PATCHES');
+      // Ask the file what it is rather than assuming: a drum kit and a synth
+      // patch look alike from outside and load into different halves of the
+      // machine. `readOp1PatchInfo` reads the metadata without decoding audio.
+      const info = readOp1PatchInfo(await aiff.arrayBuffer());
+      const path = op1FolderPathFor(info?.kind ?? 'drum');
+      const directory = await getDirectoryForPath(libraryRoot, path);
       const fileName = await writeUniqueFile(directory, `${name}.aif`, aiff);
       await writeLibraryManifest(libraryRoot, [
         {
-          path: '/03_HARDWARE/OP-1_DRUM_PATCHES',
+          path,
           fileName,
           name,
           type: 'multi-sound',
           category: 'multi-sound',
           format: 'op-1-aiff',
+          op1Kind: info?.kind ?? 'drum',
+          op1Engine: info?.engine,
         },
       ]);
-      toast.success(`Patch OP-1 écrit : 03_HARDWARE/OP-1_DRUM_PATCHES/${fileName}`);
+      toast.success(`Patch OP-1 écrit : ${path.replace(/^\//, '')}/${fileName}`);
     } catch (error) {
       console.error('Écriture du patch OP-1 impossible', error);
       toast.error("Le patch OP-1 n'a pas pu être écrit sur le disque.");
